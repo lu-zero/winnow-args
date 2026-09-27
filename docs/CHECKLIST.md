@@ -90,7 +90,9 @@ where the references disagree and we picked a side.
       `Box<T>` variants; the enum is itself `Args`
 - [x] Nested subcommands
 - [x] `command(name, inner)` and `Word::after_separator` for the combinators
-- [ ] Global/inherited flags (a parent flag after the subcommand word)
+- [x] Global flags (`#[arg(global)]`): accepted after the subcommand word at
+      any depth, bundles included; a subcommand's own declaration wins
+- [x] `Globals` trait / `globals(closure)` for the combinators
 - [ ] Aliases, default subcommand, external subcommands
 - [ ] Multicall (argv[0] selects)
 

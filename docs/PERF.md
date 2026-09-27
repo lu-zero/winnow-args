@@ -188,3 +188,30 @@ Routing itself costs the derive ~15–30 instructions per parse: one inlined
 The combinators' `cond(files.is_empty(), command("use", …))` branch is tried
 by every word, hence `wa-comb`'s +38 on `… a b c`; `wa-disp` does the same
 check in a match guard.
+
+## 7. Global flags: `-v/--verbose` becomes `global`
+
+A parent's `global` flag is accepted after its subcommand word at any depth,
+and a subcommand's own declaration of the same name wins. The parent hands its
+subcommand a `Globals` handler (a closure over its global fields, then its own
+parent's handler); the subcommand offers it only flags it does not declare, so
+recognised flags never touch it. bpaf's derive has no `global`, so its field is
+`external(short('v')…count().global())`.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `-vvv …` | `-I …` | `… use -g node@20` | Δ vs 6 | `--path /tmp/x use -v -g node@20` |
+|-----------|------:|------:|------:|------:|------:|------:|------:|
+| usage     | 160   | 362   | 215   | 366   | 351   | +7    | 377   |
+| wa        | 48    | 123   | 56    | 135   | 118   | +9    | 118   |
+| wa-disp   | 104   | 204   | 142   | 244   | 231   | +11   | 230   |
+| wa-comb   | 133   | 272   | 185   | 425   | 261   | +10   | 281   |
+| bpaf 0.10 | 6080  | 7863  | 8147  | 8570  | 9684  | +51   | 9728  |
+| clap 4    | 4749  | 5822  | 5482  | 6789  | 8736  | +1599 | 8688  |
+
+Warm ns (min); three repeated sweeps of the `use` line agreed at 118.
+
+Lines without a subcommand did not move. Entering one costs wa ~9 ns more:
+the child's `parse_argv_with` now takes the handler and stays out of line
+(inlining every subcommand into its parent would not scale to mise's 211).
+Binding a global through the handler is free next to that: the global line
+costs the same as the local one. clap pays ~0.6–1.6 µs for `global = true`
+everywhere, since it propagates the argument into every subcommand at build time.
