@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Cold-parse cost of `example -v/--verbose -p/--path=PATH` in each framework,
-# measured as ../usage/tasks/perf-shadow.sh measures its mise shadows: run the
-# same binary with PARSE_N=0 and PARSE_N=1 under cachegrind and difference the
-# instruction counts, which leaves one parse in a fresh process and nothing else.
+# Cost of `example -v/--verbose -p/--path=PATH` in each framework, three ways:
+#
+# - instructions for one cold parse: the same binary run with PARSE_N=0 and
+#   PARSE_N=1, differenced, as ../usage/tasks/perf-shadow.sh does;
+# - cold wall time: the first parse in a fresh process, median over $RUNS processes;
+# - warm wall time: min and median per parse in a hot loop (time-sweep).
 #
 #   tasks/perf.sh                      # default argv
 #   tasks/perf.sh -vp/tmp/x            # any argv; every binary gets the same one
@@ -11,32 +13,45 @@ cd "$(dirname "$0")/.."
 
 ARGV=("$@")
 [ ${#ARGV[@]} -eq 0 ] && ARGV=(-v --path /tmp/x)
+RUNS=${RUNS:-31}
+FRAMEWORKS=(usage wa wa-comb bpaf clap)
 
 cargo build --release -q -p bench 2>/dev/null || cargo build --release -p bench
 
+median() {
+  sort -n | awk '{ a[NR] = $1 } END { print a[int((NR + 1) / 2)] }'
+}
+
 # cachegrind where it works; it does not on aarch64 hosts whose glibc uses
-# instructions valgrind cannot decode. The fallback is the `instructions:u`
-# hardware counter, which wobbles by a few hundred per run, so it takes the
-# median of $RUNS runs.
-RUNS=${RUNS:-31}
-if (valgrind --tool=none true) >/dev/null 2>&1; then
+# instructions valgrind cannot decode. The fallback hardware counter wobbles by
+# a few hundred per run, so it takes the median.
+if bash -c 'valgrind --tool=none true; exit $?' >/dev/null 2>&1; then
   counter=cachegrind
   instructions() {
     PARSE_N="$2" valgrind --tool=cachegrind --cache-sim=no --branch-sim=no \
       --cachegrind-out-file=/dev/null "./target/release/$1" "${ARGV[@]}" 2>&1 |
       sed -n 's/.*I *refs: *//p' | tr -d ','
   }
-else
+elif perf stat -e instructions:u true >/dev/null 2>&1; then
   counter="perf instructions:u, median of $RUNS"
   instructions() {
     for _ in $(seq "$RUNS"); do
       PARSE_N="$2" perf stat -x, -e instructions:u "./target/release/$1" "${ARGV[@]}" 2>&1 >/dev/null |
         cut -d, -f1
-    done | sort -n | awk '{ a[NR] = $1 } END { print a[int((NR + 1) / 2)] }'
+    done | median
   }
+else
+  counter="none available"
+  instructions() { echo 0; }
 fi
 
-size_of() {
+cold_ns() {
+  for _ in $(seq "$RUNS"); do
+    PARSE_N=1 PARSE_TIME=1 "./target/release/$1" "${ARGV[@]}" | sed -n 2p
+  done | median
+}
+
+stripped_size() {
   local copy
   copy=$(mktemp)
   cp "./target/release/$1" "$copy" && strip "$copy"
@@ -44,18 +59,34 @@ size_of() {
   rm -f "$copy"
 }
 
-echo "argv: ${ARGV[*]}   (counter: $counter)"
+ratio() {
+  awk -v a="$1" -v b="$2" 'BEGIN { if (b == 0) print "-"; else printf (a / b < 10 ? "%.1fx" : "%dx"), a / b }'
+}
+
+declare -A warm_min warm_median
+while read -r name min med; do
+  warm_min[$name]=$min
+  warm_median[$name]=$med
+done < <(./target/release/time-sweep "${ARGV[@]}")
+
+echo "argv: ${ARGV[*]}"
+echo "instructions: $counter; cold ns: median of $RUNS processes; warm ns: min / median of 2000 rounds"
 echo
-printf '| %-20s | %14s | %8s | %16s |\n' framework "instr, cold" "vs usage" "stripped bytes"
-printf '|%s|%s|%s|%s|\n' "----------------------" "---------------:" "---------:" "-----------------:"
-base=
-for bin in usage wa wa-comb bpaf clap; do
-  got=$(PARSE_N=1 "./target/release/parse-n-$bin" "${ARGV[@]}")
-  [ "$got" = 1 ] || echo "warning: parse-n-$bin did not accept the argv (printed $got)" >&2
-  cold=$(($(instructions "parse-n-$bin" 1) - $(instructions "parse-n-$bin" 0)))
-  base=${base:-$cold}
-  ratio=$(awk -v a="$cold" -v b="$base" 'BEGIN { printf (a / b < 10 ? "%.1fx" : "%dx"), a / b }')
-  printf '| %-20s | %14s | %8s | %16s |\n' "$bin" "$(printf "%'d" "$cold")" "$ratio" "$(printf "%'d" "$(size_of "parse-n-$bin")")"
+printf '| %-9s | %8s | %7s | %8s | %7s | %8s | %11s | %9s |\n' \
+  framework instr "×usage" "cold ns" "×usage" "warm ns" "warm median" "stripped"
+printf '|%s|%s|%s|%s|%s|%s|%s|%s|\n' ----------- ---------: --------: ---------: --------: ---------: ------------: ----------:
+base_instr=
+base_cold=
+for fw in "${FRAMEWORKS[@]}"; do
+  bin="parse-n-$fw"
+  got=$(PARSE_N=1 "./target/release/$bin" "${ARGV[@]}")
+  [ "$got" = 1 ] || echo "warning: $bin did not accept the argv (printed $got)" >&2
+  instr=$(($(instructions "$bin" 1) - $(instructions "$bin" 0)))
+  cold=$(cold_ns "$bin")
+  base_instr=${base_instr:-$instr}
+  base_cold=${base_cold:-$cold}
+  printf '| %-9s | %8s | %7s | %8s | %7s | %8s | %11s | %9s |\n' "$fw" \
+    "$instr" "$(ratio "$instr" "$base_instr")" \
+    "$cold" "$(ratio "$cold" "$base_cold")" \
+    "${warm_min[$fw]}" "${warm_median[$fw]}" "$(stripped_size "$bin")"
 done
-echo
-./target/release/time-sweep "${ARGV[@]}"
