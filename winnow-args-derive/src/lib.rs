@@ -315,6 +315,21 @@ struct Field {
     required_unless: Vec<String>,
     /// The struct-level group this field belongs to.
     group: Option<String>,
+    /// The value of a flag given without one.
+    default_missing: Option<String>,
+}
+
+impl Field {
+    /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
+    fn read(&self) -> TokenStream2 {
+        match &self.default_missing {
+            None => quote!(__arg.read_value(__input)?),
+            Some(missing) => {
+                let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
+                quote!(__arg.read_value_or(__input, __wa::BStr::new(#bytes)))
+            }
+        }
+    }
 }
 
 impl Field {
@@ -547,7 +562,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`double_dash = \"required\"` and `\"automatic\"` cannot share a struct",
         ));
     }
-    let groups = struct_groups(input)?;
+    let (groups, restart_token) = struct_options(input)?;
     let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;
@@ -582,23 +597,26 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
             Kind::Optional(ty) | Kind::Required(ty) => {
                 let value = f.flag_value(ty, quote!(__value));
+                let read = f.read();
                 quote! {
-                    let __value = __arg.read_value(__input)?;
+                    let __value = #read;
                     #ident = ::core::option::Option::Some(#value);
                 }
             }
             Kind::Many(ty) => match f.delimiter {
                 None => {
                     let value = f.flag_value(ty, quote!(__value));
+                    let read = f.read();
                     quote! {
-                        let __value = __arg.read_value(__input)?;
+                        let __value = #read;
                         #ident.push(#value);
                     }
                 }
                 Some(d) => {
                     let value = f.flag_value(ty, quote!(__piece));
+                    let read = f.read();
                     quote! {
-                        for __piece in __wa::split(__arg.read_value(__input)?, #d) {
+                        for __piece in __wa::split(#read, #d) {
                             #ident.push(#value);
                         }
                     }
@@ -793,8 +811,31 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     });
+    // A new invocation of the same command: positionals start over, flags keep theirs.
+    let restart = restart_token.map(|token| {
+        let token = LitByteStr::new(token.as_bytes(), Span::call_site());
+        let clears = fields.iter().filter(|f| f.is_positional()).map(|f| {
+            let slot = slot(&f.ident);
+            match f.kind {
+                Kind::Many(_) => quote!(#slot.clear();),
+                _ => quote!(#slot = ::core::option::Option::None;),
+            }
+        });
+        let position = (!positionals.is_empty()).then(|| quote!(__position = 0;));
+        let filled = track_filled.then(|| quote!(__filled = false;));
+        quote! {
+            if &**__word.value == #token {
+                #(#clears)*
+                #position
+                #filled
+                __input.resume_flags();
+                continue;
+            }
+        }
+    });
     let word_arm = quote! {
         __wa::Arg::Word(__word) => {
+            #restart
             #route
             #positional_match
         }
@@ -886,12 +927,20 @@ struct Group {
     multiple: bool,
 }
 
-fn struct_groups(input: &DeriveInput) -> syn::Result<Vec<Group>> {
+/// `#[arg(...)]` on the struct: groups, and the word that restarts parsing.
+fn struct_options(input: &DeriveInput) -> syn::Result<(Vec<Group>, Option<String>)> {
     let mut groups = Vec::new();
+    let mut restart = None;
     for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("restart_token") {
+                restart = Some(meta.value()?.parse::<LitStr>()?.value());
+                return Ok(());
+            }
             if !meta.path.is_ident("group") {
-                return Err(meta.error("expected `group(\"name\", required, multiple)`"));
+                return Err(
+                    meta.error("expected `group(\"name\", ...)` or `restart_token = \"...\"`")
+                );
             }
             let content;
             syn::parenthesized!(content in meta.input);
@@ -919,7 +968,7 @@ fn struct_groups(input: &DeriveInput) -> syn::Result<Vec<Group>> {
             Ok(())
         })?;
     }
-    Ok(groups)
+    Ok((groups, restart))
 }
 
 /// The relations between fields, resolved to field indices.
@@ -1190,6 +1239,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut env = None;
     let mut default = None;
     let mut double_dash = None;
+    let (mut default_missing, mut value_optional) = (None, false);
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
@@ -1219,6 +1269,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("default_missing") {
+                default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("value_optional") {
+                value_optional = true;
             } else if meta.path.is_ident("double_dash") {
                 let mode = meta.value()?.parse::<LitStr>()?;
                 double_dash = Some(match mode.value().as_str() {
@@ -1266,6 +1320,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
+                     `default_missing`, `value_optional`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -1282,6 +1337,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     } else {
         kind(&f.ty)
     };
+    if value_optional && default_missing.is_none() {
+        return error("`value_optional` needs `default_missing`: the value of a bare flag".into());
+    }
+    if default_missing.is_some()
+        && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error("`default_missing` is for flags that take a value".into());
+    }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
     }
@@ -1355,6 +1418,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         required,
         required_unless,
         group,
+        default_missing,
     })
 }
 

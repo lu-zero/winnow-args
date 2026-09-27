@@ -376,3 +376,30 @@ per word.
 | clap 4    | 10394 | 12088 | 13625 |
 
 Warm ns (min), under load; compare within a row, not against step 12.
+
+## 14. `default_missing` (`-w/--write[=PATH]`) and `restart_token`
+
+`default_missing = "…"` (with or without `value_optional`) makes a value-taking
+flag's value optional, per usage's corpus: a bare `--write`, or one followed by
+a flag-like word, gives the missing default; `--write=x`, `-wx` and `--write x`
+give `x`. It is `Arg::read_value_or` — `read_value` with the missing default
+where it would report a missing value — and `Named::argument_or` for the
+combinators. clap spells it `num_args = 0..=1, default_missing_value`; bpaf's
+combinator `on_missing_value`. A struct-level `restart_token = ":::"` restarts
+positionals and resumes flags; it is not in the bench, since mise's `run` has no
+static positionals for it to act on.
+
+Measured on a quiet machine (load ~3).
+
+| framework | `-v --path /tmp/x` | `… --write` | `-v -w ./x --path /tmp/x` | `… a b c` |
+|-----------|------:|------:|------:|------:|
+| usage     | 271   | 351   | 335   | 484   |
+| wa        | 130   | 168   | 164   | 201   |
+| wa-disp   | 186   | 240   | 237   | 298   |
+| wa-comb   | 226   | 506   | 508   | 416   |
+| bpaf 0.10 | 10761 | 11213 | 11234 | 12916 |
+| clap 4    | 10403 | 11523 | 11616 | 12154 |
+
+Warm ns (min). `wa-comb` now needs nested `alt`s: winnow's `alt` takes at most
+9 parsers, and the root has 10 flags. `--write` is the last branch of the second
+one, which is why it costs `wa-comb` ~280 ns more than the flags-only line.

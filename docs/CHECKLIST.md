@@ -38,7 +38,7 @@ where the references disagree and we picked a side.
       dropped (usage)
 - [x] Several long names: `alias = "…"` / `alias("…", …)`; `Named<N>::longs([…])`
 - [ ] Negative numbers as detached values (`--offset -1`)
-- [ ] `allow_hyphen_values`, `require_equals`, `default_missing`
+- [ ] `allow_hyphen_values`, `require_equals`
 - [ ] `--no-name` negation
 - [ ] Non-UTF-8 names are rejected cleanly (names are ASCII-ish in practice)
 
@@ -76,8 +76,9 @@ where the references disagree and we picked a side.
       judged on what was supplied, requiredness on what has a value
 - [ ] Selectors naming an ancestor's global flag (usage resolves those at runtime)
 - [ ] `requires_if`, `required_if_eq`, `default_if`, `exclusive`
-- [ ] `value_optional` + `default_missing` (3)
-- [ ] `restart_token` (2, on mise's `run`)
+- [x] `default_missing` (+ `value_optional`): bare flag or flag-like next word
+      gives the missing default; `Named::argument_or`, `Arg::read_value_or`
+- [x] Struct-level `restart_token`: positionals restart, flags resume and keep values
 
 ## 4. Positionals
 
@@ -165,7 +166,7 @@ where the references disagree and we picked a side.
 
 Parsing semantics still missing, by use count: ~~`conflicts` 77, `overrides` 37,
 `requires` 23, `group` 20~~, ~~`double_dash` 13~~, ~~`required` 10, `required_unless` 7~~,
-`value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
+~~`value_optional`/`default_missing` 3, `restart_token` 2~~, `default_subcommand` 1,
 `arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).
 

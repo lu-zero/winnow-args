@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -18,6 +18,8 @@ pub mod wa_derive {
         pub toml: bool,
         #[arg(long, requires = "--json")]
         pub strict: bool,
+        #[arg(short, long, value_optional, default_missing = "./bin/mise")]
+        pub write: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
@@ -73,6 +75,7 @@ pub mod wa_comb {
         pub json: bool,
         pub toml: bool,
         pub strict: bool,
+        pub write: Option<String>,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
@@ -128,6 +131,7 @@ pub mod wa_comb {
     const JSON: Named = long("json");
     const TOML: Named = long("toml");
     const STRICT: Named = long("strict");
+    const WRITE: Named = short('w').long("write");
 
     /// What the derive does after its loop: `--jobs` fallbacks, then the constraints.
     pub fn finish(cli: &mut Cli, input: &Argv<'_>) -> Result<(), Error> {
@@ -151,18 +155,24 @@ pub mod wa_comb {
         let mut cli = Cli::default();
         let c = &mut cli;
         args(dispatch! {kind;
+            // winnow's `alt` takes at most 9 parsers, so the flags are split in two.
             Kind::Long | Kind::Short => alt((
-                VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1)),
-                PATH.argument_as().map(|p| c.path = Some(p)),
-                INCLUDE
-                    .arguments_as(b',')
-                    .map(|i: Vec<PathBuf>| c.include.extend(i)),
-                COLOR.argument_as().map(|w| c.color = Some(w)),
-                JOBS.argument_as().map(|j| c.jobs = Some(j)),
-                QUIET.switch().map(|()| c.quiet = true),
-                JSON.switch().map(|()| c.json = true),
-                TOML.switch().map(|()| c.toml = true),
-                STRICT.switch().map(|()| c.strict = true),
+                alt((
+                    VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1)),
+                    PATH.argument_as().map(|p| c.path = Some(p)),
+                    INCLUDE
+                        .arguments_as(b',')
+                        .map(|i: Vec<PathBuf>| c.include.extend(i)),
+                    COLOR.argument_as().map(|w| c.color = Some(w)),
+                    JOBS.argument_as().map(|j| c.jobs = Some(j)),
+                )),
+                alt((
+                    QUIET.switch().map(|()| c.quiet = true),
+                    JSON.switch().map(|()| c.json = true),
+                    TOML.switch().map(|()| c.toml = true),
+                    STRICT.switch().map(|()| c.strict = true),
+                    WRITE.argument_or("./bin/mise").map(|w| c.write = Some(w)),
+                )),
             )),
             Kind::Word => alt((
                 // `CMD` takes every word after `--`, and only those.
@@ -195,6 +205,7 @@ pub mod wa_comb {
 pub mod wa_disp {
     use winnow::combinator::{dispatch, fail};
     use winnow::prelude::*;
+    use winnow::stream::BStr;
     use winnow_args::combinator::args;
     use winnow_args::token::{Arg, LongFlag, ShortFlag, arg, split};
     use winnow_args::{Argv, Error, Globals, globals};
@@ -247,6 +258,9 @@ pub mod wa_disp {
             a @ Arg::Long(LongFlag { name: b"json", .. }) => a.switch().map(|()| c.json = true),
             a @ Arg::Long(LongFlag { name: b"toml", .. }) => a.switch().map(|()| c.toml = true),
             a @ Arg::Long(LongFlag { name: b"strict", .. }) => a.switch().map(|()| c.strict = true),
+            a @ (Arg::Long(LongFlag { name: b"write", .. }) | Arg::Short(ShortFlag { letter: 'w', .. })) => {
+                a.value_or(BStr::new("./bin/mise")).map(|w| c.write = Some(w))
+            },
             Arg::Word(w) if w.after_separator => {
                 |_: &mut Argv<'i>| {
                     c.cmd.push(w.convert("CMD")?);
@@ -310,6 +324,8 @@ pub mod bpaf010 {
         pub toml: bool,
         #[bpaf(long("strict"), switch)]
         pub strict: bool,
+        #[bpaf(external(write_p))]
+        pub write: Option<String>,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
@@ -335,6 +351,16 @@ pub mod bpaf010 {
         // `--` and this stays empty. The agreement test skips bpaf on such lines.
         #[bpaf(positional("CMD"), strict, many)]
         pub cmd: Vec<String>,
+    }
+
+    /// bpaf's derive has no `default_missing`; `on_missing_value` is the combinator.
+    fn write_p() -> impl bpaf::Parser<Output = Option<String>> {
+        use bpaf::Parser as _;
+        bpaf::short('w')
+            .long("write")
+            .argument::<String>("PATH")
+            .on_missing_value(|| Ok("./bin/mise".into()))
+            .optional()
     }
 
     /// bpaf has no value enums: a `FromStr` does the matching.
@@ -416,6 +442,8 @@ pub mod clap4 {
         pub toml: bool,
         #[arg(long, requires = "json")]
         pub strict: bool,
+        #[arg(short, long, num_args = 0..=1, default_missing_value = "./bin/mise")]
+        pub write: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
@@ -496,6 +524,13 @@ pub mod usage {
         pub toml: bool,
         #[usage(long = "strict", requires("--json"))]
         pub strict: bool,
+        #[usage(
+            long = "write",
+            short = 'w',
+            value_optional,
+            default_missing = "./bin/mise"
+        )]
+        pub write: ::std::option::Option<::std::string::String>,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(

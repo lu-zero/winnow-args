@@ -85,6 +85,15 @@ impl<'i> Argv<'i> {
         }
     }
 
+    /// Recognize flags again after `--` or [`Argv::stop_flags`]: a command's
+    /// `restart_token` starts a fresh invocation.
+    #[inline]
+    pub fn resume_flags(&mut self) {
+        if self.mode == Mode::Stopped {
+            self.mode = Mode::Word;
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
