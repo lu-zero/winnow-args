@@ -466,6 +466,8 @@ struct Field {
     value_name: Option<String>,
     /// A negative number is a value: a flag's detached value, or a positional's word.
     negative_numbers: bool,
+    /// A flag's detached value may be any word, flag-like or `--`.
+    hyphen_values: bool,
 }
 
 impl Field {
@@ -522,10 +524,15 @@ impl Field {
 
     /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
     fn read(&self) -> TokenStream2 {
-        let negative_numbers = self.negative_numbers;
-        let options = quote!(__wa::ValueOptions { negative_numbers: #negative_numbers });
+        let (negative_numbers, hyphen_values) = (self.negative_numbers, self.hyphen_values);
+        let options = quote! {
+            __wa::ValueOptions {
+                negative_numbers: #negative_numbers,
+                hyphen_values: #hyphen_values,
+            }
+        };
         match &self.default_missing {
-            None if !negative_numbers => quote!(__arg.read_value(__input)?),
+            None if !negative_numbers && !hyphen_values => quote!(__arg.read_value(__input)?),
             None => quote!(__arg.read_value_with(__input, #options)?),
             Some(missing) => {
                 let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
@@ -1677,6 +1684,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut double_dash = None;
     let (mut default_missing, mut value_optional) = (None, false);
     let mut negative_numbers = false;
+    let mut hyphen_values = false;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
@@ -1721,6 +1729,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("allow_hyphen_values") {
+                hyphen_values = true;
             } else if meta.path.is_ident("allow_negative_numbers") {
                 negative_numbers = true;
             } else if meta.path.is_ident("default_missing") {
@@ -1774,7 +1784,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -1798,6 +1808,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
     {
         return error("`default_missing` is for flags that take a value".into());
+    }
+    if hyphen_values && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error("`allow_hyphen_values` is for flags that take a value".into());
     }
     if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
         return error("`allow_negative_numbers` is for fields that take a value".into());
@@ -1882,6 +1896,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hide,
         value_name: flag_value_name,
         negative_numbers,
+        hyphen_values,
     })
 }
 

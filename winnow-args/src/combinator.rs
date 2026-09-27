@@ -103,6 +103,12 @@ impl<const N: usize> Named<N> {
         }
     }
 
+    /// Take the next word as the value whatever it looks like: `--args -x`, `--args --`.
+    pub const fn allow_hyphen_values(mut self) -> Self {
+        self.options.hyphen_values = true;
+        self
+    }
+
     /// Take a negative number as a detached value: `--offset -1`.
     pub const fn allow_negative_numbers(mut self) -> Self {
         self.options.negative_numbers = true;

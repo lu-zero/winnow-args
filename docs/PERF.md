@@ -497,3 +497,26 @@ bytes (it sits in padding). bpaf uses `negative_lit`, clap `allow_negative_numbe
 Warm ns (min), load rising 5 → 11 during the run. Warm instructions against
 step 17 are +10 and +19 on the first two lines — the bench CLI's new `--offset`
 slot and arm — so the rest of the drift is load.
+
+## 19. `allow_hyphen_values`: `--args -destroy`
+
+A flag declared `allow_hyphen_values` takes the next word whatever it looks
+like, `--` included (usage's corpus; the `--args -- -x` vector then needs
+lenient unknown flags, which winnow-args does not have yet). It is a second
+`ValueOptions` field, so derive, `Named::allow_hyphen_values` and `dispatch!`
+arms share it, and `Named` stays 24 bytes. clap says `allow_hyphen_values`;
+bpaf 0.10 has no equivalent — pairing `literal` with `any` broke `optional()` —
+so its field refuses `-destroy` and the agreement test skips bpaf there.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `… --args -destroy` |
+|-----------|------:|------:|------:|
+| usage     | 280   | 492   | 363   |
+| wa        | 139   | 225   | 179   |
+| wa-disp   | 185   | 300   | 238   |
+| wa-comb   | 231   | 426   | 544   |
+| bpaf 0.10 | 11995 | 14136 | —     |
+| clap 4    | 10794 | 12750 | —     |
+
+Warm ns (min) under heavy load (average 22 → 29); `perf.sh` stopped after bpaf
+refused the last line, so clap has no number there. Warm instructions are the
+evidence: 1326 and 2158 per parse against step 18's 1323 and 2167.
