@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -28,6 +28,8 @@ pub mod wa_derive {
         pub jobs: Option<u32>,
         #[arg(positional, value_name = "FILE")]
         pub files: Vec<PathBuf>,
+        #[arg(positional, value_name = "CMD", double_dash = "required")]
+        pub cmd: Vec<String>,
         #[arg(subcommand)]
         pub command: Option<Commands>,
     }
@@ -61,7 +63,7 @@ pub mod wa_comb {
     use winnow::combinator::{alt, cond, dispatch, fail};
     use winnow::prelude::*;
     use winnow_args::combinator::{Named, args, command, long, positional, short};
-    use winnow_args::token::{Kind, kind};
+    use winnow_args::token::{self, Kind, Word, kind};
     use winnow_args::{Argv, Error};
 
     #[derive(Debug, Default)]
@@ -76,6 +78,7 @@ pub mod wa_comb {
         pub color: Option<Color>,
         pub jobs: Option<u32>,
         pub files: Vec<PathBuf>,
+        pub cmd: Vec<String>,
         pub command: Option<Commands>,
     }
 
@@ -162,6 +165,12 @@ pub mod wa_comb {
                 STRICT.switch().map(|()| c.strict = true),
             )),
             Kind::Word => alt((
+                // `CMD` takes every word after `--`, and only those.
+                |input: &mut Argv<'_>| {
+                    let word = token::word.verify(|w: &Word<'_>| w.after_separator).parse_next(input)?;
+                    c.cmd.push(word.convert("CMD")?);
+                    Ok(())
+                },
                 cond(
                     c.files.is_empty(),
                     command(
@@ -238,6 +247,12 @@ pub mod wa_disp {
             a @ Arg::Long(LongFlag { name: b"json", .. }) => a.switch().map(|()| c.json = true),
             a @ Arg::Long(LongFlag { name: b"toml", .. }) => a.switch().map(|()| c.toml = true),
             a @ Arg::Long(LongFlag { name: b"strict", .. }) => a.switch().map(|()| c.strict = true),
+            Arg::Word(w) if w.after_separator => {
+                |_: &mut Argv<'i>| {
+                    c.cmd.push(w.convert("CMD")?);
+                    Ok(())
+                }
+            },
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
                     let verbose = &mut c.verbose;
@@ -315,6 +330,11 @@ pub mod bpaf010 {
         pub command: Option<Commands>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
+        // bpaf 0.10 cannot keep `FILE` before `--`: a strict positional errors on a
+        // plain word rather than missing it, so `FILE` also takes the words after
+        // `--` and this stays empty. The agreement test skips bpaf on such lines.
+        #[bpaf(positional("CMD"), strict, many)]
+        pub cmd: Vec<String>,
     }
 
     /// bpaf has no value enums: a `FromStr` does the matching.
@@ -406,6 +426,8 @@ pub mod clap4 {
         pub jobs: Option<u32>,
         #[arg(value_name = "FILE")]
         pub files: Vec<PathBuf>,
+        #[arg(value_name = "CMD", last = true)]
+        pub cmd: Vec<String>,
         #[command(subcommand)]
         pub command: Option<Commands>,
     }
@@ -496,6 +518,8 @@ pub mod usage {
         pub jobs: ::std::option::Option<u32>,
         #[usage(arg, name = "FILE")]
         pub files: ::std::vec::Vec<::std::path::PathBuf>,
+        #[usage(arg, name = "CMD", double_dash = "required")]
+        pub cmd: ::std::vec::Vec<::std::string::String>,
         #[usage(subcommand)]
         pub command: ::std::option::Option<Commands>,
     }

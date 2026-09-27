@@ -347,3 +347,32 @@ Warm ns (min). Carrying the constraints costs the derive nothing measurable;
 clap pays ~3.8 µs per start building the groups and conflict tables into its
 command tree. `wa-comb`'s `--json --strict` pays for being the 9th and 11th
 branches of its `alt`.
+
+## 13. `double_dash`: `[-- CMD...]`
+
+`double_dash = "required"` takes a positional out of the ordinary sequence:
+every word after `--` goes to it (past a greedy `Vec` before it), and a word
+that would reach it before `--` is `arg_requires_double_dash`.
+`double_dash = "automatic"` calls `Argv::stop_flags()` once the argument has a
+value. The bench's root gains mise-`exec`'s shape: `[FILE]... [-- CMD...]`
+(clap `last = true`). **bpaf 0.10 cannot express it**: a `strict` positional
+errors on a plain word instead of missing it, so its `FILE` also takes the words
+after `--`; its number on that line is not the same work, and the agreement
+test skips bpaf there.
+
+**Measured under heavy load** (load average ~115 on 128 cores): times moved
+10–25 ns for every framework on lines this step does not touch, usage included.
+Warm instructions per parse against the step-12 build decide it instead:
+1291 → 1299 on `-v --path /tmp/x`, 2109 → 2121 on `… a b c` — one more branch
+per word.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `… a -- node app.js -v` |
+|-----------|------:|------:|------:|
+| usage     | 271   | 500   | 581   |
+| wa        | 134   | 210   | 272   |
+| wa-disp   | 186   | 302   | 393   |
+| wa-comb   | 219   | 400   | 452   |
+| bpaf 0.10 | 10005 | 12077 | (12533, different parse) |
+| clap 4    | 10394 | 12088 | 13625 |
+
+Warm ns (min), under load; compare within a row, not against step 12.

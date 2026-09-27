@@ -275,8 +275,20 @@ enum Role {
     },
     Positional {
         name: String,
+        double_dash: DoubleDash,
     },
     Subcommand,
+}
+
+/// A positional's relation to `--`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DoubleDash {
+    /// Words fill it on either side of `--`.
+    Optional,
+    /// Only words after `--` fill it, and they all do.
+    Required,
+    /// Once it has a value, flags stop as if `--` had been typed.
+    Automatic,
 }
 
 struct Field {
@@ -449,7 +461,7 @@ impl Field {
             Role::Flag { long: Some(l), .. } => format!("--{l}"),
             Role::Flag { short: Some(c), .. } => format!("-{c}"),
             Role::Flag { .. } => unreachable!("every flag has a name"),
-            Role::Positional { name } => name.clone(),
+            Role::Positional { name, .. } => name.clone(),
             Role::Subcommand => "<COMMAND>".to_owned(),
         }
     }
@@ -504,8 +516,37 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
     check_duplicates(&fields)?;
-    let positionals: Vec<&Field> = fields.iter().filter(|f| f.is_positional()).collect();
+    let dd = |f: &Field| match f.role {
+        Role::Positional { double_dash, .. } => double_dash,
+        _ => DoubleDash::Optional,
+    };
+    // A `double_dash = "required"` positional is outside the ordinary sequence:
+    // every word after `--` goes to it, and no word before.
+    let positionals: Vec<&Field> = fields
+        .iter()
+        .filter(|f| f.is_positional() && dd(f) != DoubleDash::Required)
+        .collect();
     check_positional_order(&positionals)?;
+    let trailing: Vec<&Field> = fields
+        .iter()
+        .filter(|f| dd(f) == DoubleDash::Required)
+        .collect();
+    if let Some(extra) = trailing.get(1) {
+        return Err(syn::Error::new(
+            extra.ident.span(),
+            "a struct has at most one `double_dash = \"required\"` positional",
+        ));
+    }
+    let trailing = trailing.first().copied();
+    if let (Some(t), Some(_)) = (
+        trailing,
+        fields.iter().find(|f| dd(f) == DoubleDash::Automatic),
+    ) {
+        return Err(syn::Error::new(
+            t.ident.span(),
+            "`double_dash = \"required\"` and `\"automatic\"` cannot share a struct",
+        ));
+    }
     let groups = struct_groups(input)?;
     let rules = Rules::new(&fields, &groups)?;
 
@@ -594,12 +635,26 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let track_filled = subcommand.is_some() && !positionals.is_empty();
     let filled = track_filled.then(|| quote!(__filled = true;));
 
+    // A word no ordinary positional takes: before `--`, it would have reached
+    // the `double_dash = "required"` positional if there is one.
+    let overflow = match trailing {
+        Some(t) => {
+            let display = LitStr::new(&t.display(), Span::call_site());
+            quote! {
+                return ::core::result::Result::Err(
+                    __wa::Error::requires_double_dash(__word.offset, #display),
+                )
+            }
+        }
+        None => unexpected.clone(),
+    };
     let positional_match = if positionals.is_empty() {
-        quote!({ #unexpected; })
+        quote!({ #overflow; })
     } else {
         let arms = positionals.iter().enumerate().map(|(i, f)| {
             let ident = slot(&f.ident);
             let display = LitStr::new(&f.display(), Span::call_site());
+            let stop = (dd(f) == DoubleDash::Automatic).then(|| quote!(__input.stop_flags();));
             match &f.kind {
                 Kind::Optional(ty) | Kind::Required(ty) => {
                     let value = f.word_value(ty, quote!(__word), &display);
@@ -608,6 +663,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #ident = ::core::option::Option::Some(#value);
                             __position += 1;
                             #filled
+                            #stop
                         }
                     }
                 }
@@ -630,6 +686,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #i => {
                             #push
                             #filled
+                            #stop
                         }
                     }
                 }
@@ -641,7 +698,43 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote! {
             match __position {
                 #(#arms)*
-                _ => { #unexpected; }
+                _ => { #overflow; }
+            }
+        }
+    };
+    let positional_match = match trailing {
+        None => positional_match,
+        Some(t) => {
+            let ident = slot(&t.ident);
+            let display = LitStr::new(&t.display(), Span::call_site());
+            let store = match &t.kind {
+                Kind::Many(ty) => match t.delimiter {
+                    None => {
+                        let value = t.word_value(ty, quote!(__word), &display);
+                        quote!(#ident.push(#value);)
+                    }
+                    Some(d) => {
+                        let value = t.word_value(ty, quote!(__piece), &display);
+                        quote!(for __piece in __word.split(#d) { #ident.push(#value); })
+                    }
+                },
+                Kind::Optional(ty) | Kind::Required(ty) => {
+                    let value = t.word_value(ty, quote!(__word), &display);
+                    quote! {
+                        if #ident.is_some() { #unexpected; }
+                        #ident = ::core::option::Option::Some(#value);
+                    }
+                }
+                Kind::Switch | Kind::Count(_) => {
+                    unreachable!("rejected for positionals in `field`")
+                }
+            };
+            quote! {
+                if __word.after_separator {
+                    #store
+                } else {
+                    #positional_match
+                }
             }
         }
     };
@@ -858,7 +951,7 @@ impl Rules {
                                 .is_some_and(|c| chars.next().is_none() && f.short() == Some(c))
                         }
                         (None, None) => {
-                            matches!(&f.role, Role::Positional { name } if name == selector)
+                            matches!(&f.role, Role::Positional { name, .. } if name == selector)
                                 || f.ident == selector
                         }
                     },
@@ -1096,6 +1189,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut choices = None;
     let mut env = None;
     let mut default = None;
+    let mut double_dash = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
@@ -1125,6 +1219,19 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("double_dash") {
+                let mode = meta.value()?.parse::<LitStr>()?;
+                double_dash = Some(match mode.value().as_str() {
+                    "required" => DoubleDash::Required,
+                    "automatic" => DoubleDash::Automatic,
+                    "optional" => DoubleDash::Optional,
+                    _ => {
+                        return Err(syn::Error::new(
+                            mode.span(),
+                            "expected \"required\", \"automatic\" or \"optional\"",
+                        ));
+                    }
+                });
             } else if meta.path.is_ident("conflicts") {
                 conflicts.extend(aliases(&meta)?);
             } else if meta.path.is_ident("overrides") {
@@ -1158,7 +1265,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
-                     `positional`, `value_name`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
+                     `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -1175,6 +1282,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     } else {
         kind(&f.ty)
     };
+    if double_dash.is_some() && !positional {
+        return error("`double_dash` is for positional fields".into());
+    }
     let role = if subcommand {
         if positional || count || global || short.is_some() || long.is_some() || !alias.is_empty() {
             return error("a subcommand field takes no other `arg` options".into());
@@ -1191,6 +1301,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             return error("a positional field cannot be `bool` or `count`".into());
         }
         Role::Positional {
+            double_dash: double_dash.unwrap_or(DoubleDash::Optional),
             name: value_name.unwrap_or_else(|| bare.to_uppercase()),
         }
     } else {

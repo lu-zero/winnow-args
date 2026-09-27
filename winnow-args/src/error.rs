@@ -39,6 +39,9 @@ pub enum ErrorKind {
     Conflict,
     /// A required group had none of its members.
     MissingOneOf,
+    /// `arg_requires_double_dash`: a word reached an argument that only takes
+    /// words after `--`.
+    RequiresDoubleDash,
     /// A value that its type rejected.
     InvalidValue,
     /// `invalid_choice`: a value outside a fixed set.
@@ -126,6 +129,11 @@ impl Error {
         let mut error = Self::with_token(ErrorKind::MissingOneOf, offset, group.into());
         error.detail_mut().value = Some(members.join(", "));
         error
+    }
+
+    /// The word at `offset` reached `name`, which only takes words after `--`.
+    pub fn requires_double_dash(offset: usize, name: impl Into<String>) -> Self {
+        Self::with_token(ErrorKind::RequiresDoubleDash, offset, name.into())
     }
 
     /// A required subcommand was not given. The offset is the end of the line.
@@ -220,6 +228,9 @@ impl fmt::Display for Error {
                 "`{token}` cannot be used with `{}`",
                 self.value().unwrap_or_default()
             ),
+            ErrorKind::RequiresDoubleDash => {
+                write!(f, "`{token}` can only be set after a `--` separator")
+            }
             ErrorKind::MissingOneOf => write!(
                 f,
                 "one of {} is required ({token})",

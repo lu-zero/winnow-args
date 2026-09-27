@@ -76,6 +76,15 @@ impl<'i> Argv<'i> {
         self.mode
     }
 
+    /// Read every remaining word as a value, as if `--` had been typed. An
+    /// argument declared `double_dash = "automatic"` does this once it has a value.
+    #[inline]
+    pub fn stop_flags(&mut self) {
+        if self.mode != Mode::Bundle {
+            self.mode = Mode::Stopped;
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
