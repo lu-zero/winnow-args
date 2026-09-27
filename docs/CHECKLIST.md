@@ -90,7 +90,9 @@ where the references disagree and we picked a side.
       compile time. usage instead lets an optional before a required one reserve
       the last word, which needs lookahead.
 - [ ] `var_min` / `var_max`; a variadic that is not last
-- [ ] `double_dash` modes: `required` (7 in mise), `automatic` (6), `preserve`
+- [x] `double_dash = "required"` (words after `--` only, past earlier positionals;
+      `arg_requires_double_dash`) and `"automatic"` (`Argv::stop_flags` once filled)
+- [ ] `double_dash = "preserve"`
 
 ## 5. Subcommands
 
@@ -162,7 +164,7 @@ where the references disagree and we picked a side.
 ## Audit: usage's mise shadow (45 attribute keys)
 
 Parsing semantics still missing, by use count: ~~`conflicts` 77, `overrides` 37,
-`requires` 23, `group` 20~~, `double_dash` 13, ~~`required` 10, `required_unless` 7~~,
+`requires` 23, `group` 20~~, ~~`double_dash` 13~~, ~~`required` 10, `required_unless` 7~~,
 `value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
 `arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).
