@@ -7,7 +7,8 @@ Command line parsing built from [winnow](../winnow) parsers over a `BStr`.
 - `winnow-args-derive/` — `#[derive(Args)]`.
 - `bench/` — the same CLI in usage, winnow-args, bpaf 0.10 and clap; run
   `tasks/perf.sh [argv...]`.
-- `docs/CHECKLIST.md` — what is done and what is next; `docs/DESIGN.md` — why.
+- `docs/CHECKLIST.md` — what is done and what is next; `docs/DESIGN.md` — why;
+  `docs/PERF.md` — measurements, one entry per feature.
 
 ```
 cargo test

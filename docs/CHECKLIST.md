@@ -73,8 +73,13 @@ where the references disagree and we picked a side.
 
 - [x] `--` stops flag parsing; only the first `--` is a separator
 - [x] A word where nothing accepts one is `unexpected_arg`
-- [ ] Positional fields, declaration order, interleaved with flags
-- [ ] Optional / required / variadic positionals, `var_min` / `var_max`
+- [x] Positional fields, declaration order, interleaved with flags
+- [x] Required / optional / trailing `Vec` positionals; `missing_required_arg`
+- [x] `positional::<T>(name)` occurrence parser for the combinators
+- [x] **decision** the derive requires required → optional → one `Vec` last, at
+      compile time. usage instead lets an optional before a required one reserve
+      the last word, which needs lookahead.
+- [ ] `var_min` / `var_max`; a variadic that is not last
 - [ ] `double_dash` modes (required / preserve / automatic)
 
 ## 5. Subcommands
@@ -117,7 +122,8 @@ where the references disagree and we picked a side.
 - [x] Field types: `bool`, `Option<T>`, `T` where `T: FromArg`
 - [x] Codegen is a single `match` over the lexed token (no `alt` chain), so a
       flag lookup is a compiled string match
-- [ ] Positionals, subcommands (`enum`), flattening, doc-comment help
+- [x] Positionals: `#[arg(positional, value_name = "…")]`, `T` / `Option<T>` / `Vec<T>`
+- [ ] Subcommands (`enum`), flattening, doc-comment help
 
 ## 10. Conformance and performance
 

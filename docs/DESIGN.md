@@ -89,40 +89,14 @@ product and usage's `Partial` work too.
    lookup, nothing is re-lexed, and fields are locals. `Cli::parse_argv` is
    still a plain winnow parser.
 
-## Numbers (aarch64, `tasks/perf.sh`)
+## Numbers
 
-Three measurements per framework, all on the same argv:
+Measurements, method and per-feature deltas live in [PERF.md](./PERF.md).
+Headline, flags only: the derive is at ~0.3–0.4× usage's instructions and
+~⅓ of its warm time; the combinators are about level with usage, 3–4× slower
+than the derive warm, because each `alt` branch re-lexes the token.
 
-- **instr**: instructions for one cold parse, `PARSE_N=1` minus `PARSE_N=0`.
-  This host's glibc uses an instruction valgrind can't decode, so it's the
-  `perf stat -e instructions:u` median of 31 runs (±~100 noise).
-- **cold ns**: wall time of the first parse in a fresh process, median over 31
-  processes. This includes first-touch page faults, and is what a CLI pays.
-- **warm ns**: in-process min / median over 2000 short rounds (`time-sweep`).
-
-| argv | framework | instr | cold ns | warm ns (min) |
-|------|-----------|------:|--------:|--------------:|
-| `-v --path /tmp/x` | usage | 1428 | 3280 | 140 |
-| | wa derive | 570 | 1460 | 46 |
-| | wa combinators | 1216 | 1660 | 157 |
-| | bpaf 0.10 | 31280 | 56781 | 3455 |
-| | clap 4 | 24413 | 26961 | 2557 |
-| `-vp/tmp/x` | usage | 1266 | 2900 | 125 |
-| | wa derive | 509 | 1020 | 39 |
-| | wa combinators | 1101 | 1700 | 139 |
-| | bpaf 0.10 | 36032 | 73421 | 4104 |
-| | clap 4 | 22865 | 21521 | 2394 |
-| `--verbose --path=/tmp/x` | usage | 1557 | 2360 | 153 |
-| | wa derive | 611 | 1600 | 49 |
-| | wa combinators | 1263 | 1960 | 160 |
-| | bpaf 0.10 | 31347 | 58941 | 3491 |
-| | clap 4 | 23800 | 32060 | 2522 |
-
-Cold ns varies a few hundred ns between runs; compare ratios, not digits.
-Warm, the combinators cost ~3× the derive because each `alt` branch re-lexes
-the token.
-
-Caveat: this is a two-flag CLI. usage's static tables are built for mise scale
+Caveat: these are toy CLIs. usage's static tables are built for mise scale
 (211 commands), and it also does work we skip (help/version flags, spec
 metadata). The real comparison is a `mise-winnow-args` shadow once we have
 subcommands and positionals.
