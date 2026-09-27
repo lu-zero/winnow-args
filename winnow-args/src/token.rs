@@ -92,40 +92,93 @@ fn letter(input: &mut Argv<'_>) -> char {
     c
 }
 
-/// Lex the next item. Backtracks at the end of the command line.
-pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
+/// What the next item is, without consuming it.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    /// `--name` or `--name=value`.
+    Long,
+    /// A letter of `-abc`, at its start or part-way through.
+    Short,
+    /// A word that is not a flag.
+    Word,
+    /// The first `--`.
+    Separator,
+}
+
+/// Classify the next item without consuming it; backtracks at the end of the
+/// command line. Meant as a `dispatch!` scrutinee, so a word is only offered to
+/// positional parsers and a flag only to flag parsers.
+///
+/// `dispatch!` is a `move` closure: give it `&mut` references, or a `bool` it
+/// sets would be a copy.
+///
+/// ```
+/// use winnow::combinator::{alt, dispatch, fail};
+/// use winnow::prelude::*;
+/// use winnow::stream::BStr;
+/// use winnow_args::combinator::{args, positional, short};
+/// use winnow_args::token::{Kind, kind};
+/// use winnow_args::{Argv, Error};
+///
+/// let words = [BStr::new("a"), BStr::new("-v"), BStr::new("b")];
+/// let (mut verbose, mut files) = (false, Vec::<String>::new());
+/// let (v, f) = (&mut verbose, &mut files);
+/// args(dispatch! {kind;
+///     Kind::Long | Kind::Short => alt((short('v').long("verbose").switch().map(|()| *v = true),)),
+///     Kind::Word => positional("FILE").map(|file| f.push(file)),
+///     Kind::Separator => fail,
+/// })
+/// .parse_next(&mut Argv::new(&words))?;
+/// assert!(verbose);
+/// assert_eq!(files, ["a", "b"]);
+/// # Ok::<(), Error>(())
+/// ```
+#[inline]
+pub fn kind(input: &mut Argv<'_>) -> Result<Kind, Error> {
     if input.is_empty() {
         return Err(Error::from_input(input));
     }
-    match input.mode() {
-        Mode::Bundle => Ok(Arg::Short(letter(input))),
-        Mode::Stopped => Ok(Arg::Word(input.take_word())),
+    Ok(match input.mode() {
+        Mode::Bundle => Kind::Short,
+        Mode::Stopped => Kind::Word,
         Mode::Word => match input.front() {
-            b"--" => {
-                input.take_word();
-                input.set_mode(Mode::Stopped);
-                Ok(Arg::Separator)
-            }
-            [b'-', b'-', ..] => {
-                let word = &input.take_word()[2..];
-                Ok(match word.iter().position(|&b| b == b'=') {
-                    Some(eq) => Arg::Long {
-                        name: BStr::new(&word[..eq]),
-                        value: Some(BStr::new(&word[eq + 1..])),
-                    },
-                    None => Arg::Long {
-                        name: BStr::new(word),
-                        value: None,
-                    },
-                })
-            }
-            [b'-', _, ..] => {
-                input.take_bytes(1);
-                Ok(Arg::Short(letter(input)))
-            }
-            _ => Ok(Arg::Word(input.take_word())),
+            b"--" => Kind::Separator,
+            [b'-', b'-', ..] => Kind::Long,
+            [b'-', _, ..] => Kind::Short,
+            _ => Kind::Word,
         },
-    }
+    })
+}
+
+/// Lex the next item. Backtracks at the end of the command line.
+pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
+    Ok(match kind(input)? {
+        Kind::Separator => {
+            input.take_word();
+            input.set_mode(Mode::Stopped);
+            Arg::Separator
+        }
+        Kind::Long => {
+            let word = &input.take_word()[2..];
+            match word.iter().position(|&b| b == b'=') {
+                Some(eq) => Arg::Long {
+                    name: BStr::new(&word[..eq]),
+                    value: Some(BStr::new(&word[eq + 1..])),
+                },
+                None => Arg::Long {
+                    name: BStr::new(word),
+                    value: None,
+                },
+            }
+        }
+        Kind::Short => {
+            if input.mode() == Mode::Word {
+                input.take_bytes(1);
+            }
+            Arg::Short(letter(input))
+        }
+        Kind::Word => Arg::Word(input.take_word()),
+    })
 }
 
 /// A word that is not a flag: a positional value.

@@ -100,3 +100,22 @@ The combinators now show their structural cost: every word goes through each
 flag branch of the `alt`, each of which lexes, fails, and resets, before
 reaching the positional. `… a b c` got 149 ns slower from one more flag,
 ~50 ns per word. The derive's `match` does not grow with the flag count.
+
+## 4. Combinators: `dispatch!` on the item kind
+
+Not a feature: the combinator CLI now classifies each item once with
+`token::kind` (a peek, no consumption) and `dispatch!`es it, so a word only
+meets the positional parser and a flag only the flag `alt`.
+
+| line | wa-comb before (3) | wa-comb after | Δ | wa derive |
+|------|------:|------:|------:|------:|
+| `-v --path /tmp/x`             | 226 | 134 | −92  | 52  |
+| `… a b c`                      | 567 | 230 | −337 | 141 |
+| `-vvv --path /tmp/x`           | 254 | 180 | −74  | 68  |
+| `… -I a -I b -I c`             | 525 | 455 | −70  | 167 |
+
+Warm ns (min). Instructions: 1140 / 2705 / 1603 / 4120 (were 1510 / 4340 / 1934 / 4341).
+
+Words are now cheap. Flags still pay per preceding branch: every `-I` lexes and
+fails `VERBOSE` and `PATH` before `INCLUDE` matches, which is why the last line
+barely moved. The derive remains ~2.5× cheaper there.

@@ -82,8 +82,11 @@ product and usage's `Partial` work too.
 
 1. **Combinators.** `args(alt((VERBOSE.switch().map(|()| v = true), …)))`.
    `Named` implements `Parser<Argv, Arg, Error>` for one occurrence. `args`
-   repeats the item and then reports leftovers precisely. Each `alt` branch
-   re-lexes the token, so cost grows with the number of flags.
+   repeats the item and then reports leftovers precisely. `dispatch!` on
+   `token::kind` keeps words away from the flag branches; within the flag `alt`,
+   each branch still re-lexes, so flag cost grows with the number of flags.
+   `dispatch!` is a `move` closure, so the arms must write through `&mut`
+   references.
 2. **Derive.** One `while` loop with `match arg { Long{name} => match &**name
    { b"verbose" => … }, Short(c) => match c { 'v' => … } }`. rustc compiles the
    lookup, nothing is re-lexed, and fields are locals. `Cli::parse_argv` is

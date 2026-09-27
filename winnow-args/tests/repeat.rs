@@ -1,9 +1,11 @@
-//! Repeatable options, run against the combinator parser and the derived one.
+//! Repeatable options, run against the combinator parser (in `dispatch!` form)
+//! and the derived one.
 
-use winnow::combinator::alt;
+use winnow::combinator::{alt, dispatch, fail};
 use winnow::prelude::*;
 use winnow::stream::BStr;
 use winnow_args::combinator::{Named, args, long, positional, short};
+use winnow_args::token::{Kind, kind};
 use winnow_args::{Args, Argv, Error, ErrorKind};
 
 #[derive(Debug, PartialEq, Default)]
@@ -18,11 +20,15 @@ const NUM: Named = long("num");
 
 fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
     let mut cli = Cli::default();
-    args(alt((
-        INCLUDE.argument_as().map(|v| cli.include.push(v)),
-        NUM.argument_as().map(|v| cli.num.push(v)),
-        positional("FILES").map(|v| cli.files.push(v)),
-    )))
+    let c = &mut cli;
+    args(dispatch! {kind;
+        Kind::Long | Kind::Short => alt((
+            INCLUDE.argument_as().map(|v| c.include.push(v)),
+            NUM.argument_as().map(|v| c.num.push(v)),
+        )),
+        Kind::Word => positional("FILES").map(|v| c.files.push(v)),
+        Kind::Separator => fail,
+    })
     .parse_next(input)?;
     Ok(cli)
 }
