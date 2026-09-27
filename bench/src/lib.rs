@@ -1,4 +1,4 @@
-//! `example -v/--verbose -p/--path=PATH` in four spellings.
+//! `example -v/--verbose -p/--path=PATH [FILE]...` in five spellings.
 
 /// winnow-args, derived.
 pub mod wa_derive {
@@ -10,6 +10,8 @@ pub mod wa_derive {
         pub verbose: bool,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
+        #[arg(positional, value_name = "FILE")]
+        pub files: Vec<PathBuf>,
     }
 }
 
@@ -19,13 +21,14 @@ pub mod wa_comb {
 
     use winnow::combinator::alt;
     use winnow::prelude::*;
-    use winnow_args::combinator::{Named, args, short};
+    use winnow_args::combinator::{Named, args, positional, short};
     use winnow_args::{Argv, Error};
 
     #[derive(Debug)]
     pub struct Cli {
         pub verbose: bool,
         pub path: Option<PathBuf>,
+        pub files: Vec<PathBuf>,
     }
 
     const VERBOSE: Named = short('v').long("verbose");
@@ -34,12 +37,18 @@ pub mod wa_comb {
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
         let mut verbose = false;
         let mut path = None;
+        let mut files = Vec::new();
         args(alt((
             VERBOSE.switch().map(|()| verbose = true),
             PATH.argument_as::<PathBuf>().map(|p| path = Some(p)),
+            positional::<PathBuf>("FILE").map(|f| files.push(f)),
         )))
         .parse_next(input)?;
-        Ok(Cli { verbose, path })
+        Ok(Cli {
+            verbose,
+            path,
+            files,
+        })
     }
 }
 
@@ -56,6 +65,8 @@ pub mod bpaf010 {
         pub verbose: bool,
         #[bpaf(short('p'), long("path"), argument("PATH"))]
         pub path: Option<PathBuf>,
+        #[bpaf(positional("FILE"))]
+        pub files: Vec<PathBuf>,
     }
 }
 
@@ -69,6 +80,8 @@ pub mod clap4 {
         pub verbose: bool,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
+        #[arg(value_name = "FILE")]
+        pub files: Vec<PathBuf>,
     }
 }
 
@@ -108,5 +121,7 @@ pub mod usage {
         pub verbose: bool,
         #[usage(long = "path", short = 'p', value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
+        #[usage(arg, name = "FILE")]
+        pub files: ::std::vec::Vec<::std::path::PathBuf>,
     }
 }
