@@ -224,7 +224,7 @@ pub mod __private {
         Ok(())
     }
     pub use crate::env;
-    pub use crate::token::{Arg, arg, split};
+    pub use crate::token::{Arg, ValueOptions, arg, number, split};
     pub use crate::value::{ChoiceError, FromArg};
     pub use winnow::stream::BStr;
     pub type BoxError = crate::error::BoxError;

@@ -474,3 +474,26 @@ where usage walks shared static tables with one parser. Cold times, which
 include first-touch page faults, gain less than warm ones for the same reason.
 `run build` is rejected by every shadow: mise's tasks arrive through `mount`,
 which none of them model.
+
+## 18. `allow_negative_numbers`: `--offset -3`
+
+A flag or positional opts in; a negative number is digits, at most one `.` and
+an optional exponent (usage's rule, so `-inf` and `-1x` stay flag-like). A flag
+takes it as a detached value through `ValueOptions`, which the next grammar
+steps extend; a positional takes it when it is the next to fill, through a check
+the derive emits only for structs that have such a positional; a declared digit
+short (`-0`) still wins. `Named::allow_negative_numbers` keeps `Named` at 24
+bytes (it sits in padding). bpaf uses `negative_lit`, clap `allow_negative_numbers`.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `… --offset -3` |
+|-----------|------:|------:|------:|
+| usage     | 286   | 503   | 369   |
+| wa        | 133   | 215   | 159   |
+| wa-disp   | 186   | 300   | 238   |
+| wa-comb   | 229   | 432   | 517   |
+| bpaf 0.10 | 11151 | 13366 | 11723 |
+| clap 4    | 10786 | 12727 | 12006 |
+
+Warm ns (min), load rising 5 → 11 during the run. Warm instructions against
+step 17 are +10 and +19 on the first two lines — the bench CLI's new `--offset`
+slot and arm — so the rest of the drift is load.

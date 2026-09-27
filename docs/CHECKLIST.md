@@ -37,7 +37,7 @@ where the references disagree and we picked a side.
 - [x] **decision** `--verbose=x` on a switch is an error (clap, bpaf), not silently
       dropped (usage)
 - [x] Several long names: `alias = "…"` / `alias("…", …)`; `Named<N>::longs([…])`
-- [ ] Negative numbers as detached values (`--offset -1`)
+- [x] `allow_negative_numbers` on flags and positionals; `ValueOptions`, `token::number`
 - [ ] `allow_hyphen_values`, `require_equals`
 - [ ] `--no-name` negation
 - [ ] Non-UTF-8 names are rejected cleanly (names are ASCII-ish in practice)
@@ -53,7 +53,9 @@ where the references disagree and we picked a side.
 - [ ] **decision** usage rejects a whole bundle containing an unknown letter
       before applying any; we are strict (unknown flag is an error), so a
       partially-applied bundle is never observed. Revisit with lenient mode.
-- [ ] Negative numbers vs digit shorts (`-1` is a value unless `-1` is declared)
+- [x] Negative numbers vs digit shorts: a declared `-0` stays a flag
+- [ ] A negative number routed into a default subcommand whose positional opts in
+      (corpus `default-takes-an-opted-negative-number`)
 - [ ] Several short names
 
 ## 3. Occurrence semantics (post-binding)

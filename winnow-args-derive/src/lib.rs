@@ -464,6 +464,8 @@ struct Field {
     hide: bool,
     /// A flag's value placeholder.
     value_name: Option<String>,
+    /// A negative number is a value: a flag's detached value, or a positional's word.
+    negative_numbers: bool,
 }
 
 impl Field {
@@ -520,11 +522,14 @@ impl Field {
 
     /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
     fn read(&self) -> TokenStream2 {
+        let negative_numbers = self.negative_numbers;
+        let options = quote!(__wa::ValueOptions { negative_numbers: #negative_numbers });
         match &self.default_missing {
-            None => quote!(__arg.read_value(__input)?),
+            None if !negative_numbers => quote!(__arg.read_value(__input)?),
+            None => quote!(__arg.read_value_with(__input, #options)?),
             Some(missing) => {
                 let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
-                quote!(__arg.read_value_or(__input, __wa::BStr::new(#bytes)))
+                quote!(__arg.read_value_or_with(__input, #options, __wa::BStr::new(#bytes)))
             }
         }
     }
@@ -1074,6 +1079,34 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
     let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
+    // A negative number is a word where the positional next to fill opts in,
+    // unless it spells a declared digit short exactly (`-0` for fd's `--print0`).
+    let opted: Vec<usize> = positionals
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| f.negative_numbers)
+        .map(|(i, _)| i)
+        .collect();
+    let lex = if opted.is_empty() {
+        quote!(__wa::arg(__input)?)
+    } else {
+        let digits: Vec<LitByteStr> = fields
+            .iter()
+            .filter_map(|f| f.short().filter(char::is_ascii_digit))
+            .map(|c| LitByteStr::new(format!("-{c}").as_bytes(), Span::call_site()))
+            .collect();
+        let not_a_short =
+            (!digits.is_empty()).then(|| quote!(&&!matches!(__input.front(), #(#digits)|*)));
+        quote! {
+            match matches!(__position, #(#opted)|*) #not_a_short {
+                true => match __wa::number(__input) {
+                    ::core::result::Result::Ok(__word) => __wa::Arg::Word(__word),
+                    ::core::result::Result::Err(_) => __wa::arg(__input)?,
+                },
+                false => __wa::arg(__input)?,
+            }
+        }
+    };
     let start = default_subcommand
         .is_some()
         .then(|| quote!(let __start = *__input;));
@@ -1198,7 +1231,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #help_on_empty
                 while !__input.is_empty() {
                     #start
-                    let __arg = __wa::arg(__input)?;
+                    let __arg = #lex;
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#long_arms)*
@@ -1643,6 +1676,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut default = None;
     let mut double_dash = None;
     let (mut default_missing, mut value_optional) = (None, false);
+    let mut negative_numbers = false;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
@@ -1687,6 +1721,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("allow_negative_numbers") {
+                negative_numbers = true;
             } else if meta.path.is_ident("default_missing") {
                 default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("value_optional") {
@@ -1738,7 +1774,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -1762,6 +1798,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
     {
         return error("`default_missing` is for flags that take a value".into());
+    }
+    if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
+        return error("`allow_negative_numbers` is for fields that take a value".into());
     }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
@@ -1842,6 +1881,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         heading,
         hide,
         value_name: flag_value_name,
+        negative_numbers,
     })
 }
 

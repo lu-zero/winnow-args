@@ -13,3 +13,4 @@
 -v --path /tmp/x a -- node app.js -v
 -v --path /tmp/x --write
 -v -w ./x --path /tmp/x
+-v --path /tmp/x --offset -3

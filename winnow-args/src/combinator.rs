@@ -35,7 +35,7 @@ use winnow::prelude::*;
 
 use crate::error::Error;
 use crate::stream::Argv;
-use crate::token::{self, Arg};
+use crate::token::{self, Arg, ValueOptions};
 use crate::value::FromArg;
 use winnow::stream::BStr;
 
@@ -49,6 +49,8 @@ use winnow::stream::BStr;
 pub struct Named<const N: usize = 1> {
     short: Option<char>,
     longs: [Option<&'static str>; N],
+    /// Sits in padding: a plain `Named` stays 24 bytes.
+    options: ValueOptions,
 }
 
 /// A flag named `-c`.
@@ -56,6 +58,7 @@ pub const fn short(c: char) -> Named {
     Named {
         short: Some(c),
         longs: [None],
+        options: ValueOptions::DEFAULT,
     }
 }
 
@@ -64,6 +67,7 @@ pub const fn long(name: &'static str) -> Named {
     Named {
         short: None,
         longs: [Some(name)],
+        options: ValueOptions::DEFAULT,
     }
 }
 
@@ -79,6 +83,7 @@ impl<const N: usize> Named<N> {
         Named {
             short: self.short,
             longs: [Some(name)],
+            options: self.options,
         }
     }
 
@@ -94,7 +99,14 @@ impl<const N: usize> Named<N> {
         Named {
             short: self.short,
             longs,
+            options: self.options,
         }
+    }
+
+    /// Take a negative number as a detached value: `--offset -1`.
+    pub const fn allow_negative_numbers(mut self) -> Self {
+        self.options.negative_numbers = true;
+        self
     }
 
     /// Whether `arg` is this flag.
@@ -134,14 +146,17 @@ impl<const N: usize> Named<N> {
     /// An option taking one value, as bytes.
     pub fn argument<'i>(mut self) -> impl Parser<Argv<'i>, &'i BStr, Error> {
         trace("argument", move |input: &mut Argv<'i>| {
-            self.parse_next(input)?.value().parse_next(input)
+            let arg = self.parse_next(input)?;
+            arg.read_value_with(input, self.options)
         })
     }
 
     /// An option taking one value, converted with [`FromArg`].
     pub fn argument_as<'i, T: FromArg>(mut self) -> impl Parser<Argv<'i>, T, Error> {
         trace("argument_as", move |input: &mut Argv<'i>| {
-            self.parse_next(input)?.value_as().parse_next(input)
+            self.parse_next(input)?
+                .value_as_with(self.options)
+                .parse_next(input)
         })
     }
 
