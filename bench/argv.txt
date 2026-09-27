@@ -7,3 +7,4 @@
 -v --dir /tmp/x
 -v --path /tmp/x u -g node@20
 -v --path /tmp/x -I a,b,c
+-v --path /tmp/x --color always

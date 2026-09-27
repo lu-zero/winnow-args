@@ -42,10 +42,10 @@ pub mod value;
 pub use error::{Error, ErrorKind};
 pub use stream::{Argv, words};
 pub use token::Arg;
-pub use value::FromArg;
+pub use value::{ChoiceError, FromArg};
 
 #[cfg(feature = "derive")]
-pub use winnow_args_derive::{Args, Subcommand};
+pub use winnow_args_derive::{Args, Subcommand, ValueEnum};
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
@@ -162,4 +162,7 @@ pub mod __private {
         Ok(())
     }
     pub use crate::token::{Arg, arg, split};
+    pub use crate::value::{ChoiceError, FromArg};
+    pub use winnow::stream::BStr;
+    pub type BoxError = crate::error::BoxError;
 }

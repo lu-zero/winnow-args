@@ -37,6 +37,8 @@ pub enum ErrorKind {
     MissingSubcommand,
     /// A value that its type rejected.
     InvalidValue,
+    /// `invalid_choice`: a value outside a fixed set.
+    InvalidChoice,
 }
 
 #[derive(Debug, Default)]
@@ -118,10 +120,16 @@ impl Error {
         value: &[u8],
         cause: impl Into<BoxError>,
     ) -> Self {
-        let mut error = Self::with_token(ErrorKind::InvalidValue, offset, flag.into());
+        let cause = cause.into();
+        let kind = if cause.is::<crate::value::ChoiceError>() {
+            ErrorKind::InvalidChoice
+        } else {
+            ErrorKind::InvalidValue
+        };
+        let mut error = Self::with_token(kind, offset, flag.into());
         let detail = error.detail_mut();
         detail.value = Some(String::from_utf8_lossy(value).into_owned());
-        detail.cause = Some(cause.into());
+        detail.cause = Some(cause);
         error
     }
 
@@ -181,7 +189,7 @@ impl fmt::Display for Error {
             ErrorKind::MissingRequired => write!(f, "`{token}` is required"),
             ErrorKind::MissingArgument => write!(f, "missing argument `{token}`"),
             ErrorKind::MissingSubcommand => f.write_str("a subcommand is required"),
-            ErrorKind::InvalidValue => {
+            ErrorKind::InvalidValue | ErrorKind::InvalidChoice => {
                 write!(
                     f,
                     "invalid value `{}` for `{token}`",
