@@ -1,11 +1,12 @@
-//! `#[derive(Args)]` for winnow-args.
+//! `#[derive(Args)]` and `#[derive(Subcommand)]` for winnow-args.
 //!
 //! The generated `parse_argv` is one loop: lex an item with `arg`, `match` it
 //! against every flag the struct declares, store into a local per field, and
 //! build the struct once the line is exhausted. Long names are matched as byte
 //! string patterns and shorts as `char` patterns, so the lookup is whatever
 //! rustc makes of a `match`, not a walk over a list of parsers. Words fill the
-//! positional fields in declaration order, tracked by one counter.
+//! positional fields in declaration order, tracked by one counter, unless the
+//! first one names a subcommand: then the subcommand parses the rest.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -21,6 +22,142 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
     expand(&input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
+}
+
+#[proc_macro_derive(Subcommand, attributes(arg))]
+pub fn derive_subcommand(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_subcommand(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// One `match` on the subcommand's name; the variant's `Args` parses the rest.
+fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new(
+            input.span(),
+            "`Subcommand` can only be derived for enums",
+        ));
+    };
+    let mut names: Vec<(String, &Ident)> = Vec::new();
+    let mut arms = Vec::new();
+    let mut patterns = Vec::new();
+    for variant in &data.variants {
+        let mut name = None;
+        for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    name = Some(meta.value()?.parse::<LitStr>()?.value());
+                    Ok(())
+                } else {
+                    Err(meta.error("expected `name`"))
+                }
+            })?;
+        }
+        let ident = &variant.ident;
+        let name = name.unwrap_or_else(|| kebab_case(&ident.to_string()));
+        if let Some((_, other)) = names.iter().find(|(n, _)| *n == name) {
+            return Err(syn::Error::new(
+                ident.span(),
+                format!("`{name}` is already used by `{other}`"),
+            ));
+        }
+        let pattern = LitByteStr::new(name.as_bytes(), Span::call_site());
+        let parse = match &variant.fields {
+            Fields::Unit => quote!(__wa::finish(__input).map(|()| Self::#ident)),
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                let ty = &fields.unnamed[0].ty;
+                match boxed(ty) {
+                    Some(inner) => quote! {
+                        <#inner as ::winnow_args::Args>::parse_argv(__input)
+                            .map(|v| Self::#ident(::std::boxed::Box::new(v)))
+                    },
+                    None => {
+                        quote!(<#ty as ::winnow_args::Args>::parse_argv(__input).map(Self::#ident))
+                    }
+                }
+            }
+            _ => {
+                return Err(syn::Error::new(
+                    variant.span(),
+                    "a subcommand variant is a unit or holds one `Args` type",
+                ));
+            }
+        };
+        arms.push(quote!(#pattern => #parse,));
+        patterns.push(pattern);
+        names.push((name, ident));
+    }
+
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    Ok(quote! {
+        impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
+            #[inline]
+            fn has(__name: &[u8]) -> bool {
+                matches!(__name, #(#patterns)|*)
+            }
+
+            fn parse_subcommand(
+                __name: &[u8],
+                __input: &mut ::winnow_args::Argv<'_>,
+            ) -> ::core::result::Result<Self, ::winnow_args::Error> {
+                use ::winnow_args::__private as __wa;
+                match __name {
+                    #(#arms)*
+                    _ => ::core::result::Result::Err(__wa::Error::unexpected_arg(
+                        __input.offset(),
+                        ::std::string::String::from_utf8_lossy(__name),
+                    )),
+                }
+            }
+        }
+
+        impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
+            fn parse_argv(
+                __input: &mut ::winnow_args::Argv<'_>,
+            ) -> ::core::result::Result<Self, ::winnow_args::Error> {
+                use ::winnow_args::__private as __wa;
+                if __input.is_empty() {
+                    return ::core::result::Result::Err(__wa::Error::missing_subcommand(__input.offset()));
+                }
+                let __arg = __wa::arg(__input)?;
+                if let __wa::Arg::Word(__word) = __arg {
+                    if <Self as __wa::Subcommand>::has(&**__word.value) {
+                        return <Self as __wa::Subcommand>::parse_subcommand(&**__word.value, __input);
+                    }
+                }
+                ::core::result::Result::Err(__arg.unexpected())
+            }
+        }
+    })
+}
+
+/// `DryRun` → `dry-run`.
+fn kebab_case(ident: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in ident.trim_start_matches("r#").chars().enumerate() {
+        if c.is_uppercase() {
+            if i > 0 {
+                out.push('-');
+            }
+            out.extend(c.to_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// `T` in `Box<T>`.
+fn boxed(ty: &Type) -> Option<&Type> {
+    let last = last_segment(ty)?;
+    if last.ident == "Box" {
+        inner(last)
+    } else {
+        None
+    }
 }
 
 enum Kind {
@@ -44,6 +181,7 @@ enum Role {
     Positional {
         name: String,
     },
+    Subcommand,
 }
 
 struct Field {
@@ -60,20 +198,21 @@ impl Field {
             Role::Flag { short: Some(c), .. } => format!("-{c}"),
             Role::Flag { .. } => unreachable!("every flag has a name"),
             Role::Positional { name } => name.clone(),
+            Role::Subcommand => "<COMMAND>".to_owned(),
         }
     }
 
     fn short(&self) -> Option<char> {
         match self.role {
             Role::Flag { short, .. } => short,
-            Role::Positional { .. } => None,
+            Role::Positional { .. } | Role::Subcommand => None,
         }
     }
 
     fn long(&self) -> Option<&str> {
         match &self.role {
             Role::Flag { long, .. } => long.as_deref(),
-            Role::Positional { .. } => None,
+            Role::Positional { .. } | Role::Subcommand => None,
         }
     }
 
@@ -156,8 +295,23 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     });
 
     let unexpected = quote!(return ::core::result::Result::Err(__arg.unexpected()));
-    let word_arm = if positionals.is_empty() {
-        quote!(__wa::Arg::Word(_) => { #unexpected; })
+    let subcommands: Vec<&Field> = fields
+        .iter()
+        .filter(|f| matches!(f.role, Role::Subcommand))
+        .collect();
+    if let Some(extra) = subcommands.get(1) {
+        return Err(syn::Error::new(
+            extra.ident.span(),
+            "a struct has at most one subcommand field",
+        ));
+    }
+    let subcommand = subcommands.first();
+    // A word routes to a subcommand only before any positional is filled.
+    let track_filled = subcommand.is_some() && !positionals.is_empty();
+    let filled = track_filled.then(|| quote!(__filled = true;));
+
+    let positional_match = if positionals.is_empty() {
+        quote!({ #unexpected; })
     } else {
         let arms = positionals.iter().enumerate().map(|(i, f)| {
             let ident = slot(&f.ident);
@@ -169,10 +323,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             __word.convert::<#ty>(#display)?
                         );
                         __position += 1;
+                        #filled
                     }
                 },
                 Kind::Many(ty) => quote! {
-                    #i => #ident.push(__word.convert::<#ty>(#display)?),
+                    #i => {
+                        #ident.push(__word.convert::<#ty>(#display)?);
+                        #filled
+                    }
                 },
                 Kind::Switch | Kind::Count(_) => {
                     unreachable!("rejected for positionals in `field`")
@@ -180,13 +338,38 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         });
         quote! {
-            __wa::Arg::Word(__word) => match __position {
+            match __position {
                 #(#arms)*
                 _ => { #unexpected; }
-            },
+            }
+        }
+    };
+    let route = subcommand.map(|f| {
+        let ident = slot(&f.ident);
+        let ty = match &f.kind {
+            Kind::Optional(ty) | Kind::Required(ty) => ty,
+            _ => unreachable!("rejected for subcommands in `field`"),
+        };
+        let not_filled = track_filled.then(|| quote!(!__filled &&));
+        quote! {
+            if #not_filled !__word.after_separator {
+                if <#ty as __wa::Subcommand>::has(&**__word.value) {
+                    #ident = ::core::option::Option::Some(
+                        <#ty as __wa::Subcommand>::parse_subcommand(&**__word.value, __input)?
+                    );
+                    break;
+                }
+            }
+        }
+    });
+    let word_arm = quote! {
+        __wa::Arg::Word(__word) => {
+            #route
+            #positional_match
         }
     };
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
+    let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
@@ -197,18 +380,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
             Kind::Required(_) => {
                 let display = LitStr::new(&f.display(), Span::call_site());
-                let error = if f.is_positional() {
-                    quote!(missing_argument)
-                } else {
-                    quote!(missing_required)
+                let error = match f.role {
+                    Role::Positional { .. } => {
+                        quote!(__wa::Error::missing_argument(__input.offset(), #display))
+                    }
+                    Role::Flag { .. } => {
+                        quote!(__wa::Error::missing_required(__input.offset(), #display))
+                    }
+                    Role::Subcommand => quote!(__wa::Error::missing_subcommand(__input.offset())),
                 };
                 quote! {
                     #ident: match #slot {
                         ::core::option::Option::Some(v) => v,
                         ::core::option::Option::None => {
-                            return ::core::result::Result::Err(
-                                __wa::Error::#error(__input.offset(), #display)
-                            );
+                            return ::core::result::Result::Err(#error);
                         }
                     }
                 }
@@ -224,6 +409,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 use ::winnow_args::__private as __wa;
                 #(#slots)*
                 #position
+                #filled_slot
                 while !__input.is_empty() {
                     let __arg = __wa::arg(__input)?;
                     match __arg {
@@ -257,6 +443,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut long = None;
     let mut positional = false;
     let mut count = false;
+    let mut subcommand = false;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -278,12 +465,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 positional = true;
             } else if meta.path.is_ident("count") {
                 count = true;
+            } else if meta.path.is_ident("subcommand") {
+                subcommand = true;
             } else if meta.path.is_ident("value_name") {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
-                return Err(
-                    meta.error("expected `short`, `long`, `positional`, `count` or `value_name`")
-                );
+                return Err(meta.error(
+                    "expected `short`, `long`, `positional`, `subcommand`, `count` or `value_name`",
+                ));
             }
             Ok(())
         })?;
@@ -295,7 +484,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     } else {
         kind(&f.ty)
     };
-    let role = if positional {
+    let role = if subcommand {
+        if positional || count || short.is_some() || long.is_some() {
+            return error("a subcommand field takes no other `arg` options".into());
+        }
+        if !matches!(kind, Kind::Optional(_) | Kind::Required(_)) {
+            return error("a subcommand field is `E` or `Option<E>`".into());
+        }
+        Role::Subcommand
+    } else if positional {
         if short.is_some() || long.is_some() {
             return error("a positional field has no `short` or `long` name".into());
         }

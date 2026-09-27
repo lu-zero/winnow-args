@@ -84,8 +84,13 @@ where the references disagree and we picked a side.
 
 ## 5. Subcommands
 
-- [ ] Enum of subcommands, one word selects
-- [ ] Nested subcommands, global/inherited flags
+- [x] Enum of subcommands (`#[derive(Subcommand)]`), one word selects, only
+      before any positional and never after `--`; the child takes the rest
+- [x] Required (`E`) or optional (`Option<E>`) subcommand field; unit and
+      `Box<T>` variants; the enum is itself `Args`
+- [x] Nested subcommands
+- [x] `command(name, inner)` and `Word::after_separator` for the combinators
+- [ ] Global/inherited flags (a parent flag after the subcommand word)
 - [ ] Aliases, default subcommand, external subcommands
 - [ ] Multicall (argv[0] selects)
 
@@ -123,7 +128,8 @@ where the references disagree and we picked a side.
 - [x] Codegen is a single `match` over the lexed token (no `alt` chain), so a
       flag lookup is a compiled string match
 - [x] Positionals: `#[arg(positional, value_name = "…")]`, `T` / `Option<T>` / `Vec<T>`
-- [ ] Subcommands (`enum`), flattening, doc-comment help
+- [x] Subcommands: `#[arg(subcommand)]`, `#[derive(Subcommand)]`, `#[arg(name = "…")]`
+- [ ] Flattening, doc-comment help
 
 ## 10. Conformance and performance
 

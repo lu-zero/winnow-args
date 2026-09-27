@@ -8,7 +8,28 @@ use clap::Parser as _;
 use winnow::Parser as _;
 use winnow_args::{Args as _, Argv};
 
-type Fields = (usize, Option<PathBuf>, Vec<PathBuf>, Vec<PathBuf>);
+#[derive(Debug, PartialEq)]
+struct Fields {
+    verbose: usize,
+    path: Option<PathBuf>,
+    include: Vec<PathBuf>,
+    files: Vec<PathBuf>,
+    /// `use`: `--global` and the tools.
+    command: Option<(bool, Vec<String>)>,
+}
+
+macro_rules! fields {
+    ($cli:expr, $use:path) => {{
+        let c = $cli;
+        Fields {
+            verbose: c.verbose as usize,
+            path: c.path,
+            include: c.include,
+            files: c.files,
+            command: c.command.map(|$use(u)| (u.global, u.tools)),
+        }
+    }};
+}
 
 #[test]
 fn frameworks_agree_on_every_benchmarked_line() {
@@ -23,45 +44,42 @@ fn frameworks_agree_on_every_benchmarked_line() {
         let clap_argv = std::iter::once(OsString::from("example")).chain(args.iter().cloned());
 
         let usage = bench::usage::Cli::parse_from(&refs)
-            .map(|c| (c.verbose.into(), c.path, c.include, c.files))
+            .map(|c| fields!(c, bench::usage::Commands::Use))
             .unwrap_or_else(|_| panic!("usage rejected {line:?}"));
-        let all: [(&str, Fields); 5] = [
+        let all = [
             (
                 "wa",
                 bench::wa_derive::Cli::parse_from(&words)
-                    .map(|c| (c.verbose.into(), c.path, c.include, c.files))
-                    .unwrap(),
+                    .map(|c| fields!(c, bench::wa_derive::Commands::Use)),
             ),
             (
                 "wa-disp",
                 bench::wa_disp::cli
                     .parse_next(&mut Argv::new(&words))
-                    .map(|c| (c.verbose.into(), c.path, c.include, c.files))
-                    .unwrap(),
+                    .map(|c| fields!(c, bench::wa_comb::Commands::Use)),
             ),
             (
                 "wa-comb",
                 bench::wa_comb::cli
                     .parse_next(&mut Argv::new(&words))
-                    .map(|c| (c.verbose.into(), c.path, c.include, c.files))
-                    .unwrap(),
-            ),
-            (
-                "bpaf",
-                bench::bpaf010::cli_p()
-                    .run_inner(&strs[..])
-                    .map(|c| (c.verbose, c.path, c.include, c.files))
-                    .unwrap(),
-            ),
-            (
-                "clap",
-                bench::clap4::Cli::try_parse_from(clap_argv)
-                    .map(|c| (c.verbose.into(), c.path, c.include, c.files))
-                    .unwrap(),
+                    .map(|c| fields!(c, bench::wa_comb::Commands::Use)),
             ),
         ];
         for (name, fields) in all {
-            assert_eq!(fields, usage, "{name} disagrees with usage on {line:?}");
+            assert_eq!(
+                fields.as_ref().ok(),
+                Some(&usage),
+                "{name} disagrees with usage on {line:?}"
+            );
         }
+        let bpaf = bench::bpaf010::cli_p()
+            .run_inner(&strs[..])
+            .map(|c| fields!(c, bench::bpaf010::Commands::Use))
+            .unwrap_or_else(|e| panic!("bpaf rejected {line:?}: {e:?}"));
+        assert_eq!(bpaf, usage, "bpaf disagrees with usage on {line:?}");
+        let clap = bench::clap4::Cli::try_parse_from(clap_argv)
+            .map(|c| fields!(c, bench::clap4::Commands::Use))
+            .unwrap_or_else(|e| panic!("clap rejected {line:?}: {e}"));
+        assert_eq!(clap, usage, "clap disagrees with usage on {line:?}");
     }
 }
