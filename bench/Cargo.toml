@@ -1,0 +1,19 @@
+# The same tiny CLI — `example -v/--verbose -p/--path=PATH` — in each framework,
+# measured the way ../usage/benches/gate measures its mise shadows: one binary per
+# framework that parses its own argv PARSE_N times, so N=1 minus N=0 under
+# cachegrind is one cold parse in a fresh process. See tasks/perf.sh.
+[package]
+name = "bench"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+winnow.workspace = true
+winnow-args.workspace = true
+# bpaf 0.10 is not on crates.io; same local checkout usage's mise-bpaf010 shadow uses.
+bpaf = { path = "../../bpaf/bpaf", version = "0.10.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
+# The reference: usage's compiled, zero-allocation parser, as its mise shadow uses it.
+usage-argv = { path = "../../usage/argv", features = ["spec"] }
+usage-derive = { path = "../../usage/derive" }
