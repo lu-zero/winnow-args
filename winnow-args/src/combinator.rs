@@ -78,10 +78,10 @@ impl Named {
     /// Whether `arg` is this flag.
     #[inline]
     pub fn matches(&self, arg: &Arg<'_>) -> bool {
-        match *arg {
-            Arg::Long { name, .. } => self.long.is_some_and(|l| **name == *l.as_bytes()),
-            Arg::Short(c) => self.short == Some(c),
-            Arg::Word(_) | Arg::Separator => false,
+        match arg {
+            Arg::Long(f) => self.long.is_some_and(|l| f.name == l.as_bytes()),
+            Arg::Short(f) => self.short == Some(f.letter),
+            Arg::Word(_) | Arg::Separator { .. } => false,
         }
     }
 
@@ -102,29 +102,21 @@ impl Named {
     /// A switch: `--name` or `-c`, no value.
     pub fn switch<'i>(mut self) -> impl Parser<Argv<'i>, (), Error> {
         trace("switch", move |input: &mut Argv<'i>| {
-            let offset = input.offset();
-            let arg = self.parse_next(input)?;
-            token::no_value(&arg, offset)
+            self.parse_next(input)?.switch().parse_next(input)
         })
     }
 
     /// An option taking one value, as bytes.
     pub fn argument<'i>(mut self) -> impl Parser<Argv<'i>, &'i BStr, Error> {
         trace("argument", move |input: &mut Argv<'i>| {
-            let offset = input.offset();
-            let arg = self.parse_next(input)?;
-            token::value(input, &arg, offset)
+            self.parse_next(input)?.value().parse_next(input)
         })
     }
 
     /// An option taking one value, converted with [`FromArg`].
     pub fn argument_as<'i, T: FromArg>(mut self) -> impl Parser<Argv<'i>, T, Error> {
         trace("argument_as", move |input: &mut Argv<'i>| {
-            let offset = input.offset();
-            let arg = self.parse_next(input)?;
-            let value = token::value(input, &arg, offset)?;
-            T::from_arg(value)
-                .map_err(|cause| Error::invalid_value(offset, arg.spelling(), value, cause))
+            self.parse_next(input)?.value_as().parse_next(input)
         })
     }
 }
@@ -146,9 +138,7 @@ impl<'i> Parser<Argv<'i>, Arg<'i>, Error> for Named {
 /// as with flags.
 pub fn positional<'i, T: FromArg>(name: &'static str) -> impl Parser<Argv<'i>, T, Error> {
     trace("positional", move |input: &mut Argv<'i>| {
-        let offset = input.offset();
-        let word = token::word(input)?;
-        T::from_arg(word).map_err(|cause| Error::invalid_value(offset, name, word, cause))
+        token::word(input)?.value_as(name).parse_next(input)
     })
 }
 
@@ -163,7 +153,9 @@ where
     P: Parser<Argv<'i>, (), Error>,
 {
     trace("args", move |input: &mut Argv<'i>| {
-        let separator = token::arg.verify(|a: &Arg<'i>| *a == Arg::Separator).void();
+        let separator = token::arg
+            .verify(|a: &Arg<'i>| matches!(a, Arg::Separator { .. }))
+            .void();
         repeat::<_, _, (), _, _>(0.., winnow::combinator::alt((item.by_ref(), separator)))
             .parse_next(input)?;
         token::finish(input).map_err(|e| e.cut())

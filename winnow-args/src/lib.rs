@@ -5,8 +5,9 @@
 //! else is a winnow parser over it, in three layers:
 //!
 //! - [`token`]: the lexer. [`token::arg`] reads one item (long flag, short
-//!   letter, word, `--`); [`token::value`] and [`token::no_value`] finish a flag
-//!   once its caller knows whether it takes a value.
+//!   letter, word, `--`); [`token::Arg`]'s methods finish a flag once its
+//!   caller knows whether it takes a value. Matched in a `dispatch!`, the
+//!   flags' names become a compiled `match`.
 //! - [`combinator`]: bpaf-style named items — `short('p').long("path").argument()` —
 //!   that compose with `alt`, `map` and friends.
 //! - [`Args`] and its derive: a struct parsed by one generated loop that
@@ -85,28 +86,5 @@ pub trait Args: Sized {
 pub mod __private {
     pub use crate::error::Error;
     pub use crate::stream::Argv;
-    pub use crate::token::{Arg, arg, no_value, unexpected, value};
-    pub use crate::value::FromArg;
-
-    /// Convert the positional `word` read at `offset`, naming `name` on failure.
-    #[inline]
-    pub fn positional_as<T: FromArg>(
-        word: &winnow::stream::BStr,
-        offset: usize,
-        name: &str,
-    ) -> Result<T, Error> {
-        T::from_arg(word).map_err(|cause| Error::invalid_value(offset, name, word, cause))
-    }
-
-    /// Read the value of `arg` and convert it, naming the flag on failure.
-    #[inline]
-    pub fn value_as<'i, T: FromArg>(
-        input: &mut Argv<'i>,
-        arg: &Arg<'i>,
-        offset: usize,
-    ) -> Result<T, Error> {
-        let value = value(input, arg, offset)?;
-        T::from_arg(value)
-            .map_err(|cause| Error::invalid_value(offset, arg.spelling(), value, cause))
-    }
+    pub use crate::token::{Arg, arg};
 }

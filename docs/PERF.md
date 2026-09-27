@@ -119,3 +119,40 @@ Warm ns (min). Instructions: 1140 / 2705 / 1603 / 4120 (were 1510 / 4340 / 1934 
 Words are now cheap. Flags still pay per preceding branch: every `-I` lexes and
 fails `VERBOSE` and `PATH` before `INCLUDE` matches, which is why the last line
 barely moved. The derive remains ~2.5× cheaper there.
+
+## 5. Full dispatch on flag names, and three layout fixes
+
+`token::arg` now returns an `Arg` whose variants carry their offset and whose
+fields are plain (`LongFlag { name: &[u8], .. }`, `ShortFlag { letter, .. }`),
+so one `dispatch!` can match both spellings of a flag as a pattern (`wa-disp`).
+Its first version made **everything slower despite executing fewer
+instructions**; `stall_backend` showed why, and three fixes followed:
+
+| change | wa derive, `… a b c` | cycles / parse | backend stalls / parse |
+|--------|------:|------:|------:|
+| before (step 4)                                   | 130 | 452 | 19  |
+| `Arg` grows to 48 bytes, `arg` not `#[inline]`    | 187 | 662 | 207 |
+| `#[inline]` on `token::arg`                       | 145 | ~520 | ~100 |
+| continuations as `&self` methods, not closures    | 117 | ~395 | ~23 |
+| `Argv` counters `u32`: 48 → 32 bytes              | 116 | ~430 | ~32 |
+
+Warm ns (min); cycles and stalls from `perf stat` over 1M warm parses, ±15%.
+The stalls are store-to-load forwarding failures: a value written field by field
+(the `Result<Arg, Error>` returned through memory, a closure capturing the
+enum, an `Argv` checkpoint) read back at once with wider loads. The last row
+mostly helps the combinators, whose `repeat`/`alt` copy `Argv` per item
+(stalls ~136 → ~65).
+
+| framework | `-v --path /tmp/x` | `… a b c` | `-vvv …` | `… -I a -I b -I c` |
+|-----------|------:|------:|------:|------:|
+| usage     | 157   | 341   | 209   | 366   |
+| wa        | 46    | 115   | 57    | 130   |
+| wa-disp   | 99    | 196   | 131   | 230   |
+| wa-comb   | 125   | 216   | 175   | 415   |
+| bpaf 0.10 | 5449  | 6872  | 7594  | 7752  |
+| clap 4    | 3031  | 4140  | 3789  | 5238  |
+
+Warm ns (min). Against step 4 the derive gained 6–37 ns per line. `wa-disp`
+costs the same per flag however many flags there are; `wa-comb` still pays per
+preceding flag (the `-I` line). What separates `wa-disp` from the derive is
+winnow's `repeat`/`alt` bookkeeping in `args`, not the matching.

@@ -52,6 +52,9 @@ fn main() {
     sweep("wa-comb", 2_000, || {
         black_box(bench::wa_comb::cli.parse_next(&mut Argv::new(black_box(&words)))).ok();
     });
+    sweep("wa-disp", 2_000, || {
+        black_box(bench::wa_disp::cli.parse_next(&mut Argv::new(black_box(&words)))).ok();
+    });
     sweep("bpaf", 100, || {
         black_box(bench::bpaf010::cli_p().run_inner(black_box(&strs[..]))).ok();
     });

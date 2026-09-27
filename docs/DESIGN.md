@@ -78,19 +78,32 @@ winnow's permutation macro applies each parser *exactly once*. Options are
 or collect). So accumulation is a loop plus a fold, which is how bpaf's
 product and usage's `Partial` work too.
 
-## Two composition styles over the same primitives
+## Three composition styles over the same primitives
 
-1. **Combinators.** `args(alt((VERBOSE.switch().map(|()| v = true), …)))`.
-   `Named` implements `Parser<Argv, Arg, Error>` for one occurrence. `args`
+1. **Named combinators.** `args(alt((VERBOSE.switch().map(|()| v = true), …)))`.
+   `Named` implements `Parser<Argv, Arg, Error>` for one occurrence; `args`
    repeats the item and then reports leftovers precisely. `dispatch!` on
-   `token::kind` keeps words away from the flag branches; within the flag `alt`,
-   each branch still re-lexes, so flag cost grows with the number of flags.
-   `dispatch!` is a `move` closure, so the arms must write through `&mut`
-   references.
-2. **Derive.** One `while` loop with `match arg { Long{name} => match &**name
-   { b"verbose" => … }, Short(c) => match c { 'v' => … } }`. rustc compiles the
-   lookup, nothing is re-lexed, and fields are locals. `Cli::parse_argv` is
-   still a plain winnow parser.
+   `token::kind` keeps words away from the flag branches. Inside the flag
+   `alt`, each branch still re-lexes, so flag cost grows with the flag count.
+2. **Name dispatch.** One `dispatch!` on `token::arg`, with arms such as
+   `a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. }))`.
+   rustc compiles the names into a `match`, and each item is lexed once.
+   Nesting `dispatch!` (on `--` and then on the name) does not work: each
+   level is a `move` closure, and the inner one would move the outer's
+   `&mut` captures.
+3. **Derive.** The same `match`, generated, in one plain loop with locals.
+
+Why the derive is fastest: it lexes each item once, looks names up in a
+compiled `match`, and keeps every field in a local of one function. It stops
+on `is_empty()` and handles `--` as one more arm. The combinators add
+winnow's `repeat`/`alt` bookkeeping per item: a checkpoint copy, the
+progress check, and a separator branch. `Named` also adds a re-lex and a
+rewind per non-matching flag.
+
+Layout matters as much as instruction count here (see PERF.md step 5):
+`token::arg` is `#[inline]` so its `Result<Arg, Error>` never goes through
+memory. `Arg`'s continuations are `&self` methods. `Argv` is kept at 32
+bytes because the combinators copy it on every checkpoint.
 
 ## Numbers
 

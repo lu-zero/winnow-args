@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR... [FILE]...` in five spellings.
+//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR... [FILE]...` in six spellings.
 
 /// winnow-args, derived.
 pub mod wa_derive {
@@ -50,6 +50,38 @@ pub mod wa_comb {
             )),
             Kind::Word => positional("FILE").map(|f| c.files.push(f)),
             Kind::Separator => fail,
+        })
+        .parse_next(input)?;
+        Ok(cli)
+    }
+}
+
+/// winnow-args, combinators: one `dispatch!` matching flag names as patterns,
+/// the same shape as the derive's `match`.
+pub mod wa_disp {
+    use winnow::combinator::{dispatch, fail};
+    use winnow::prelude::*;
+    use winnow_args::combinator::args;
+    use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
+    use winnow_args::{Argv, Error};
+
+    pub use super::wa_comb::Cli;
+
+    pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
+        let mut cli = Cli::default();
+        let c = &mut cli;
+        args(dispatch! {arg;
+            a @ (Arg::Long(LongFlag { name: b"verbose", .. }) | Arg::Short(ShortFlag { letter: 'v', .. })) => {
+                a.switch().map(|()| c.verbose = c.verbose.saturating_add(1))
+            },
+            a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. })) => {
+                a.value_as().map(|p| c.path = Some(p))
+            },
+            a @ (Arg::Long(LongFlag { name: b"include", .. }) | Arg::Short(ShortFlag { letter: 'I', .. })) => {
+                a.value_as().map(|i| c.include.push(i))
+            },
+            Arg::Word(w) => w.value_as("FILE").map(|f| c.files.push(f)),
+            _ => fail,
         })
         .parse_next(input)?;
         Ok(cli)

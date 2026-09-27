@@ -126,20 +126,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         match &f.kind {
             Kind::Switch => quote! {
-                __wa::no_value(&__arg, __offset)?;
+                __arg.check_switch()?;
                 #ident = true;
             },
             Kind::Count(_) => quote! {
-                __wa::no_value(&__arg, __offset)?;
+                __arg.check_switch()?;
                 #ident = #ident.saturating_add(1);
             },
             Kind::Optional(ty) | Kind::Required(ty) => quote! {
                 #ident = ::core::option::Option::Some(
-                    __wa::value_as::<#ty>(__input, &__arg, __offset)?
+                    __arg.read_value_as::<#ty>(__input)?
                 );
             },
             Kind::Many(ty) => quote! {
-                #ident.push(__wa::value_as::<#ty>(__input, &__arg, __offset)?);
+                #ident.push(__arg.read_value_as::<#ty>(__input)?);
             },
         }
     };
@@ -155,7 +155,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         Some(quote!(#pattern => { #body }))
     });
 
-    let unexpected = quote!(return ::core::result::Result::Err(__wa::unexpected(&__arg, __offset)));
+    let unexpected = quote!(return ::core::result::Result::Err(__arg.unexpected()));
     let word_arm = if positionals.is_empty() {
         quote!(__wa::Arg::Word(_) => { #unexpected; })
     } else {
@@ -166,13 +166,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 Kind::Optional(ty) | Kind::Required(ty) => quote! {
                     #i => {
                         #ident = ::core::option::Option::Some(
-                            __wa::positional_as::<#ty>(__word, __offset, #display)?
+                            __word.convert::<#ty>(#display)?
                         );
                         __position += 1;
                     }
                 },
                 Kind::Many(ty) => quote! {
-                    #i => #ident.push(__wa::positional_as::<#ty>(__word, __offset, #display)?),
+                    #i => #ident.push(__word.convert::<#ty>(#display)?),
                 },
                 Kind::Switch | Kind::Count(_) => {
                     unreachable!("rejected for positionals in `field`")
@@ -225,18 +225,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #(#slots)*
                 #position
                 while !__input.is_empty() {
-                    let __offset = __input.offset();
                     let __arg = __wa::arg(__input)?;
                     match __arg {
-                        __wa::Arg::Long { name: __name, .. } => match &**__name {
+                        __wa::Arg::Long(__flag) => match __flag.name {
                             #(#long_arms)*
                             _ => { #unexpected; }
                         },
-                        __wa::Arg::Short(__c) => match __c {
+                        __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             _ => { #unexpected; }
                         },
-                        __wa::Arg::Separator => {}
+                        __wa::Arg::Separator { .. } => {}
                         #word_arm
                     }
                 }

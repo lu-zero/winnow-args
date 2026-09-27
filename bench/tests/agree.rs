@@ -25,10 +25,17 @@ fn frameworks_agree_on_every_benchmarked_line() {
         let usage = bench::usage::Cli::parse_from(&refs)
             .map(|c| (c.verbose.into(), c.path, c.include, c.files))
             .unwrap_or_else(|_| panic!("usage rejected {line:?}"));
-        let all: [(&str, Fields); 4] = [
+        let all: [(&str, Fields); 5] = [
             (
                 "wa",
                 bench::wa_derive::Cli::parse_from(&words)
+                    .map(|c| (c.verbose.into(), c.path, c.include, c.files))
+                    .unwrap(),
+            ),
+            (
+                "wa-disp",
+                bench::wa_disp::cli
+                    .parse_next(&mut Argv::new(&words))
                     .map(|c| (c.verbose.into(), c.path, c.include, c.files))
                     .unwrap(),
             ),
