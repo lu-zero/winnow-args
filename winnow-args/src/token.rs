@@ -151,7 +151,17 @@ impl<'i> Arg<'i> {
     ///   lone `-` is a value; `--` is not.
     #[inline(always)]
     pub fn read_value(&self, input: &mut Argv<'i>) -> Result<&'i BStr, Error> {
-        match self.next_value(input) {
+        self.read_value_with(input, ValueOptions::DEFAULT)
+    }
+
+    /// [`Arg::read_value`] under `options`: which detached words it may take.
+    #[inline(always)]
+    pub fn read_value_with(
+        &self,
+        input: &mut Argv<'i>,
+        options: ValueOptions,
+    ) -> Result<&'i BStr, Error> {
+        match self.next_value(input, options) {
             Some(v) => Ok(v),
             None => Err(Error::missing_value(self.offset(), self.spelling())),
         }
@@ -162,11 +172,22 @@ impl<'i> Arg<'i> {
     /// this gives `missing` instead.
     #[inline(always)]
     pub fn read_value_or(&self, input: &mut Argv<'i>, missing: &'static BStr) -> &'i BStr {
-        self.next_value(input).unwrap_or(missing)
+        self.read_value_or_with(input, ValueOptions::DEFAULT, missing)
+    }
+
+    /// [`Arg::read_value_or`] under `options`.
+    #[inline(always)]
+    pub fn read_value_or_with(
+        &self,
+        input: &mut Argv<'i>,
+        options: ValueOptions,
+        missing: &'static BStr,
+    ) -> &'i BStr {
+        self.next_value(input, options).unwrap_or(missing)
     }
 
     #[inline(always)]
-    fn next_value(&self, input: &mut Argv<'i>) -> Option<&'i BStr> {
+    fn next_value(&self, input: &mut Argv<'i>, options: ValueOptions) -> Option<&'i BStr> {
         match self {
             Arg::Long(LongFlag { value: Some(v), .. }) => Some(v),
             Arg::Short(_) if input.mode() == Mode::Bundle => {
@@ -174,7 +195,14 @@ impl<'i> Arg<'i> {
                 Some(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
             }
             _ => {
-                if input.is_empty() || (input.mode() == Mode::Word && is_flag_like(input.front())) {
+                if input.is_empty() {
+                    return None;
+                }
+                let next = input.front();
+                if input.mode() == Mode::Word
+                    && is_flag_like(next)
+                    && !(options.negative_numbers && is_negative_number(next))
+                {
                     return None;
                 }
                 Some(input.take_word())
@@ -222,6 +250,17 @@ impl<'i> Arg<'i> {
         }
     }
 
+    /// [`Arg::read_value_with`], converted, as a parser for a `dispatch!` arm.
+    pub fn value_as_with<T: FromArg>(
+        &self,
+        options: ValueOptions,
+    ) -> impl Parser<Argv<'i>, T, Error> {
+        move |input: &mut Argv<'i>| {
+            let v = self.read_value_with(input, options)?;
+            self.convert(v)
+        }
+    }
+
     /// [`Arg::read_value_as`] as a parser, for a `dispatch!` arm.
     pub fn value_as<T: FromArg>(&self) -> impl Parser<Argv<'i>, T, Error> {
         move |input: &mut Argv<'i>| self.read_value_as(input)
@@ -258,6 +297,68 @@ impl<'i> Word<'i> {
     pub fn value_as<T: FromArg>(&self, name: &'static str) -> impl Parser<Argv<'i>, T, Error> {
         move |_: &mut Argv<'i>| self.convert(name)
     }
+}
+
+/// How a flag takes a detached value, beyond the default of any word that is
+/// not flag-like.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ValueOptions {
+    /// A negative number is a value, not a flag: `--offset -1`.
+    pub negative_numbers: bool,
+}
+
+impl ValueOptions {
+    /// Any word that is not flag-like.
+    pub const DEFAULT: Self = Self {
+        negative_numbers: false,
+    };
+}
+
+/// Whether `word` is a negative number: `-` then digits, at most one `.`, and an
+/// optional exponent (`e` or `E`, an optional sign, at least one digit). Narrower
+/// than a float parse on purpose: `-inf` and `-NaN` are likelier misspelled flags.
+#[inline]
+pub fn is_negative_number(word: &[u8]) -> bool {
+    let Some(rest) = word.strip_prefix(b"-") else {
+        return false;
+    };
+    let (mantissa, exponent) = match rest.iter().position(|b| matches!(b, b'e' | b'E')) {
+        Some(at) => (&rest[..at], Some(&rest[at + 1..])),
+        None => (rest, None),
+    };
+    let (mut digit, mut dot) = (false, false);
+    for &b in mantissa {
+        match b {
+            b'0'..=b'9' => digit = true,
+            b'.' if !dot => dot = true,
+            _ => return false,
+        }
+    }
+    let exponent_ok = match exponent {
+        None => true,
+        Some(e) => {
+            let digits = e
+                .strip_prefix(b"+")
+                .or_else(|| e.strip_prefix(b"-"))
+                .unwrap_or(e);
+            !digits.is_empty() && digits.iter().all(u8::is_ascii_digit)
+        }
+    };
+    digit && exponent_ok
+}
+
+/// A negative number standing where a word starts, as a positional value: for a
+/// positional declared `allow_negative_numbers`, which would otherwise see a flag.
+pub fn number<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
+    if input.mode() != Mode::Word || !is_negative_number(input.front()) {
+        return Err(Error::from_input(input));
+    }
+    let offset = input.offset();
+    Ok(Word {
+        after_separator: false,
+        value: input.take_word(),
+        offset,
+    })
 }
 
 /// Whether a detached word would be read as a flag rather than a value.

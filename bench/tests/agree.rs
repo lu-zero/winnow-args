@@ -21,6 +21,7 @@ struct Fields {
     /// `--quiet`, `--json`, `--toml`, `--strict`.
     switches: [bool; 4],
     write: Option<String>,
+    offset: Option<i32>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -53,6 +54,7 @@ macro_rules! fields {
             jobs: Some(c.jobs).flatten_jobs(),
             switches: [c.quiet, c.json, c.toml, c.strict],
             write: c.write,
+            offset: c.offset,
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};
