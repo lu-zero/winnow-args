@@ -297,3 +297,26 @@ Warm ns (min); wa's −8 is the code-placement wobble noted in step 9 (instructi
 513 against 573). One more flag and an enum match cost the derive 15 ns; the
 `Named`/`alt` form pays per preceding branch again, since `--color` is tried
 last.
+
+## 11. `env` and `default`: `-j/--jobs <N>`, `$EXAMPLE_JOBS`, default 4
+
+The command line wins, then the environment, then the default; a switch from
+the environment is true unless `""`, `0`, `false`, `no` or `off`, as in usage.
+Environment reads go through `winnow_args::env::var`, which `with_env` can point
+at a fixed set for tests. The variable is unset while measuring, so every line
+without `-j` pays one lookup and a default conversion.
+
+| framework | `-v --path /tmp/x` | Δ vs 10 | `-v --path /tmp/x -j 8` | `… a b c` | `… use -g node@20` |
+|-----------|------:|------:|------:|------:|------:|
+| usage     | 238   | +72   | 239   | 480   | 444   |
+| wa        | 120   | +73   | 69    | 198   | 183   |
+| wa-disp   | 162   | +56   | 125   | 251   | 273   |
+| wa-comb   | 205   | +67   | 259   | 334   | 318   |
+| bpaf 0.10 | 7878  | +916  | 8214  | 9577  | 11599 |
+| clap 4    | 6097  | +828  | 6607  | 7757  | 10399 |
+
+Warm ns (min). One environment lookup costs everyone ~70 ns: `std::env::var_os`
+takes the environment lock, scans every variable and copies the match. usage
+pays exactly the same, since that is the whole cost; with `-j 8` the derive
+skips the lookup and is back to 69 ns. It scales with the size of the
+environment, so these numbers depend on the shell that ran them.

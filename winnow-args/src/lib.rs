@@ -34,11 +34,13 @@
 //! ```
 
 pub mod combinator;
+pub mod env;
 pub mod error;
 pub mod stream;
 pub mod token;
 pub mod value;
 
+pub use env::with_env;
 pub use error::{Error, ErrorKind};
 pub use stream::{Argv, words};
 pub use token::Arg;
@@ -161,6 +163,7 @@ pub mod __private {
         }
         Ok(())
     }
+    pub use crate::env;
     pub use crate::token::{Arg, arg, split};
     pub use crate::value::{ChoiceError, FromArg};
     pub use winnow::stream::BStr;

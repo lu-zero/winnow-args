@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -15,6 +15,8 @@ pub mod wa_derive {
         pub include: Vec<PathBuf>,
         #[arg(long)]
         pub color: Option<Color>,
+        #[arg(short, long, env = "EXAMPLE_JOBS", default = "4")]
+        pub jobs: Option<u32>,
         #[arg(positional, value_name = "FILE")]
         pub files: Vec<PathBuf>,
         #[arg(subcommand)]
@@ -59,6 +61,7 @@ pub mod wa_comb {
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
+        pub jobs: Option<u32>,
         pub files: Vec<PathBuf>,
         pub command: Option<Commands>,
     }
@@ -103,6 +106,15 @@ pub mod wa_comb {
     const PATH: Named<2> = short('p').longs(["path", "dir"]);
     const INCLUDE: Named = short('I').long("include");
     const COLOR: Named = long("color");
+    const JOBS: Named = short('j').long("jobs");
+
+    /// `--jobs` from the environment, then its default, when the line gave none.
+    pub fn jobs_fallback(jobs: &mut Option<u32>) -> Result<(), Error> {
+        if jobs.is_none() {
+            *jobs = Some(winnow_args::env::value("EXAMPLE_JOBS")?.unwrap_or(4));
+        }
+        Ok(())
+    }
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
         let mut cli = Cli::default();
@@ -115,6 +127,7 @@ pub mod wa_comb {
                     .arguments_as(b',')
                     .map(|i: Vec<PathBuf>| c.include.extend(i)),
                 COLOR.argument_as().map(|w| c.color = Some(w)),
+                JOBS.argument_as().map(|j| c.jobs = Some(j)),
             )),
             Kind::Word => alt((
                 cond(
@@ -131,6 +144,7 @@ pub mod wa_comb {
             Kind::Separator => fail,
         })
         .parse_next(input)?;
+        jobs_fallback(&mut cli.jobs)?;
         Ok(cli)
     }
 }
@@ -183,6 +197,9 @@ pub mod wa_disp {
                 }
             },
             a @ Arg::Long(LongFlag { name: b"color", .. }) => a.value_as().map(|w| c.color = Some(w)),
+            a @ (Arg::Long(LongFlag { name: b"jobs", .. }) | Arg::Short(ShortFlag { letter: 'j', .. })) => {
+                a.value_as().map(|j| c.jobs = Some(j))
+            },
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
                     let verbose = &mut c.verbose;
@@ -203,6 +220,7 @@ pub mod wa_disp {
             _ => fail,
         })
         .parse_next(input)?;
+        super::wa_comb::jobs_fallback(&mut cli.jobs)?;
         Ok(cli)
     }
 }
@@ -224,6 +242,14 @@ pub mod bpaf010 {
         pub include: Vec<PathBuf>,
         #[bpaf(long("color"), argument("COLOR"))]
         pub color: Option<Color>,
+        #[bpaf(
+            short('j'),
+            long("jobs"),
+            env("EXAMPLE_JOBS"),
+            argument("JOBS"),
+            fallback(4)
+        )]
+        pub jobs: u32,
         // bpaf tries items in order: the command must come before the greedy
         // positional, or `use` is taken as a FILE.
         #[bpaf(external(commands_p), optional)]
@@ -308,6 +334,8 @@ pub mod clap4 {
         pub include: Vec<PathBuf>,
         #[arg(long, value_enum)]
         pub color: Option<Color>,
+        #[arg(short, long, env = "EXAMPLE_JOBS", default_value = "4")]
+        pub jobs: Option<u32>,
         #[arg(value_name = "FILE")]
         pub files: Vec<PathBuf>,
         #[command(subcommand)]
@@ -382,6 +410,14 @@ pub mod usage {
         pub include: ::std::vec::Vec<::std::path::PathBuf>,
         #[usage(long = "color", value_enum)]
         pub color: ::std::option::Option<Color>,
+        #[usage(
+            long = "jobs",
+            short = 'j',
+            value_name = "JOBS",
+            env = "EXAMPLE_JOBS",
+            default = "4"
+        )]
+        pub jobs: ::std::option::Option<u32>,
         #[usage(arg, name = "FILE")]
         pub files: ::std::vec::Vec<::std::path::PathBuf>,
         #[usage(subcommand)]
