@@ -320,3 +320,30 @@ takes the environment lock, scans every variable and copies the match. usage
 pays exactly the same, since that is the whole cost; with `-j 8` the derive
 skips the lookup and is back to 69 ns. It scales with the size of the
 environment, so these numbers depend on the shell that ran them.
+
+## 12. Constraints: `conflicts`, `overrides`, `requires`, `group`, `required`, `required_unless`
+
+After the loop: environment fallbacks, then exclusivity (`conflicts`, at-most-one
+groups) on what was *supplied*, then defaults, then requiredness (`required`,
+`required_unless`, required groups, `requires` targets) on what *has a value*;
+`overrides` unsets the loser while binding and keeps the environment and default
+from refilling it. Selectors resolve to fields at compile time, so each check is
+a couple of slot tests. The bench adds `-q` conflicting with `--verbose`,
+`--json`/`--toml` in an at-most-one group and `--strict` requiring `--json`;
+clap uses `conflicts_with`/`ArgGroup`/`requires`, bpaf a struct-level `guard`,
+the combinators plain Rust after the parse. Every framework was checked to
+reject each violation.
+
+| framework | `-v --path /tmp/x` | Δ vs 11 | `… a b c` | `-vvv …` | `--json --strict` |
+|-----------|------:|------:|------:|------:|------:|
+| usage     | 251   | +13   | 486   | 308   | 366   |
+| wa        | 120   | 0     | 193   | 129   | 136   |
+| wa-disp   | 185   | +23   | 303   | 232   | 238   |
+| wa-comb   | 213   | +8    | 329   | 271   | 590   |
+| bpaf 0.10 | 9439  | +1561 | 11128 | 11303 | 9939  |
+| clap 4    | 9944  | +3847 | 11610 | 10788 | 11642 |
+
+Warm ns (min). Carrying the constraints costs the derive nothing measurable;
+clap pays ~3.8 µs per start building the groups and conflict tables into its
+command tree. `wa-comb`'s `--json --strict` pays for being the 9th and 11th
+branches of its `alt`.

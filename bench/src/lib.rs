@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -6,9 +6,18 @@ pub mod wa_derive {
     use std::path::PathBuf;
 
     #[derive(winnow_args::Args, Debug)]
+    #[arg(group("output"))]
     pub struct Cli {
         #[arg(short, long, count, global)]
         pub verbose: u8,
+        #[arg(short, long, conflicts = "--verbose")]
+        pub quiet: bool,
+        #[arg(long, group = "output")]
+        pub json: bool,
+        #[arg(long, group = "output")]
+        pub toml: bool,
+        #[arg(long, requires = "--json")]
+        pub strict: bool,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
@@ -58,6 +67,10 @@ pub mod wa_comb {
     #[derive(Debug, Default)]
     pub struct Cli {
         pub verbose: u8,
+        pub quiet: bool,
+        pub json: bool,
+        pub toml: bool,
+        pub strict: bool,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
@@ -108,10 +121,25 @@ pub mod wa_comb {
     const COLOR: Named = long("color");
     const JOBS: Named = short('j').long("jobs");
 
-    /// `--jobs` from the environment, then its default, when the line gave none.
-    pub fn jobs_fallback(jobs: &mut Option<u32>) -> Result<(), Error> {
-        if jobs.is_none() {
-            *jobs = Some(winnow_args::env::value("EXAMPLE_JOBS")?.unwrap_or(4));
+    const QUIET: Named = short('q').long("quiet");
+    const JSON: Named = long("json");
+    const TOML: Named = long("toml");
+    const STRICT: Named = long("strict");
+
+    /// What the derive does after its loop: `--jobs` fallbacks, then the constraints.
+    pub fn finish(cli: &mut Cli, input: &Argv<'_>) -> Result<(), Error> {
+        if cli.jobs.is_none() {
+            cli.jobs = Some(winnow_args::env::value("EXAMPLE_JOBS")?.unwrap_or(4));
+        }
+        let at = input.offset();
+        if cli.quiet && cli.verbose > 0 {
+            return Err(Error::conflict(at, "--quiet", "--verbose"));
+        }
+        if cli.json && cli.toml {
+            return Err(Error::conflict(at, "--json", "--toml"));
+        }
+        if cli.strict && !cli.json {
+            return Err(Error::required_by(at, "--json", "--strict"));
         }
         Ok(())
     }
@@ -128,6 +156,10 @@ pub mod wa_comb {
                     .map(|i: Vec<PathBuf>| c.include.extend(i)),
                 COLOR.argument_as().map(|w| c.color = Some(w)),
                 JOBS.argument_as().map(|j| c.jobs = Some(j)),
+                QUIET.switch().map(|()| c.quiet = true),
+                JSON.switch().map(|()| c.json = true),
+                TOML.switch().map(|()| c.toml = true),
+                STRICT.switch().map(|()| c.strict = true),
             )),
             Kind::Word => alt((
                 cond(
@@ -144,7 +176,7 @@ pub mod wa_comb {
             Kind::Separator => fail,
         })
         .parse_next(input)?;
-        jobs_fallback(&mut cli.jobs)?;
+        finish(&mut cli, input)?;
         Ok(cli)
     }
 }
@@ -200,6 +232,12 @@ pub mod wa_disp {
             a @ (Arg::Long(LongFlag { name: b"jobs", .. }) | Arg::Short(ShortFlag { letter: 'j', .. })) => {
                 a.value_as().map(|j| c.jobs = Some(j))
             },
+            a @ (Arg::Long(LongFlag { name: b"quiet", .. }) | Arg::Short(ShortFlag { letter: 'q', .. })) => {
+                a.switch().map(|()| c.quiet = true)
+            },
+            a @ Arg::Long(LongFlag { name: b"json", .. }) => a.switch().map(|()| c.json = true),
+            a @ Arg::Long(LongFlag { name: b"toml", .. }) => a.switch().map(|()| c.toml = true),
+            a @ Arg::Long(LongFlag { name: b"strict", .. }) => a.switch().map(|()| c.strict = true),
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
                     let verbose = &mut c.verbose;
@@ -220,7 +258,7 @@ pub mod wa_disp {
             _ => fail,
         })
         .parse_next(input)?;
-        super::wa_comb::jobs_fallback(&mut cli.jobs)?;
+        super::wa_comb::finish(&mut cli, input)?;
         Ok(cli)
     }
 }
@@ -231,11 +269,32 @@ pub mod bpaf010 {
 
     use bpaf::Bpaf;
 
+    /// bpaf has no declarative constraints: a guard over the parsed struct.
+    pub fn cli_p() -> bpaf::OptionParser<Cli> {
+        use bpaf::Parser as _;
+        cli_inner()
+            .guard(
+                |c| !(c.quiet && c.verbose > 0),
+                "--quiet cannot be used with --verbose",
+            )
+            .guard(|c| !(c.json && c.toml), "--json cannot be used with --toml")
+            .guard(|c| !c.strict || c.json, "--strict requires --json")
+            .to_options()
+    }
+
     #[derive(Debug, Clone, Bpaf)]
-    #[bpaf(options, generate(cli_p))]
+    #[bpaf(generate(cli_inner))]
     pub struct Cli {
         #[bpaf(external(verbose_p))]
         pub verbose: usize,
+        #[bpaf(short('q'), long("quiet"), switch)]
+        pub quiet: bool,
+        #[bpaf(long("json"), switch)]
+        pub json: bool,
+        #[bpaf(long("toml"), switch)]
+        pub toml: bool,
+        #[bpaf(long("strict"), switch)]
+        pub strict: bool,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
@@ -325,9 +384,18 @@ pub mod clap4 {
     use std::path::PathBuf;
 
     #[derive(clap::Parser, Debug)]
+    #[command(group(clap::ArgGroup::new("output").multiple(false)))]
     pub struct Cli {
         #[arg(short, long, action = clap::ArgAction::Count, global = true)]
         pub verbose: u8,
+        #[arg(short, long, conflicts_with = "verbose")]
+        pub quiet: bool,
+        #[arg(long, group = "output")]
+        pub json: bool,
+        #[arg(long, group = "output")]
+        pub toml: bool,
+        #[arg(long, requires = "json")]
+        pub strict: bool,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
@@ -394,10 +462,18 @@ pub mod usage {
     use usage_derive::{Args, Cli, Subcommands, ValueEnum};
 
     #[derive(Cli)]
-    #[usage(bin = "example", name = "example")]
+    #[usage(bin = "example", name = "example", group("output"))]
     pub struct Cli {
         #[usage(long = "verbose", short = 'v', count, global)]
         pub verbose: u8,
+        #[usage(long = "quiet", short = 'q', conflicts("--verbose"))]
+        pub quiet: bool,
+        #[usage(long = "json", group = "output")]
+        pub json: bool,
+        #[usage(long = "toml", group = "output")]
+        pub toml: bool,
+        #[usage(long = "strict", requires("--json"))]
+        pub strict: bool,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(
