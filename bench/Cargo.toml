@@ -13,7 +13,7 @@ winnow.workspace = true
 winnow-args.workspace = true
 # bpaf 0.10 is not on crates.io; same local checkout usage's mise-bpaf010 shadow uses.
 bpaf = { path = "../../bpaf/bpaf", version = "0.10.0", features = ["derive"] }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 # The reference: usage's compiled, zero-allocation parser, as its mise shadow uses it.
 usage-argv = { path = "../../usage/argv", features = ["spec"] }
 usage-derive = { path = "../../usage/derive" }

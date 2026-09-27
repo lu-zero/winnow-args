@@ -67,10 +67,14 @@ where the references disagree and we picked a side.
 - [x] Value delimiters: `delimiter = ','` on `Vec` flags and positionals, each
       piece converted alone; `Named::arguments_as`, `Arg::values_as`, `token::split`
 - [ ] Variadic option (`--include a b`); `dont_delimit_trailing_values`
-- [ ] Defaults, env fallback
+- [x] `default = "…"` and `env = "VAR"` on flags and positionals: command line >
+      environment > default; `with_env` for deterministic tests
 - [x] Value enums: `#[derive(ValueEnum)]` (a `FromArg` match on bytes; `name`, `alias`)
 - [x] `choices("a", "b")` on string flags and positionals; `invalid_choice` lists the names
-- [ ] Conflicts, requires, groups
+- [ ] `conflicts` (77 in mise), `overrides` (37), `requires` (23), `group` (20),
+      `required` (10), `required_unless` (7)
+- [ ] `value_optional` + `default_missing` (3)
+- [ ] `restart_token` (2, on mise's `run`)
 
 ## 4. Positionals
 
@@ -83,7 +87,7 @@ where the references disagree and we picked a side.
       compile time. usage instead lets an optional before a required one reserve
       the last word, which needs lookahead.
 - [ ] `var_min` / `var_max`; a variadic that is not last
-- [ ] `double_dash` modes (required / preserve / automatic)
+- [ ] `double_dash` modes: `required` (7 in mise), `automatic` (6), `preserve`
 
 ## 5. Subcommands
 
@@ -97,7 +101,8 @@ where the references disagree and we picked a side.
       any depth, bundles included; a subcommand's own declaration wins
 - [x] `Globals` trait / `globals(closure)` for the combinators
 - [x] Subcommand aliases: `#[arg(alias = "…")]` on a variant; `command(["name", "alias"], …)`
-- [ ] Default subcommand, external subcommands; hidden aliases (help only)
+- [ ] `default_subcommand` and `arg_required_else_help` (mise's root has both);
+      external subcommands; hidden aliases (help only)
 - [ ] Multicall (argv[0] selects)
 
 ## 6. Values
@@ -150,3 +155,16 @@ where the references disagree and we picked a side.
       generator from the KDL spec)
 - [ ] Add a `mise-winnow-args` shadow to `../usage/benches/shadows` via
       `xtask gen-shadow` once subcommands and positionals exist
+
+## Audit: usage's mise shadow (45 attribute keys)
+
+Parsing semantics still missing, by use count: `conflicts` 77, `overrides` 37,
+`requires` 23, `group` 20, `double_dash` 13, `required` 10, `required_unless` 7,
+`value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
+`arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
+(`disable_help_flag` 3, `disable_version_flag` 1).
+
+Help and metadata only, needed for help output but not for parsing: `help`,
+`long_help`, `after_long_help`, `help_heading`, `hide`, `alias_hidden`,
+`hide_default_value`, `hide_env`, `about`, `author`, `bin`, `effect` (usage's
+side-effect annotation, 198 uses).

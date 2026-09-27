@@ -16,8 +16,24 @@ struct Fields {
     files: Vec<PathBuf>,
     /// `--color`, by its variant name.
     color: Option<String>,
+    jobs: Option<u32>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
+}
+
+/// `--jobs` as `Option<u32>` whether a framework holds it as `u32` or `Option<u32>`.
+trait FlattenJobs {
+    fn flatten_jobs(self) -> Option<u32>;
+}
+impl FlattenJobs for Option<u32> {
+    fn flatten_jobs(self) -> Option<u32> {
+        self
+    }
+}
+impl FlattenJobs for Option<Option<u32>> {
+    fn flatten_jobs(self) -> Option<u32> {
+        self.flatten()
+    }
 }
 
 macro_rules! fields {
@@ -29,6 +45,7 @@ macro_rules! fields {
             include: c.include,
             files: c.files,
             color: c.color.map(|w| format!("{w:?}")),
+            jobs: Some(c.jobs).flatten_jobs(),
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};

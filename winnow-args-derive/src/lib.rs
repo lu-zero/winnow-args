@@ -287,6 +287,10 @@ struct Field {
     delimiter: Option<u8>,
     /// The only values accepted, checked before conversion.
     choices: Option<Vec<String>>,
+    /// Environment variable consulted when the command line gave nothing.
+    env: Option<String>,
+    /// Value used when neither the command line nor the environment did.
+    default: Option<String>,
 }
 
 impl Field {
@@ -316,6 +320,84 @@ impl Field {
             quote!(__wa::Error::invalid_value(__arg.offset(), __arg.spelling(), #value, #cause))
         });
         quote!({ #check __arg.convert::<#ty>(#value)? })
+    }
+
+    /// `value` (a `&BStr` from the environment or a default) converted to `ty`;
+    /// errors name it by `source`.
+    fn source_value(&self, ty: &Type, value: TokenStream2, source: &str) -> TokenStream2 {
+        let source = LitStr::new(source, Span::call_site());
+        let check = self.check(
+            value.clone(),
+            |cause| quote!(__wa::Error::invalid_value(__input.offset(), #source, #value, #cause)),
+        );
+        quote!({
+            #check
+            <#ty as __wa::FromArg>::from_arg(#value).map_err(|cause| {
+                __wa::Error::invalid_value(__input.offset(), #source, #value, cause)
+            })?
+        })
+    }
+
+    /// Fill the field from its environment variable, then its default, when the
+    /// command line left it unset.
+    fn fallbacks(&self) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        let unset = match &self.kind {
+            Kind::Switch => quote!(!#slot),
+            Kind::Count(_) => quote!(#slot == 0),
+            Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_none()),
+            Kind::Many(_) => quote!(#slot.is_empty()),
+        };
+        let assign = |value: TokenStream2, source: &str| match &self.kind {
+            Kind::Optional(ty) | Kind::Required(ty) => {
+                let value = self.source_value(ty, value, source);
+                quote!(#slot = ::core::option::Option::Some(#value);)
+            }
+            Kind::Many(ty) => match self.delimiter {
+                None => {
+                    let value = self.source_value(ty, value, source);
+                    quote!(#slot.push(#value);)
+                }
+                Some(d) => {
+                    let piece = self.source_value(ty, quote!(__piece), source);
+                    quote!(for __piece in __wa::split(#value, #d) { #slot.push(#piece); })
+                }
+            },
+            Kind::Switch | Kind::Count(_) => unreachable!("handled below"),
+        };
+        let env = self.env.as_ref().map(|var| {
+            let name = LitStr::new(var, Span::call_site());
+            let apply = match &self.kind {
+                Kind::Switch => quote!(#slot = __wa::env::truthy(&__raw);),
+                Kind::Count(ty) => quote! {
+                    if let ::core::option::Option::Some(::core::result::Result::Ok(__n)) =
+                        __raw.to_str().map(str::parse::<#ty>)
+                    {
+                        #slot = __n;
+                    }
+                },
+                _ => {
+                    let assign = assign(quote!(__value), &format!("${var}"));
+                    quote! {
+                        let __value = __wa::BStr::new(__raw.as_encoded_bytes());
+                        #assign
+                    }
+                }
+            };
+            quote! {
+                if #unset {
+                    if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
+                        #apply
+                    }
+                }
+            }
+        });
+        let default = self.default.as_ref().map(|value| {
+            let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
+            let assign = assign(quote!(__wa::BStr::new(#bytes)), &self.display());
+            quote!(if #unset { #assign })
+        });
+        quote!(#env #default)
     }
 
     /// A positional word converted to `ty`, checked against `choices` first.
@@ -591,6 +673,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
     let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
+    let fallbacks = fields.iter().map(Field::fallbacks);
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
@@ -646,6 +729,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #word_arm
                     }
                 }
+                #(#fallbacks)*
                 ::core::result::Result::Ok(Self { #(#build),* })
             }
         }
@@ -669,6 +753,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut alias = Vec::new();
     let mut delimiter = None;
     let mut choices = None;
+    let mut env = None;
+    let mut default = None;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -696,6 +782,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("env") {
+                env = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("default") {
+                default = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("choices") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -712,7 +802,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter`, `choices` or `value_name`",
+                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter`, `choices`, `env`, `default` or `value_name`",
                 ));
             }
             Ok(())
@@ -774,12 +864,20 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error("`choices` needs a field that takes a value".into());
     }
+    if (env.is_some() || default.is_some()) && matches!(role, Role::Subcommand) {
+        return error("a subcommand field takes no `env` or `default`".into());
+    }
+    if default.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
+        return error("`default` needs a field that takes a value".into());
+    }
     Ok(Field {
         ident,
         kind,
         role,
         delimiter,
         choices,
+        env,
+        default,
     })
 }
 
