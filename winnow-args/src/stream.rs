@@ -1,75 +1,24 @@
-//! The input: a whole command line as one byte buffer.
+//! The input: `argv` as a slice of words.
 //!
-//! Every word of `argv` is stored back to back, each one followed by [`SEP`]
-//! (NUL). A command line can never contain NUL — neither Unix `argv` nor the
-//! Windows command line can carry one — so the byte is free to mark where one
-//! word ends and the next begins.
+//! [`Argv`] is a winnow [`Stream`] whose tokens are the words of the command
+//! line, borrowed as [`BStr`], so nothing is copied or joined and any byte,
+//! NUL included, can appear in a word. A word is never re-split: `"a b"` is
+//! one token, the same as the shell handed it over.
 //!
-//! Flattening `argv` this way is what lets the rest of the crate be ordinary
-//! winnow parsers over a [`BStr`]: a position is one pointer, a checkpoint is a
-//! copy of it, and `--path=x`, `-vpx` and `-p x` are all just byte patterns.
-//! The only thing a flat buffer cannot say by itself is *where in the grammar*
-//! the position is — at the start of a word, part-way through a bundle of short
-//! flags, or past a `--` — so [`Argv`] carries that as a [`Mode`] next to the
-//! bytes, and its checkpoint saves both. Backtracking in `alt` therefore
-//! restores the mode too, which a `Stateful` wrapper would not.
+//! Offsets are counted in bytes as if every word were followed by one
+//! separator, so a position inside a bundle of short flags (`-vq`) is still
+//! a single number that shrinks as the lexer reads a letter. That keeps
+//! `repeat`'s "parser must consume" check and error offsets meaningful.
 
 use std::ffi::OsStr;
 
-use winnow::stream::{
-    AsBStr, BStr, Compare, CompareResult, FindSlice, Location, Needed, Offset, SliceLen, Stream,
-    StreamIsPartial,
-};
+use winnow::stream::{BStr, Location, Needed, Offset, SliceLen, Stream, StreamIsPartial};
 
-/// The byte that terminates every word in the buffer.
-pub const SEP: u8 = 0;
-
-/// An owned command line, flattened into NUL-terminated words.
-#[derive(Clone, Default, PartialEq, Eq)]
-pub struct ArgvBuf {
-    bytes: Vec<u8>,
-}
-
-impl ArgvBuf {
-    /// Flatten `args`, which should not include the program name.
-    ///
-    /// A word containing NUL cannot come from a real command line; one passed in
-    /// by hand would be read as two words.
-    pub fn new<I, S>(args: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let mut bytes = Vec::new();
-        for arg in args {
-            let arg = arg.as_ref().as_encoded_bytes();
-            debug_assert!(!arg.contains(&SEP), "argv words cannot contain NUL");
-            bytes.extend_from_slice(arg);
-            bytes.push(SEP);
-        }
-        Self { bytes }
-    }
-
-    /// The current process's arguments, without the program name.
-    pub fn from_env() -> Self {
-        Self::new(std::env::args_os().skip(1))
-    }
-
-    /// A stream positioned at the first word.
-    pub fn argv(&self) -> Argv<'_> {
-        Argv::new(&self.bytes)
-    }
-
-    /// The flattened bytes, NUL-terminated words.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-}
-
-impl std::fmt::Debug for ArgvBuf {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.argv().fmt(f)
-    }
+/// Borrow each argument as a [`BStr`] word.
+pub fn words<S: AsRef<OsStr>>(args: &[S]) -> Vec<&BStr> {
+    args.iter()
+        .map(|arg| BStr::new(arg.as_ref().as_encoded_bytes()))
+        .collect()
 }
 
 /// Where in the grammar a position is.
@@ -77,31 +26,38 @@ impl std::fmt::Debug for ArgvBuf {
 pub enum Mode {
     /// At the start of a word, and flags are still recognized.
     Word,
-    /// Inside a bundle of short flags: the next byte is another letter, or the
-    /// attached value of the letter just read.
+    /// Inside a bundle of short flags: the rest of the current word is more
+    /// letters, or the attached value of the letter just read.
     Bundle,
     /// Past a `--`: every word is a value.
     Stopped,
 }
 
 /// A command line being parsed: the [`Stream`] every parser in this crate reads.
+///
+/// Its checkpoint is the whole state, so `alt` backtracking restores the
+/// [`Mode`] and the position inside a bundle along with the word.
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Argv<'i> {
-    initial: &'i [u8],
-    input: &'i BStr,
+    /// Unfinished words; `words[0]` is the current one.
+    words: &'i [&'i BStr],
+    /// Bytes of `words[0]` already read, when inside a bundle.
+    skip: usize,
+    /// Offset to the end: unread bytes plus one separator per unfinished word.
+    remaining: usize,
+    total: usize,
     mode: Mode,
 }
 
 impl<'i> Argv<'i> {
-    /// Parse a buffer that is already flattened: NUL-terminated words.
-    pub fn new(bytes: &'i [u8]) -> Self {
-        debug_assert!(
-            bytes.last().is_none_or(|&b| b == SEP),
-            "the last word must be NUL-terminated"
-        );
+    /// Parse `words`, which should not include the program name.
+    pub fn new(words: &'i [&'i BStr]) -> Self {
+        let total = words.iter().map(|w| w.len() + 1).sum();
         Self {
-            initial: bytes,
-            input: BStr::new(bytes),
+            words,
+            skip: 0,
+            remaining: total,
+            total,
             mode: Mode::Word,
         }
     }
@@ -109,7 +65,7 @@ impl<'i> Argv<'i> {
     /// Whether every word has been consumed.
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
-        self.input.is_empty()
+        self.words.is_empty()
     }
 
     /// Where in the grammar the stream is.
@@ -123,33 +79,65 @@ impl<'i> Argv<'i> {
         self.mode = mode;
     }
 
-    /// The unconsumed bytes.
-    #[inline(always)]
-    pub fn as_bytes(&self) -> &'i [u8] {
-        self.input
-    }
-
-    /// Byte offset from the start of the command line.
+    /// Byte offset from the start of the command line, one separator counted per word.
     #[inline(always)]
     pub fn offset(&self) -> usize {
-        self.initial.len() - self.input.len()
+        self.total - self.remaining
     }
 
-    /// The whole command line this stream started from.
-    pub fn initial(&self) -> &'i [u8] {
-        self.initial
+    /// The unread part of the current word; empty at the end.
+    #[inline(always)]
+    pub fn front(&self) -> &'i [u8] {
+        match self.words.first() {
+            Some(word) => &word[self.skip..],
+            None => &[],
+        }
+    }
+
+    /// Read `n` bytes of the current word, staying inside it.
+    #[inline(always)]
+    pub(crate) fn take_bytes(&mut self, n: usize) {
+        debug_assert!(n < self.front().len() + 1);
+        self.skip += n;
+        self.remaining -= n;
+    }
+
+    /// Read the rest of the current word and move to the next one.
+    #[inline(always)]
+    pub(crate) fn take_word(&mut self) -> &'i BStr {
+        let rest = self.front();
+        self.remaining -= rest.len() + 1;
+        self.words = &self.words[1..];
+        self.skip = 0;
+        if self.mode == Mode::Bundle {
+            self.mode = Mode::Word;
+        }
+        BStr::new(rest)
+    }
+
+    /// Number of whole words spanning `offset`, which must fall on a word boundary.
+    fn words_in(&self, offset: usize) -> usize {
+        let mut end = 0;
+        for (n, (at, _)) in self.iter_offsets().enumerate() {
+            if at == offset {
+                return n;
+            }
+            end = at;
+        }
+        assert_eq!(
+            offset, self.remaining,
+            "offset {offset} is inside a word (last start {end})"
+        );
+        self.words.len()
     }
 }
 
 impl std::fmt::Debug for Argv<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut words = self
-            .input
-            .split(|&b| b == SEP)
-            .map(BStr::new)
-            .collect::<Vec<_>>();
-        // Every word is terminated, so splitting leaves an empty tail.
-        words.pop();
+        let mut words: Vec<&BStr> = self.words.to_vec();
+        if let Some(first) = words.first_mut() {
+            *first = BStr::new(&first[self.skip..]);
+        }
         f.debug_struct("Argv")
             .field("mode", &self.mode)
             .field("words", &words)
@@ -157,96 +145,112 @@ impl std::fmt::Debug for Argv<'_> {
     }
 }
 
-/// A saved position: the bytes and the [`Mode`] together.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct ArgvCheckpoint<'i> {
-    input: <&'i BStr as Stream>::Checkpoint,
-    mode: Mode,
+/// Iterator over the remaining words with their offsets.
+#[derive(Clone, Debug)]
+pub struct IterOffsets<'i> {
+    words: std::slice::Iter<'i, &'i BStr>,
+    skip: usize,
+    offset: usize,
 }
 
-impl Offset for ArgvCheckpoint<'_> {
-    #[inline(always)]
-    fn offset_from(&self, start: &Self) -> usize {
-        self.input.offset_from(&start.input)
+impl<'i> Iterator for IterOffsets<'i> {
+    type Item = (usize, &'i BStr);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let word = BStr::new(&self.words.next()?[self.skip..]);
+        self.skip = 0;
+        let at = self.offset;
+        self.offset += word.len() + 1;
+        Some((at, word))
     }
 }
 
 impl Offset for Argv<'_> {
     #[inline(always)]
     fn offset_from(&self, start: &Self) -> usize {
-        self.input.offset_from(&start.input)
-    }
-}
-
-impl<'i> Offset<ArgvCheckpoint<'i>> for Argv<'i> {
-    #[inline(always)]
-    fn offset_from(&self, start: &ArgvCheckpoint<'i>) -> usize {
-        self.input.offset_from(&start.input)
+        start.remaining - self.remaining
     }
 }
 
 impl SliceLen for Argv<'_> {
     #[inline(always)]
     fn slice_len(&self) -> usize {
-        self.input.len()
+        self.remaining
     }
 }
 
+/// Tokens are words (the unread part of the current one first); slices are
+/// runs of whole words, so `next_slice` must not be asked to split a word.
 impl<'i> Stream for Argv<'i> {
-    type Token = u8;
-    type Slice = &'i [u8];
-    type IterOffsets = <&'i BStr as Stream>::IterOffsets;
-    type Checkpoint = ArgvCheckpoint<'i>;
+    type Token = &'i BStr;
+    type Slice = &'i [&'i BStr];
+    type IterOffsets = IterOffsets<'i>;
+    type Checkpoint = Self;
 
     #[inline(always)]
     fn iter_offsets(&self) -> Self::IterOffsets {
-        self.input.iter_offsets()
+        IterOffsets {
+            words: self.words.iter(),
+            skip: self.skip,
+            offset: 0,
+        }
     }
     #[inline(always)]
     fn eof_offset(&self) -> usize {
-        self.input.eof_offset()
+        self.remaining
     }
     #[inline(always)]
     fn next_token(&mut self) -> Option<Self::Token> {
-        self.input.next_token()
+        if self.is_empty() {
+            None
+        } else {
+            Some(self.take_word())
+        }
     }
     #[inline(always)]
     fn peek_token(&self) -> Option<Self::Token> {
-        self.input.peek_token()
+        (!self.is_empty()).then(|| BStr::new(self.front()))
     }
-    #[inline(always)]
     fn offset_for<P>(&self, predicate: P) -> Option<usize>
     where
         P: Fn(Self::Token) -> bool,
     {
-        self.input.offset_for(predicate)
+        self.iter_offsets()
+            .find(|&(_, word)| predicate(word))
+            .map(|(at, _)| at)
     }
-    #[inline(always)]
     fn offset_at(&self, tokens: usize) -> Result<usize, Needed> {
-        self.input.offset_at(tokens)
+        let mut iter = self.iter_offsets();
+        match iter.nth(tokens) {
+            Some((at, _)) => Ok(at),
+            None if tokens == self.words.len() => Ok(self.remaining),
+            None => Err(Needed::new(tokens - self.words.len())),
+        }
     }
-    #[inline(always)]
     fn next_slice(&mut self, offset: usize) -> Self::Slice {
-        self.input.next_slice(offset)
+        let slice = self.peek_slice(offset);
+        for _ in 0..slice.len() {
+            self.take_word();
+        }
+        slice
     }
-    #[inline(always)]
     fn peek_slice(&self, offset: usize) -> Self::Slice {
-        self.input.peek_slice(offset)
+        assert!(
+            self.skip == 0 || offset == 0,
+            "cannot slice whole words inside a bundle"
+        );
+        &self.words[..self.words_in(offset)]
     }
     #[inline(always)]
     fn checkpoint(&self) -> Self::Checkpoint {
-        ArgvCheckpoint {
-            input: self.input.checkpoint(),
-            mode: self.mode,
-        }
+        *self
     }
     #[inline(always)]
     fn reset(&mut self, checkpoint: &Self::Checkpoint) {
-        self.input.reset(&checkpoint.input);
-        self.mode = checkpoint.mode;
+        *self = *checkpoint;
     }
     fn trace(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} {:?}", self.mode, self.input)
+        write!(f, "{self:?}")
     }
 }
 
@@ -274,29 +278,54 @@ impl Location for Argv<'_> {
     }
 }
 
-impl<'i, T> Compare<T> for Argv<'i>
-where
-    &'i BStr: Compare<T>,
-{
-    #[inline(always)]
-    fn compare(&self, t: T) -> CompareResult {
-        self.input.compare(t)
-    }
-}
+#[cfg(test)]
+mod tests {
+    use winnow::combinator::repeat;
+    use winnow::prelude::*;
+    use winnow::token::{any, take};
 
-impl<'i, S> FindSlice<S> for Argv<'i>
-where
-    &'i BStr: FindSlice<S>,
-{
-    #[inline(always)]
-    fn find_slice(&self, substr: S) -> Option<std::ops::Range<usize>> {
-        self.input.find_slice(substr)
-    }
-}
+    use super::*;
 
-impl AsBStr for Argv<'_> {
-    #[inline(always)]
-    fn as_bstr(&self) -> &[u8] {
-        self.input
+    fn line<'a>(words: &'a [&'a str]) -> Vec<&'a BStr> {
+        words.iter().map(BStr::new).collect()
+    }
+
+    #[test]
+    fn generic_token_parsers_see_whole_words() {
+        let words = line(&["a b", "", "c"]);
+        let mut input = Argv::new(&words);
+        assert_eq!(
+            any::<_, crate::Error>.parse_next(&mut input).unwrap(),
+            "a b"
+        );
+        assert_eq!(input.offset(), 4);
+        let rest: &[&BStr] = take::<_, _, crate::Error>(2usize)
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(rest, &words[1..]);
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn reading_a_letter_counts_as_progress() {
+        let words = line(&["-abc"]);
+        let mut input = Argv::new(&words);
+        let letters: Vec<_> = repeat(0.., crate::token::arg)
+            .parse_next(&mut input)
+            .unwrap();
+        assert_eq!(letters.len(), 3);
+        assert!(input.is_empty());
+    }
+
+    #[test]
+    fn checkpoint_restores_the_position_inside_a_bundle() {
+        let words = line(&["-ab", "x"]);
+        let mut input = Argv::new(&words);
+        crate::token::arg(&mut input).unwrap();
+        let saved = input.checkpoint();
+        crate::token::arg(&mut input).unwrap();
+        crate::token::arg(&mut input).unwrap();
+        input.reset(&saved);
+        assert_eq!((input.mode(), input.front()), (Mode::Bundle, &b"b"[..]));
     }
 }

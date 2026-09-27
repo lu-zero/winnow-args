@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use winnow::combinator::alt;
 use winnow::prelude::*;
 use winnow_args::combinator::{Named, args, short};
-use winnow_args::{Args, Argv, ArgvBuf, Error};
+use winnow_args::{Args, Argv, Error, words};
 
 #[derive(Debug, PartialEq)]
 struct Example {
@@ -42,12 +42,13 @@ struct Derived {
 }
 
 fn main() {
-    let buf = ArgvBuf::from_env();
-    match example.parse_next(&mut buf.argv()) {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    let words = words(&args);
+    match example.parse_next(&mut Argv::new(&words)) {
         Ok(parsed) => println!("combinator: {parsed:?}"),
         Err(e) => eprintln!("combinator: error: {e}"),
     }
-    match Derived::parse_argv(&mut buf.argv()) {
+    match Derived::parse_from(&words) {
         Ok(parsed) => println!("derive:     {parsed:?}"),
         Err(e) => eprintln!("derive:     error: {e}"),
     }

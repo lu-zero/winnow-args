@@ -3,17 +3,14 @@
 use std::hint::black_box;
 
 use winnow::Parser as _;
-use winnow_args::ArgvBuf;
+use winnow_args::Argv;
 
 fn main() {
-    let n = bench::parse_n();
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let mut seen = 0usize;
-    for _ in 0..n {
-        let buf = ArgvBuf::new(black_box(&args));
-        if let Ok(cli) = bench::wa_comb::cli.parse_next(&mut buf.argv()) {
-            seen += usize::from(cli.verbose && cli.path.is_some());
-        }
-    }
-    println!("{seen}");
+    let words = winnow_args::words(&args);
+    bench::run(|| {
+        bench::wa_comb::cli
+            .parse_next(&mut Argv::new(black_box(&words)))
+            .is_ok_and(|cli| cli.verbose && cli.path.is_some())
+    });
 }

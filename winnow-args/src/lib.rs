@@ -1,9 +1,8 @@
 //! Command line argument parsing built from [winnow] parsers.
 //!
-//! The command line is flattened into one [`BStr`](winnow::stream::BStr) —
-//! NUL-terminated words, see [`ArgvBuf`] — and read through [`Argv`], a winnow
-//! [`Stream`](winnow::stream::Stream). Everything else is a winnow parser over
-//! it, in three layers:
+//! The command line is read as a slice of [`BStr`](winnow::stream::BStr) words
+//! through [`Argv`], a winnow [`Stream`](winnow::stream::Stream). Everything
+//! else is a winnow parser over it, in three layers:
 //!
 //! - [`token`]: the lexer. [`token::arg`] reads one item (long flag, short
 //!   letter, word, `--`); [`token::value`] and [`token::no_value`] finish a flag
@@ -40,7 +39,7 @@ pub mod token;
 pub mod value;
 
 pub use error::{Error, ErrorKind};
-pub use stream::{Argv, ArgvBuf};
+pub use stream::{Argv, words};
 pub use value::FromArg;
 
 #[cfg(feature = "derive")]
@@ -54,20 +53,25 @@ pub trait Args: Sized {
     /// `Parser<Argv, Cli, Error>` is expected.
     fn parse_argv(input: &mut Argv<'_>) -> Result<Self, Error>;
 
+    /// Parse `words`, which should not include the program name.
+    fn parse_from(words: &[&winnow::stream::BStr]) -> Result<Self, Error> {
+        Self::parse_argv(&mut Argv::new(words))
+    }
+
     /// Parse `args`, which should not include the program name.
     fn try_parse_from<I, S>(args: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
     {
-        let buf = ArgvBuf::new(args);
-        Self::parse_argv(&mut buf.argv())
+        let args: Vec<S> = args.into_iter().collect();
+        Self::parse_from(&words(&args))
     }
 
     /// Parse the process's arguments, exiting with a message on failure.
     fn parse() -> Self {
-        let buf = ArgvBuf::from_env();
-        match Self::parse_argv(&mut buf.argv()) {
+        let args: Vec<_> = std::env::args_os().skip(1).collect();
+        match Self::parse_from(&words(&args)) {
             Ok(parsed) => parsed,
             Err(error) => {
                 eprintln!("error: {error}");
