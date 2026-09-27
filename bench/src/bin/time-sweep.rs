@@ -1,18 +1,20 @@
-//! Wall clock per parse, in process: the minimum over many short rounds, the
-//! estimator usage's `time-sweep` uses because noise from a loaded machine only
-//! ever adds time.
+//! Warm wall clock per parse, in process: the minimum and median over many
+//! short rounds, the estimator usage's `time-sweep` uses because noise from a
+//! loaded machine only ever adds time.
+//!
+//! Prints `name min_ns median_ns` per framework, for `tasks/perf.sh` to tabulate.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::hint::black_box;
 use std::time::Instant;
 
 use clap::Parser as _;
 use winnow::Parser as _;
-use winnow_args::{Args as _, ArgvBuf};
+use winnow_args::{Args as _, Argv};
 
 const ROUNDS: usize = 2_000;
 
-fn sweep(iters: usize, mut f: impl FnMut()) -> (f64, f64) {
+fn sweep(name: &str, iters: usize, mut f: impl FnMut()) {
     for _ in 0..iters.max(200) {
         f();
     }
@@ -26,60 +28,34 @@ fn sweep(iters: usize, mut f: impl FnMut()) -> (f64, f64) {
         })
         .collect();
     per_call.sort_by(f64::total_cmp);
-    (per_call[0], per_call[per_call.len() / 2])
-}
-
-fn report(label: &str, (min, median): (f64, f64)) {
-    println!("{label:<36}{min:>9.0} {median:>9.0}  ns");
+    println!("{name} {:.0} {:.0}", per_call[0], per_call[ROUNDS / 2]);
 }
 
 fn main() {
-    let words: Vec<String> = std::env::args().skip(1).collect();
-    let words = if words.is_empty() {
-        vec!["-v".into(), "--path".into(), "/tmp/x".into()]
-    } else {
-        words
-    };
-    let os: Vec<OsString> = words.iter().map(OsString::from).collect();
-    let clap_argv: Vec<OsString> = std::iter::once(OsString::from("example"))
-        .chain(os.iter().cloned())
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let refs: Vec<&OsStr> = args.iter().map(|a| a.as_os_str()).collect();
+    let words = winnow_args::words(&args);
+    let strs: Vec<&str> = args
+        .iter()
+        .map(|a| a.to_str().expect("UTF-8 argv"))
         .collect();
-    let refs: Vec<&str> = words.iter().map(String::as_str).collect();
+    let clap_argv: Vec<OsString> = std::iter::once(OsString::from("example"))
+        .chain(args.iter().cloned())
+        .collect();
 
-    println!("argv: {words:?}");
-    println!("{:<36}{:>9} {:>9}", "", "min", "median");
-    let usage_argv: Vec<&std::ffi::OsStr> = os.iter().map(|a| a.as_os_str()).collect();
-    report(
-        "usage derive",
-        sweep(2_000, || {
-            black_box(bench::usage::Cli::parse_from(black_box(&usage_argv))).ok();
-        }),
-    );
-    report(
-        "winnow-args derive",
-        sweep(2_000, || {
-            let buf = ArgvBuf::new(black_box(&os));
-            black_box(bench::wa_derive::Cli::parse_argv(&mut buf.argv())).ok();
-        }),
-    );
-    report(
-        "winnow-args combinators",
-        sweep(2_000, || {
-            let buf = ArgvBuf::new(black_box(&os));
-            black_box(bench::wa_comb::cli.parse_next(&mut buf.argv())).ok();
-        }),
-    );
-    report(
-        "bpaf 0.10: build + parse",
-        sweep(100, || {
-            let parsed = bench::bpaf010::cli_p().run_inner(black_box(&refs[..]));
-            black_box(parsed).ok();
-        }),
-    );
-    report(
-        "clap 4: build + parse",
-        sweep(100, || {
-            black_box(bench::clap4::Cli::try_parse_from(black_box(&clap_argv))).ok();
-        }),
-    );
+    sweep("usage", 2_000, || {
+        black_box(bench::usage::Cli::parse_from(black_box(&refs))).ok();
+    });
+    sweep("wa", 2_000, || {
+        black_box(bench::wa_derive::Cli::parse_from(black_box(&words))).ok();
+    });
+    sweep("wa-comb", 2_000, || {
+        black_box(bench::wa_comb::cli.parse_next(&mut Argv::new(black_box(&words)))).ok();
+    });
+    sweep("bpaf", 100, || {
+        black_box(bench::bpaf010::cli_p().run_inner(black_box(&strs[..]))).ok();
+    });
+    sweep("clap", 100, || {
+        black_box(bench::clap4::Cli::try_parse_from(black_box(&clap_argv))).ok();
+    });
 }

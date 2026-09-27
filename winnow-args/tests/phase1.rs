@@ -5,8 +5,9 @@ use std::path::PathBuf;
 
 use winnow::combinator::alt;
 use winnow::prelude::*;
+use winnow::stream::BStr;
 use winnow_args::combinator::{Named, args, long, short};
-use winnow_args::{Args, Argv, ArgvBuf, Error, ErrorKind};
+use winnow_args::{Args, Argv, Error, ErrorKind, words};
 
 #[derive(Debug, PartialEq, Default)]
 struct Cli {
@@ -79,9 +80,9 @@ impl From<Derived> for Cli {
 
 /// Parse with both, check they agree, return the shared answer.
 fn parse(line: &[&str]) -> Result<Cli, Error> {
-    let buf = ArgvBuf::new(line);
-    let a = combinator.parse_next(&mut buf.argv());
-    let b = Derived::parse_argv(&mut buf.argv()).map(Cli::from);
+    let words: Vec<&BStr> = line.iter().map(BStr::new).collect();
+    let a = combinator.parse_next(&mut Argv::new(&words));
+    let b = Derived::parse_from(&words).map(Cli::from);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -161,6 +162,14 @@ fn values_that_look_like_flags() {
 }
 
 #[test]
+fn words_are_never_resplit() {
+    assert_eq!(ok(&["-j1", "--path", "/a b"]).path, path("/a b"));
+    assert_eq!(ok(&["-j1", "-p", " "]).path, path(" "));
+    assert_eq!(ok(&["-j1", "--set=a\0b"]).set.as_deref(), Some("a\0b"));
+    assert_eq!(ok(&["-j1", "--set", ""]).set.as_deref(), Some(""));
+}
+
+#[test]
 fn separator() {
     assert_eq!(ok(&["-j1", "--"]), ok(&["-j1"]));
     let e = err(&["-j1", "--", "-v"]);
@@ -235,23 +244,22 @@ fn non_utf8_values_survive() {
     use std::os::unix::ffi::OsStrExt as _;
 
     let raw = OsStr::from_bytes(b"/tmp/\xff");
-    let buf = ArgvBuf::new([OsStr::new("-j1"), OsStr::new("-p"), raw]);
-    let cli = Derived::parse_argv(&mut buf.argv()).unwrap();
+    let cli = Derived::parse_from(&words(&[OsStr::new("-j1"), OsStr::new("-p"), raw])).unwrap();
     assert_eq!(cli.path.as_deref().map(|p| p.as_os_str()), Some(raw));
 
     // Flags still match when a value is not UTF-8; only converting it to text fails.
-    let buf = ArgvBuf::new([OsStr::new("-j1"), OsStr::new("--set"), raw]);
-    let e = Derived::parse_argv(&mut buf.argv()).unwrap_err();
+    let e =
+        Derived::parse_from(&words(&[OsStr::new("-j1"), OsStr::new("--set"), raw])).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::InvalidValue);
 }
 
 #[test]
 fn composes_as_a_winnow_parser() {
     // `Derived::parse_argv` is a plain `Parser<Argv, Derived, Error>`.
-    let buf = ArgvBuf::new(["-j4"]);
+    let words = [BStr::new("-j4")];
     let jobs = Derived::parse_argv
         .map(|d| d.jobs)
-        .parse_next(&mut buf.argv())
+        .parse_next(&mut Argv::new(&words))
         .unwrap();
     assert_eq!(jobs, 4);
 }

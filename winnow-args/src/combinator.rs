@@ -3,13 +3,14 @@
 //! ```
 //! use winnow::prelude::*;
 //! use winnow::combinator::alt;
-//! use winnow_args::{ArgvBuf, Error, combinator::{args, long, short}};
+//! use winnow::stream::BStr;
+//! use winnow_args::{Argv, Error, combinator::{args, short}};
 //!
 //! let verbose = short('v').long("verbose");
 //! let path = short('p').long("path");
 //!
-//! let buf = ArgvBuf::new(["-v", "--path=/tmp"]);
-//! let mut input = buf.argv();
+//! let words = [BStr::new("-v"), BStr::new("--path=/tmp")];
+//! let mut input = Argv::new(&words);
 //!
 //! let (mut v, mut p) = (false, None);
 //! args(alt((

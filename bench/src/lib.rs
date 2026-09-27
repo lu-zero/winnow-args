@@ -72,12 +72,29 @@ pub mod clap4 {
     }
 }
 
-/// Repeat count from the environment; 1 when unset.
-pub fn parse_n() -> usize {
-    std::env::var("PARSE_N")
+/// Parse `PARSE_N` times (default 1) and print how many parses accepted the line.
+///
+/// With `PARSE_TIME` set, a second line gives the wall time of the first parse
+/// in nanoseconds: the cold cost a CLI actually pays, once, in a fresh process.
+pub fn run(mut parse: impl FnMut() -> bool) {
+    let n: usize = std::env::var("PARSE_N")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(1)
+        .unwrap_or(1);
+    let timed = std::env::var_os("PARSE_TIME").is_some();
+    let mut seen = 0usize;
+    let mut first = None;
+    for i in 0..n {
+        let start = timed.then(std::time::Instant::now);
+        seen += usize::from(parse());
+        if i == 0 {
+            first = start.map(|s| s.elapsed());
+        }
+    }
+    println!("{seen}");
+    if let Some(elapsed) = first {
+        println!("{}", elapsed.as_nanos());
+    }
 }
 
 /// usage (usage-derive over usage-argv), as `../usage/benches/shadows/mise` uses it.

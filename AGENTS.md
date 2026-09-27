@@ -19,8 +19,8 @@ otherwise; say which one produced a number when quoting it.
 
 ## Architecture
 
-- `winnow-args` — runtime. `stream` (the `Argv` stream over a NUL-separated
-  `BStr`), `token` (lexer and flag continuations), `combinator` (bpaf-style
+- `winnow-args` — runtime. `stream` (the `Argv` stream over `&[&BStr]`
+  words), `token` (lexer and flag continuations), `combinator` (bpaf-style
   occurrence parsers), `value` (`FromArg`), `error`.
 - `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
   `token::arg`. Generated code only uses `winnow_args::__private`.

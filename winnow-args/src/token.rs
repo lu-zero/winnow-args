@@ -20,7 +20,7 @@ use winnow::error::{ModalError as _, ParserError};
 use winnow::stream::{BStr, Stream as _};
 
 use crate::error::Error;
-use crate::stream::{Argv, Mode, SEP};
+use crate::stream::{Argv, Mode};
 
 /// One lexed command-line item.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -57,27 +57,13 @@ impl Arg<'_> {
 /// Whether a detached word would be read as a flag rather than a value.
 #[inline(always)]
 fn is_flag_like(word: &[u8]) -> bool {
-    matches!(word, [b'-', b, ..] if *b != SEP)
-}
-
-/// Take the rest of the current word and its terminator; the next item starts a word.
-#[inline(always)]
-fn rest_of_word<'i>(input: &mut Argv<'i>) -> &'i BStr {
-    let len = input.offset_for(|b| b == SEP).unwrap_or(input.eof_offset());
-    let word = input.next_slice(len);
-    if !input.is_empty() {
-        input.next_slice(1);
-    }
-    if input.mode() == Mode::Bundle {
-        input.set_mode(Mode::Word);
-    }
-    BStr::new(word)
+    word.len() > 1 && word[0] == b'-'
 }
 
 /// Read one short letter, and note whether the bundle goes on.
 #[inline(always)]
 fn letter(input: &mut Argv<'_>) -> char {
-    let bytes = input.as_bytes();
+    let bytes = input.front();
     let (c, width) = match bytes[0] {
         b if b.is_ascii() => (b as char, 1),
         b => {
@@ -87,8 +73,6 @@ fn letter(input: &mut Argv<'_>) -> char {
                 0xF0..=0xF4 => 4,
                 _ => 1,
             };
-            // SEP is ASCII, so it can never be part of a valid sequence: a
-            // letter cut short by the end of its word fails here.
             match bytes.get(..width).and_then(|b| std::str::from_utf8(b).ok()) {
                 Some(s) => (
                     s.chars().next().unwrap_or(char::REPLACEMENT_CHARACTER),
@@ -98,9 +82,9 @@ fn letter(input: &mut Argv<'_>) -> char {
             }
         }
     };
-    input.next_slice(width);
-    if input.peek_token() == Some(SEP) {
-        input.next_slice(1);
+    input.take_bytes(width);
+    if input.front().is_empty() {
+        input.take_word();
         input.set_mode(Mode::Word);
     } else {
         input.set_mode(Mode::Bundle);
@@ -115,32 +99,31 @@ pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
     }
     match input.mode() {
         Mode::Bundle => Ok(Arg::Short(letter(input))),
-        Mode::Stopped => Ok(Arg::Word(rest_of_word(input))),
-        Mode::Word => match input.as_bytes() {
-            [b'-', b'-', SEP, ..] => {
-                input.next_slice(3);
+        Mode::Stopped => Ok(Arg::Word(input.take_word())),
+        Mode::Word => match input.front() {
+            b"--" => {
+                input.take_word();
                 input.set_mode(Mode::Stopped);
                 Ok(Arg::Separator)
             }
             [b'-', b'-', ..] => {
-                input.next_slice(2);
-                let word = rest_of_word(input);
+                let word = &input.take_word()[2..];
                 Ok(match word.iter().position(|&b| b == b'=') {
                     Some(eq) => Arg::Long {
                         name: BStr::new(&word[..eq]),
                         value: Some(BStr::new(&word[eq + 1..])),
                     },
                     None => Arg::Long {
-                        name: word,
+                        name: BStr::new(word),
                         value: None,
                     },
                 })
             }
-            [b'-', b, ..] if *b != SEP => {
-                input.next_slice(1);
+            [b'-', _, ..] => {
+                input.take_bytes(1);
                 Ok(Arg::Short(letter(input)))
             }
-            _ => Ok(Arg::Word(rest_of_word(input))),
+            _ => Ok(Arg::Word(input.take_word())),
         },
     }
 }
@@ -168,16 +151,15 @@ pub fn value<'i>(input: &mut Argv<'i>, arg: &Arg<'i>, offset: usize) -> Result<&
     match *arg {
         Arg::Long { value: Some(v), .. } => return Ok(v),
         Arg::Short(_) if input.mode() == Mode::Bundle => {
-            let v = rest_of_word(input);
+            let v = input.take_word();
             return Ok(BStr::new(v.strip_prefix(b"=").unwrap_or(v)));
         }
         _ => {}
     }
-    let next = input.as_bytes();
-    if next.is_empty() || (input.mode() != Mode::Stopped && is_flag_like(next)) {
+    if input.is_empty() || (input.mode() != Mode::Stopped && is_flag_like(input.front())) {
         return Err(Error::missing_value(offset, arg.spelling()));
     }
-    Ok(rest_of_word(input))
+    Ok(input.take_word())
 }
 
 /// Check that the flag `arg` just lexed at `offset` was not given a value.
