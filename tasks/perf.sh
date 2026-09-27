@@ -6,13 +6,19 @@
 # - cold wall time: the first parse in a fresh process, median over $RUNS processes;
 # - warm wall time: min and median per parse in a hot loop (time-sweep).
 #
-#   tasks/perf.sh                      # default argv
+#   tasks/perf.sh                      # every line of bench/argv.txt, one table each
 #   tasks/perf.sh -vp/tmp/x            # any argv; every binary gets the same one
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+if [ $# -eq 0 ]; then
+  while IFS= read -r line; do
+    # shellcheck disable=SC2086 # a line is several words on purpose
+    [ -n "$line" ] && "$0" $line && echo
+  done <bench/argv.txt
+  exit
+fi
 ARGV=("$@")
-[ ${#ARGV[@]} -eq 0 ] && ARGV=(-v --path /tmp/x)
 RUNS=${RUNS:-31}
 FRAMEWORKS=(usage wa wa-comb bpaf clap)
 
