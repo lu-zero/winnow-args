@@ -274,3 +274,26 @@ Two things moved that the feature did not ask for:
 
 `wa-comb`'s `-I a -I b -I c` got 134 ns slower because `arguments_as` allocates
 a `Vec` per occurrence; `wa-disp`'s loop over `split` does not.
+
+## 10. Choices: `--color <auto|always|never>`
+
+`#[derive(ValueEnum)]` implements `FromArg` as a `match` on the value's bytes
+(kebab-case names, `name`/`alias` overrides), so it composes with `Option`,
+`Vec`, delimiters, positionals and `argument_as::<E>()` unchanged. String
+fields take `choices("a", "b")`, checked before conversion. Both fail with
+`invalid_choice` listing the names. bpaf has no value enum; its `Color` is a
+`FromStr`.
+
+| framework | `-v --path /tmp/x` | Δ vs 9 | `… --color always` | Δ vs flags-only |
+|-----------|------:|------:|------:|------:|
+| usage     | 166   | +5    | 277   | +111  |
+| wa        | 47    | −8    | 62    | +15   |
+| wa-disp   | 106   | +3    | 132   | +26   |
+| wa-comb   | 138   | +4    | 232   | +94   |
+| bpaf 0.10 | 6962  | +426  | 7342  | +380  |
+| clap 4    | 5269  | +437  | 6097  | +828  |
+
+Warm ns (min); wa's −8 is the code-placement wobble noted in step 9 (instructions
+513 against 573). One more flag and an enum match cost the derive 15 ns; the
+`Named`/`alt` form pays per preceding branch again, since `--color` is tried
+last.

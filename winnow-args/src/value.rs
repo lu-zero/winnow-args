@@ -18,6 +18,22 @@ pub trait FromArg: Sized {
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }
 
+/// The cause of an [`ErrorKind::InvalidChoice`](crate::ErrorKind::InvalidChoice):
+/// the value is not one of `choices`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChoiceError {
+    /// Every accepted spelling.
+    pub choices: &'static [&'static str],
+}
+
+impl std::fmt::Display for ChoiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "expected one of {}", self.choices.join(", "))
+    }
+}
+
+impl std::error::Error for ChoiceError {}
+
 /// The value as `&str`.
 pub fn to_str(value: &BStr) -> Result<&str, std::str::Utf8Error> {
     std::str::from_utf8(value)

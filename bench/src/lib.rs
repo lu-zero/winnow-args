@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -13,10 +13,19 @@ pub mod wa_derive {
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
         pub include: Vec<PathBuf>,
+        #[arg(long)]
+        pub color: Option<Color>,
         #[arg(positional, value_name = "FILE")]
         pub files: Vec<PathBuf>,
         #[arg(subcommand)]
         pub command: Option<Commands>,
+    }
+
+    #[derive(winnow_args::ValueEnum, Debug, Clone, Copy)]
+    pub enum Color {
+        Auto,
+        Always,
+        Never,
     }
 
     #[derive(winnow_args::Subcommand, Debug)]
@@ -40,7 +49,7 @@ pub mod wa_comb {
 
     use winnow::combinator::{alt, cond, dispatch, fail};
     use winnow::prelude::*;
-    use winnow_args::combinator::{Named, args, command, positional, short};
+    use winnow_args::combinator::{Named, args, command, long, positional, short};
     use winnow_args::token::{Kind, kind};
     use winnow_args::{Argv, Error};
 
@@ -49,9 +58,12 @@ pub mod wa_comb {
         pub verbose: u8,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
+        pub color: Option<Color>,
         pub files: Vec<PathBuf>,
         pub command: Option<Commands>,
     }
+
+    pub use super::wa_derive::Color;
 
     #[derive(Debug)]
     pub enum Commands {
@@ -90,6 +102,7 @@ pub mod wa_comb {
     const VERBOSE: Named = short('v').long("verbose");
     const PATH: Named<2> = short('p').longs(["path", "dir"]);
     const INCLUDE: Named = short('I').long("include");
+    const COLOR: Named = long("color");
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
         let mut cli = Cli::default();
@@ -101,6 +114,7 @@ pub mod wa_comb {
                 INCLUDE
                     .arguments_as(b',')
                     .map(|i: Vec<PathBuf>| c.include.extend(i)),
+                COLOR.argument_as().map(|w| c.color = Some(w)),
             )),
             Kind::Word => alt((
                 cond(
@@ -168,6 +182,7 @@ pub mod wa_disp {
                     Ok(())
                 }
             },
+            a @ Arg::Long(LongFlag { name: b"color", .. }) => a.value_as().map(|w| c.color = Some(w)),
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
                     let verbose = &mut c.verbose;
@@ -207,12 +222,34 @@ pub mod bpaf010 {
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
         pub include: Vec<PathBuf>,
+        #[bpaf(long("color"), argument("COLOR"))]
+        pub color: Option<Color>,
         // bpaf tries items in order: the command must come before the greedy
         // positional, or `use` is taken as a FILE.
         #[bpaf(external(commands_p), optional)]
         pub command: Option<Commands>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
+    }
+
+    /// bpaf has no value enums: a `FromStr` does the matching.
+    #[derive(Debug, Clone, Copy)]
+    pub enum Color {
+        Auto,
+        Always,
+        Never,
+    }
+
+    impl std::str::FromStr for Color {
+        type Err = String;
+        fn from_str(s: &str) -> Result<Self, String> {
+            match s {
+                "auto" => Ok(Self::Auto),
+                "always" => Ok(Self::Always),
+                "never" => Ok(Self::Never),
+                _ => Err(format!("expected one of auto, always, never, got {s}")),
+            }
+        }
     }
 
     /// bpaf has no value delimiter: split each occurrence afterwards.
@@ -269,10 +306,19 @@ pub mod clap4 {
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
         pub include: Vec<PathBuf>,
+        #[arg(long, value_enum)]
+        pub color: Option<Color>,
         #[arg(value_name = "FILE")]
         pub files: Vec<PathBuf>,
         #[command(subcommand)]
         pub command: Option<Commands>,
+    }
+
+    #[derive(clap::ValueEnum, Debug, Clone, Copy)]
+    pub enum Color {
+        Auto,
+        Always,
+        Never,
     }
 
     #[derive(clap::Subcommand, Debug)]
@@ -317,7 +363,7 @@ pub fn run(mut parse: impl FnMut() -> bool) {
 
 /// usage (usage-derive over usage-argv), as `../usage/benches/shadows/mise` uses it.
 pub mod usage {
-    use usage_derive::{Args, Cli, Subcommands};
+    use usage_derive::{Args, Cli, Subcommands, ValueEnum};
 
     #[derive(Cli)]
     #[usage(bin = "example", name = "example")]
@@ -334,10 +380,22 @@ pub mod usage {
             delimiter = ','
         )]
         pub include: ::std::vec::Vec<::std::path::PathBuf>,
+        #[usage(long = "color", value_enum)]
+        pub color: ::std::option::Option<Color>,
         #[usage(arg, name = "FILE")]
         pub files: ::std::vec::Vec<::std::path::PathBuf>,
         #[usage(subcommand)]
         pub command: ::std::option::Option<Commands>,
+    }
+
+    #[derive(ValueEnum, Debug, Clone, Copy)]
+    pub enum Color {
+        #[usage(name = "auto")]
+        Auto,
+        #[usage(name = "always")]
+        Always,
+        #[usage(name = "never")]
+        Never,
     }
 
     #[derive(Subcommands)]

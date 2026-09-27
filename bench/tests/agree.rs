@@ -14,6 +14,8 @@ struct Fields {
     path: Option<PathBuf>,
     include: Vec<PathBuf>,
     files: Vec<PathBuf>,
+    /// `--color`, by its variant name.
+    color: Option<String>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -26,6 +28,7 @@ macro_rules! fields {
             path: c.path,
             include: c.include,
             files: c.files,
+            color: c.color.map(|w| format!("{w:?}")),
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};

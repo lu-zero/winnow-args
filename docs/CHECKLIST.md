@@ -68,7 +68,8 @@ where the references disagree and we picked a side.
       piece converted alone; `Named::arguments_as`, `Arg::values_as`, `token::split`
 - [ ] Variadic option (`--include a b`); `dont_delimit_trailing_values`
 - [ ] Defaults, env fallback
-- [ ] Choices / value enums
+- [x] Value enums: `#[derive(ValueEnum)]` (a `FromArg` match on bytes; `name`, `alias`)
+- [x] `choices("a", "b")` on string flags and positionals; `invalid_choice` lists the names
 - [ ] Conflicts, requires, groups
 
 ## 4. Positionals

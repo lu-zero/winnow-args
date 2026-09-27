@@ -44,38 +44,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
     for variant in &data.variants {
-        let mut name = None;
-        let mut alias = Vec::new();
-        for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
-            attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("name") {
-                    name = Some(meta.value()?.parse::<LitStr>()?.value());
-                } else if meta.path.is_ident("alias") {
-                    alias.extend(aliases(&meta)?);
-                } else {
-                    return Err(meta.error("expected `name` or `alias`"));
-                }
-                Ok(())
-            })?;
-        }
         let ident = &variant.ident;
-        let spellings: Vec<String> =
-            std::iter::once(name.unwrap_or_else(|| kebab_case(&ident.to_string())))
-                .chain(alias)
-                .collect();
-        for name in &spellings {
-            if let Some((_, other)) = names.iter().find(|(n, _)| n == name) {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    format!("`{name}` is already used by `{other}`"),
-                ));
-            }
-            names.push((name.clone(), ident));
-        }
-        let literals = spellings
-            .iter()
-            .map(|n| LitByteStr::new(n.as_bytes(), Span::call_site()));
-        let pattern = quote!(#(#literals)|*);
+        let pattern = byte_patterns(&variant_names(variant, &mut names)?);
         let parse = match &variant.fields {
             Fields::Unit => quote!(__wa::finish_with(__input, __globals).map(|()| Self::#ident)),
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
@@ -149,6 +119,101 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
+#[proc_macro_derive(ValueEnum, attributes(arg))]
+pub fn derive_value_enum(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_value_enum(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// `FromArg` as one `match` on the value's bytes.
+fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new(
+            input.span(),
+            "`ValueEnum` can only be derived for enums",
+        ));
+    };
+    let mut names: Vec<(String, &Ident)> = Vec::new();
+    let mut arms = Vec::new();
+    let mut choices = Vec::new();
+    for variant in &data.variants {
+        if !matches!(variant.fields, Fields::Unit) {
+            return Err(syn::Error::new(
+                variant.span(),
+                "a `ValueEnum` variant holds no data",
+            ));
+        }
+        let spellings = variant_names(variant, &mut names)?;
+        choices.push(LitStr::new(&spellings[0], Span::call_site()));
+        let pattern = byte_patterns(&spellings);
+        let ident = &variant.ident;
+        arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
+    }
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    Ok(quote! {
+        impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
+            fn from_arg(
+                __value: &::winnow_args::__private::BStr,
+            ) -> ::core::result::Result<Self, ::winnow_args::__private::BoxError> {
+                match &**__value {
+                    #(#arms)*
+                    _ => ::core::result::Result::Err(::std::boxed::Box::new(
+                        ::winnow_args::ChoiceError { choices: &[#(#choices),*] },
+                    )),
+                }
+            }
+        }
+    })
+}
+
+/// A variant's spellings, `name` (or kebab-case) first then its aliases,
+/// checked against `seen` for duplicates.
+fn variant_names<'a>(
+    variant: &'a syn::Variant,
+    seen: &mut Vec<(String, &'a Ident)>,
+) -> syn::Result<Vec<String>> {
+    let mut name = None;
+    let mut alias = Vec::new();
+    for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("name") {
+                name = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("alias") {
+                alias.extend(aliases(&meta)?);
+            } else {
+                return Err(meta.error("expected `name` or `alias`"));
+            }
+            Ok(())
+        })?;
+    }
+    let ident = &variant.ident;
+    let spellings: Vec<String> =
+        std::iter::once(name.unwrap_or_else(|| kebab_case(&ident.to_string())))
+            .chain(alias)
+            .collect();
+    for spelling in &spellings {
+        if let Some((_, other)) = seen.iter().find(|(n, _)| n == spelling) {
+            return Err(syn::Error::new(
+                ident.span(),
+                format!("`{spelling}` is already used by `{other}`"),
+            ));
+        }
+        seen.push((spelling.clone(), ident));
+    }
+    Ok(spellings)
+}
+
+/// `b"a" | b"b"`.
+fn byte_patterns(names: &[String]) -> TokenStream2 {
+    let literals = names
+        .iter()
+        .map(|n| LitByteStr::new(n.as_bytes(), Span::call_site()));
+    quote!(#(#literals)|*)
+}
+
 /// `alias = "x"` or `alias("x", "y")`.
 fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
     if meta.input.peek(syn::Token![=]) {
@@ -220,6 +285,47 @@ struct Field {
     role: Role,
     /// Splits each value of a `Vec` field.
     delimiter: Option<u8>,
+    /// The only values accepted, checked before conversion.
+    choices: Option<Vec<String>>,
+}
+
+impl Field {
+    /// Reject `value` (a `&BStr`) outside `choices`, reported by `error(cause)`.
+    fn check(
+        &self,
+        value: TokenStream2,
+        error: impl FnOnce(TokenStream2) -> TokenStream2,
+    ) -> TokenStream2 {
+        let Some(choices) = &self.choices else {
+            return quote!();
+        };
+        let pattern = byte_patterns(choices);
+        let listed = choices.iter().map(|c| LitStr::new(c, Span::call_site()));
+        let cause = quote!(::winnow_args::ChoiceError { choices: &[#(#listed),*] });
+        let error = error(cause);
+        quote! {
+            if !matches!(&**#value, #pattern) {
+                return ::core::result::Result::Err(#error);
+            }
+        }
+    }
+
+    /// A flag's value converted to `ty`, checked against `choices` first.
+    fn flag_value(&self, ty: &Type, value: TokenStream2) -> TokenStream2 {
+        let check = self.check(value.clone(), |cause| {
+            quote!(__wa::Error::invalid_value(__arg.offset(), __arg.spelling(), #value, #cause))
+        });
+        quote!({ #check __arg.convert::<#ty>(#value)? })
+    }
+
+    /// A positional word converted to `ty`, checked against `choices` first.
+    fn word_value(&self, ty: &Type, word: TokenStream2, display: &LitStr) -> TokenStream2 {
+        let check = self.check(
+            quote!(#word.value),
+            |cause| quote!(__wa::Error::invalid_value(#word.offset, #display, #word.value, #cause)),
+        );
+        quote!({ #check #word.convert::<#ty>(#display)? })
+    }
 }
 
 impl Field {
@@ -316,20 +422,29 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 __arg.check_switch()?;
                 #ident = #ident.saturating_add(1);
             },
-            Kind::Optional(ty) | Kind::Required(ty) => quote! {
-                #ident = ::core::option::Option::Some(
-                    __arg.read_value_as::<#ty>(__input)?
-                );
-            },
+            Kind::Optional(ty) | Kind::Required(ty) => {
+                let value = f.flag_value(ty, quote!(__value));
+                quote! {
+                    let __value = __arg.read_value(__input)?;
+                    #ident = ::core::option::Option::Some(#value);
+                }
+            }
             Kind::Many(ty) => match f.delimiter {
-                None => quote! {
-                    #ident.push(__arg.read_value_as::<#ty>(__input)?);
-                },
-                Some(d) => quote! {
-                    for __piece in __wa::split(__arg.read_value(__input)?, #d) {
-                        #ident.push(__arg.convert::<#ty>(__piece)?);
+                None => {
+                    let value = f.flag_value(ty, quote!(__value));
+                    quote! {
+                        let __value = __arg.read_value(__input)?;
+                        #ident.push(#value);
                     }
-                },
+                }
+                Some(d) => {
+                    let value = f.flag_value(ty, quote!(__piece));
+                    quote! {
+                        for __piece in __wa::split(__arg.read_value(__input)?, #d) {
+                            #ident.push(#value);
+                        }
+                    }
+                }
             },
         }
     };
@@ -368,23 +483,30 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let ident = slot(&f.ident);
             let display = LitStr::new(&f.display(), Span::call_site());
             match &f.kind {
-                Kind::Optional(ty) | Kind::Required(ty) => quote! {
-                    #i => {
-                        #ident = ::core::option::Option::Some(
-                            __word.convert::<#ty>(#display)?
-                        );
-                        __position += 1;
-                        #filled
+                Kind::Optional(ty) | Kind::Required(ty) => {
+                    let value = f.word_value(ty, quote!(__word), &display);
+                    quote! {
+                        #i => {
+                            #ident = ::core::option::Option::Some(#value);
+                            __position += 1;
+                            #filled
+                        }
                     }
-                },
+                }
                 Kind::Many(ty) => {
                     let push = match f.delimiter {
-                        None => quote!(#ident.push(__word.convert::<#ty>(#display)?);),
-                        Some(d) => quote! {
-                            for __piece in __word.split(#d) {
-                                #ident.push(__piece.convert::<#ty>(#display)?);
+                        None => {
+                            let value = f.word_value(ty, quote!(__word), &display);
+                            quote!(#ident.push(#value);)
+                        }
+                        Some(d) => {
+                            let value = f.word_value(ty, quote!(__piece), &display);
+                            quote! {
+                                for __piece in __word.split(#d) {
+                                    #ident.push(#value);
+                                }
                             }
-                        },
+                        }
                     };
                     quote! {
                         #i => {
@@ -546,6 +668,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut global = false;
     let mut alias = Vec::new();
     let mut delimiter = None;
+    let mut choices = None;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -573,6 +696,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("choices") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let list =
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                choices = Some(list.iter().map(LitStr::value).collect());
             } else if meta.path.is_ident("delimiter") {
                 let c = meta.value()?.parse::<LitChar>()?;
                 if !c.value().is_ascii() {
@@ -583,7 +712,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter` or `value_name`",
+                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter`, `choices` or `value_name`",
                 ));
             }
             Ok(())
@@ -640,11 +769,17 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
     };
 
+    if choices.is_some()
+        && (matches!(kind, Kind::Switch | Kind::Count(_)) || matches!(role, Role::Subcommand))
+    {
+        return error("`choices` needs a field that takes a value".into());
+    }
     Ok(Field {
         ident,
         kind,
         role,
         delimiter,
+        choices,
     })
 }
 
