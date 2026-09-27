@@ -174,9 +174,7 @@ impl<'i> Arg<'i> {
                 Some(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
             }
             _ => {
-                if input.is_empty()
-                    || (input.mode() != Mode::Stopped && is_flag_like(input.front()))
-                {
+                if input.is_empty() || (input.mode() == Mode::Word && is_flag_like(input.front())) {
                     return None;
                 }
                 Some(input.take_word())
@@ -348,7 +346,7 @@ pub fn kind(input: &mut Argv<'_>) -> Result<Kind, Error> {
     }
     Ok(match input.mode() {
         Mode::Bundle => Kind::Short,
-        Mode::Stopped => Kind::Word,
+        Mode::Stopped | Mode::Values => Kind::Word,
         Mode::Word => match input.front() {
             b"--" => Kind::Separator,
             [b'-', b'-', ..] => Kind::Long,

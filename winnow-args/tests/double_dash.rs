@@ -97,3 +97,32 @@ fn an_automatic_argument_stops_flags_once_it_has_a_value() {
     let err = parse::<Asdf>(&["--version"]).unwrap_err();
     assert_eq!(err.kind(), ErrorKind::UnknownFlag);
 }
+
+/// mise's `run`: `[TASK] [ARGS]... [-- ARGS_LAST...]`, `TASK` automatic.
+#[derive(Args, Debug)]
+struct Run {
+    #[arg(short, long)]
+    force: bool,
+    #[arg(positional, double_dash = "automatic")]
+    task: Option<String>,
+    #[arg(positional)]
+    args: Vec<String>,
+    #[arg(positional, double_dash = "required")]
+    args_last: Vec<String>,
+}
+
+#[test]
+fn automatic_and_required_share_a_struct() {
+    // After `TASK`, flags stop: `-f` and a later `--` are ordinary `ARGS`.
+    let r: Run = parse(&["lint", "-f", "--", "y"]).unwrap();
+    assert_eq!(
+        (r.task.as_deref(), r.args, r.args_last.len(), r.force),
+        (Some("lint"), strings(&["-f", "--", "y"]), 0, false)
+    );
+    // A `--` typed before `TASK` has a value is a real separator.
+    let r: Run = parse(&["-f", "--", "a", "b"]).unwrap();
+    assert_eq!(
+        (r.task, r.args_last, r.force),
+        (None, strings(&["a", "b"]), true)
+    );
+}

@@ -124,3 +124,22 @@ fn a_subcommand_answers_to_its_aliases() {
         assert!(cli.verbose, "global reached through its alias after {name}");
     }
 }
+
+#[derive(Args, Debug)]
+struct TwoLongs {
+    /// A second `long` is another spelling, as mise's shadow writes it.
+    #[arg(long = "path", long = "file", short = 'p')]
+    path: Option<String>,
+}
+
+#[test]
+fn a_repeated_long_adds_a_spelling() {
+    for line in [&["--path", "x"][..], &["--file=x"], &["-px"]] {
+        let words: Vec<&BStr> = line.iter().map(BStr::new).collect();
+        assert_eq!(
+            TwoLongs::parse_from(&words).unwrap().path.as_deref(),
+            Some("x"),
+            "{line:?}"
+        );
+    }
+}

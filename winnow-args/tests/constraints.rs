@@ -182,3 +182,20 @@ fn required_and_required_unless() {
     );
     assert_eq!(parse::<RequiredVec>(&["a"], &[]).unwrap().targets, ["a"]);
 }
+
+#[derive(Args, Debug)]
+struct RequiredSwitch {
+    /// `mise sync ruby --brew`: the switch must be given.
+    #[arg(long, required)]
+    brew: bool,
+}
+
+#[test]
+fn a_required_switch_must_be_given() {
+    let e = err::<RequiredSwitch>(&[], &[]);
+    assert_eq!(
+        (e.kind(), e.token()),
+        (ErrorKind::MissingRequired, Some("--brew"))
+    );
+    assert!(parse::<RequiredSwitch>(&["--brew"], &[]).unwrap().brew);
+}
