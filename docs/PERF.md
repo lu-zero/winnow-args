@@ -403,3 +403,20 @@ Measured on a quiet machine (load ~3).
 Warm ns (min). `wa-comb` now needs nested `alt`s: winnow's `alt` takes at most
 9 parsers, and the root has 10 flags. `--write` is the last branch of the second
 one, which is why it costs `wa-comb` ~280 ns more than the flags-only line.
+
+## 15. `default_subcommand` and `arg_required_else_help`
+
+`#[arg(default_subcommand = "run")]` on a struct: a word naming no subcommand
+selects `run`, which reads that word again as its own (`lint` → `run lint`);
+flags before the word stay with the parent, words after `--` do not route, and
+only the struct that declares it has it. Tests mirror usage's
+`09-default-subcommand.json` vectors, except where winnow-args is strict about
+unknown flags. `#[arg(arg_required_else_help)]` makes a bare invocation return
+`ErrorKind::HelpRequested`.
+
+Not benchmarked: clap and bpaf 0.10 cannot express a default subcommand, and
+declaring one on the bench root would change what every positional line means
+for usage and winnow-args but not for them. When unused it costs nothing —
+warm instructions are unchanged from step 14 (1308 on `-v --path /tmp/x`,
+1952 on `… use -g node@20`); when used, the derive copies the 32-byte `Argv` once
+per item to re-read the word.

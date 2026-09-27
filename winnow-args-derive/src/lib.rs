@@ -562,7 +562,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`double_dash = \"required\"` and `\"automatic\"` cannot share a struct",
         ));
     }
-    let (groups, restart_token) = struct_options(input)?;
+    let StructOptions {
+        groups,
+        restart_token,
+        default_subcommand,
+        arg_required_else_help,
+    } = struct_options(input)?;
     let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;
@@ -796,6 +801,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } else {
             (quote!(), quote!(&mut *__globals))
         };
+        // Any other word selects the default subcommand, which reads it again as its own.
+        let fallback = default_subcommand.as_ref().map(|name| {
+            let name = LitByteStr::new(name.as_bytes(), Span::call_site());
+            quote! {
+                let __sub = {
+                    #inherit
+                    *__input = __start;
+                    <#ty as __wa::Subcommand>::parse_subcommand(#name, __input, #handler)?
+                };
+                #ident = ::core::option::Option::Some(__sub);
+                break;
+            }
+        });
         quote! {
             if #not_filled !__word.after_separator {
                 if <#ty as __wa::Subcommand>::has(&**__word.value) {
@@ -808,6 +826,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #ident = ::core::option::Option::Some(__sub);
                     break;
                 }
+                #fallback
             }
         }
     });
@@ -843,6 +862,22 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
     let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
+    let start = default_subcommand
+        .is_some()
+        .then(|| quote!(let __start = *__input;));
+    let help_on_empty = arg_required_else_help.then(|| {
+        quote! {
+            if __input.is_empty() {
+                return ::core::result::Result::Err(__wa::Error::help_requested(__input.offset()));
+            }
+        }
+    });
+    if default_subcommand.is_some() && subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`default_subcommand` needs an `#[arg(subcommand)]` field",
+        ));
+    }
     let displaced = rules.displaced_slots(&fields);
     let env_fallbacks = fields
         .iter()
@@ -894,7 +929,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #(#displaced)*
                 #position
                 #filled_slot
+                #help_on_empty
                 while !__input.is_empty() {
+                    #start
                     let __arg = __wa::arg(__input)?;
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
@@ -928,19 +965,45 @@ struct Group {
 }
 
 /// `#[arg(...)]` on the struct: groups, and the word that restarts parsing.
-fn struct_options(input: &DeriveInput) -> syn::Result<(Vec<Group>, Option<String>)> {
-    let mut groups = Vec::new();
-    let mut restart = None;
+/// Options declared on the struct rather than on a field.
+#[derive(Default)]
+struct StructOptions {
+    groups: Vec<Group>,
+    /// The word that starts a new invocation of this command.
+    restart_token: Option<String>,
+    /// The subcommand a word naming none selects.
+    default_subcommand: Option<String>,
+    /// A bare invocation asks for help.
+    arg_required_else_help: bool,
+}
+
+fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
+    let mut options = StructOptions::default();
+    let groups = &mut options.groups;
+    let (restart, default_subcommand, help) = (
+        &mut options.restart_token,
+        &mut options.default_subcommand,
+        &mut options.arg_required_else_help,
+    );
     for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("restart_token") {
-                restart = Some(meta.value()?.parse::<LitStr>()?.value());
+                *restart = Some(meta.value()?.parse::<LitStr>()?.value());
+                return Ok(());
+            }
+            if meta.path.is_ident("default_subcommand") {
+                *default_subcommand = Some(meta.value()?.parse::<LitStr>()?.value());
+                return Ok(());
+            }
+            if meta.path.is_ident("arg_required_else_help") {
+                *help = true;
                 return Ok(());
             }
             if !meta.path.is_ident("group") {
-                return Err(
-                    meta.error("expected `group(\"name\", ...)` or `restart_token = \"...\"`")
-                );
+                return Err(meta.error(
+                    "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand` \
+                     or `arg_required_else_help`",
+                ));
             }
             let content;
             syn::parenthesized!(content in meta.input);
@@ -968,7 +1031,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<(Vec<Group>, Option<String
             Ok(())
         })?;
     }
-    Ok((groups, restart))
+    Ok(options)
 }
 
 /// The relations between fields, resolved to field indices.
