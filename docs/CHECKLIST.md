@@ -168,8 +168,12 @@ where the references disagree and we picked a side.
       cannot run (this aarch64 host)
 - [ ] Run usage's `binding` corpus vectors (needs a runtime/table-driven mode, or a
       generator from the KDL spec)
-- [ ] Add a `mise-winnow-args` shadow to `../usage/benches/shadows` via
-      `xtask gen-shadow` once subcommands and positionals exist
+- [x] mise at full scale: `tasks/gen-mise-shadow.py` translates usage's shadow;
+      `SUITE=mise tasks/perf.sh`; `bench/tests/mise.rs` checks agreement
+- [ ] Binary size: 1.61 MB stripped against usage's 1.17 MB for mise; share the
+      lexer and continuations across structs instead of inlining them everywhere
+- [ ] A `gen-shadow` backend in usage's xtask, so the shadow comes from the KDL
+      spec directly rather than from usage's shadow
 
 ## Audit: usage's mise shadow (45 attribute keys)
 
@@ -183,3 +187,18 @@ Help and metadata only, needed for help output but not for parsing: `help`,
 `long_help`, `after_long_help`, `help_heading`, `hide`, `alias_hidden`,
 `hide_default_value`, `hide_env`, `about`, `author`, `bin`, `effect` (usage's
 side-effect annotation, 198 uses).
+
+## Metadata the mise shadow carries that winnow-args drops
+
+`tasks/gen-mise-shadow.py` drops these, since none of them changes how a line
+parses; each needs a home before the shadow is a faithful copy.
+
+- [ ] `effect` (198 uses): usage's per-command side-effect annotation (`read`,
+      `write`…), for tools that reason about what a command does
+- [ ] `author`, `bin`: program metadata (`bin` is folded into `name` today)
+- [ ] `hide_default_value`, `hide_env`: keep `[default: …]` / `[env: …]` out of help
+- [ ] `value_enum`: marks a `ValueEnum` field for help's `[possible values]`
+- [ ] `mount`: dynamic subcommands discovered by running a command (mise's tasks)
+- [ ] `var`: explicit "repeatable" (winnow-args infers it from `Vec<T>`)
+- [ ] Selectors naming an ancestor's global flag (resolved at compile time today,
+      so the converter drops them and reports how many)

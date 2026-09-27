@@ -1,0 +1,16 @@
+# Generated source: tasks/gen-mise-shadow.py translates usage's mise shadow.
+[package]
+name = "shadow-mise-wa"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[lib]
+# The doc comments are copied help text, full of indented examples.
+doctest = false
+
+[dependencies]
+winnow-args.workspace = true
+
+[lints.rust]
+missing_docs = "allow"

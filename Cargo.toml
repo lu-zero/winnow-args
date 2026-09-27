@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["winnow-args", "winnow-args-derive", "bench"]
+members = ["winnow-args", "winnow-args-derive", "bench", "bench/shadow-mise"]
 
 [workspace.package]
 version = "0.1.0"

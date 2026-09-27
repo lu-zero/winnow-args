@@ -113,6 +113,11 @@ Headline, flags only: the derive is at ~0.3–0.4× usage's instructions and
 ~⅓ of its warm time; the combinators are about level with usage, 3–4× slower
 than the derive warm, because each `alt` branch re-lexes the token.
 
+At mise's full scale (211 commands, `docs/PERF.md` step 17) the derive runs
+`mise use -g node@20` in 3 810 instructions and ~320 ns warm, against usage's
+7 549 and ~783 ns; clap needs 4.9 M instructions. Its binary is 37 % larger
+than usage's.
+
 Caveat: these are toy CLIs. usage's static tables are built for mise scale
 (211 commands), and it also does work we skip (help/version flags, spec
 metadata). The real comparison is a `mise-winnow-args` shadow once we have
