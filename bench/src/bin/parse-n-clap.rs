@@ -1,5 +1,5 @@
 //! clap 4. `try_parse_from` builds the command tree and parses; both are
-//! per-process work. argv[0] is kept because clap expects it.
+//! per-process work. `argv[0]` is kept because clap expects it.
 
 use std::hint::black_box;
 
