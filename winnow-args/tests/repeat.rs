@@ -1,11 +1,11 @@
-//! Repeatable options, run against the combinator parser (in `dispatch!` form)
-//! and the derived one.
+//! Repeatable options, run against the combinators (kind dispatch over an `alt`
+//! of flags, and a full dispatch on flag names) and the derive: all must agree.
 
 use winnow::combinator::{alt, dispatch, fail};
 use winnow::prelude::*;
 use winnow::stream::BStr;
 use winnow_args::combinator::{Named, args, long, positional, short};
-use winnow_args::token::{Kind, kind};
+use winnow_args::token::{Arg, Kind, LongFlag, ShortFlag, arg, kind};
 use winnow_args::{Args, Argv, Error, ErrorKind};
 
 #[derive(Debug, PartialEq, Default)]
@@ -28,6 +28,21 @@ fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
         )),
         Kind::Word => positional("FILES").map(|v| c.files.push(v)),
         Kind::Separator => fail,
+    })
+    .parse_next(input)?;
+    Ok(cli)
+}
+
+fn nested(input: &mut Argv<'_>) -> Result<Cli, Error> {
+    let mut cli = Cli::default();
+    let c = &mut cli;
+    args(dispatch! {arg;
+        a @ (Arg::Long(LongFlag { name: b"include", .. }) | Arg::Short(ShortFlag { letter: 'I', .. })) => {
+            a.value_as().map(|v| c.include.push(v))
+        },
+        a @ Arg::Long(LongFlag { name: b"num", .. }) => a.value_as().map(|v| c.num.push(v)),
+        Arg::Word(w) => w.value_as("FILES").map(|v| c.files.push(v)),
+        _ => fail,
     })
     .parse_next(input)?;
     Ok(cli)
@@ -61,7 +76,9 @@ fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words: Vec<&BStr> = line.iter().map(BStr::new).collect();
     let a = combinator.parse_next(&mut Argv::new(&words));
     let b = Derived::parse_from(&words).map(Cli::from);
+    let c = nested.parse_next(&mut Argv::new(&words));
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
+    assert_eq!(c, b, "nested dispatch and derive disagree on {line:?}");
     a
 }
 
@@ -93,6 +110,19 @@ fn one_value_per_occurrence() {
 fn errors_name_the_occurrence() {
     let e = parse(&["-I", "a", "-I"]).unwrap_err();
     assert_eq!((e.kind(), e.token()), (ErrorKind::MissingValue, Some("-I")));
+
+    let e = parse(&["--include=a", "--num"]).unwrap_err();
+    assert_eq!(
+        (e.kind(), e.token()),
+        (ErrorKind::MissingValue, Some("--num"))
+    );
+    let e = parse(&["--nope"]).unwrap_err();
+    assert_eq!(
+        (e.kind(), e.token()),
+        (ErrorKind::UnknownFlag, Some("--nope"))
+    );
+    let e = parse(&["-Ix", "-n"]).unwrap_err();
+    assert_eq!((e.kind(), e.token()), (ErrorKind::UnknownFlag, Some("-n")));
 
     let e = parse(&["--num", "1", "--num", "x"]).unwrap_err();
     assert_eq!(

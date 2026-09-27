@@ -42,17 +42,19 @@ pub struct Argv<'i> {
     /// Unfinished words; `words[0]` is the current one.
     words: &'i [&'i BStr],
     /// Bytes of `words[0]` already read, when inside a bundle.
-    skip: usize,
+    skip: u32,
     /// Offset to the end: unread bytes plus one separator per unfinished word.
-    remaining: usize,
-    total: usize,
+    remaining: u32,
+    total: u32,
     mode: Mode,
 }
 
 impl<'i> Argv<'i> {
     /// Parse `words`, which should not include the program name.
     pub fn new(words: &'i [&'i BStr]) -> Self {
-        let total = words.iter().map(|w| w.len() + 1).sum();
+        let total: usize = words.iter().map(|w| w.len() + 1).sum();
+        // Kept narrow so a checkpoint is two 16-byte moves; argv is capped far below this.
+        let total = u32::try_from(total).expect("a command line under 4 GiB");
         Self {
             words,
             skip: 0,
@@ -82,14 +84,14 @@ impl<'i> Argv<'i> {
     /// Byte offset from the start of the command line, one separator counted per word.
     #[inline(always)]
     pub fn offset(&self) -> usize {
-        self.total - self.remaining
+        (self.total - self.remaining) as usize
     }
 
     /// The unread part of the current word; empty at the end.
     #[inline(always)]
     pub fn front(&self) -> &'i [u8] {
         match self.words.first() {
-            Some(word) => &word[self.skip..],
+            Some(word) => &word[self.skip as usize..],
             None => &[],
         }
     }
@@ -98,15 +100,15 @@ impl<'i> Argv<'i> {
     #[inline(always)]
     pub(crate) fn take_bytes(&mut self, n: usize) {
         debug_assert!(n < self.front().len() + 1);
-        self.skip += n;
-        self.remaining -= n;
+        self.skip += n as u32;
+        self.remaining -= n as u32;
     }
 
     /// Read the rest of the current word and move to the next one.
     #[inline(always)]
     pub(crate) fn take_word(&mut self) -> &'i BStr {
         let rest = self.front();
-        self.remaining -= rest.len() + 1;
+        self.remaining -= rest.len() as u32 + 1;
         self.words = &self.words[1..];
         self.skip = 0;
         if self.mode == Mode::Bundle {
@@ -125,7 +127,7 @@ impl<'i> Argv<'i> {
             end = at;
         }
         assert_eq!(
-            offset, self.remaining,
+            offset, self.remaining as usize,
             "offset {offset} is inside a word (last start {end})"
         );
         self.words.len()
@@ -136,7 +138,7 @@ impl std::fmt::Debug for Argv<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut words: Vec<&BStr> = self.words.to_vec();
         if let Some(first) = words.first_mut() {
-            *first = BStr::new(&first[self.skip..]);
+            *first = BStr::new(&first[self.skip as usize..]);
         }
         f.debug_struct("Argv")
             .field("mode", &self.mode)
@@ -168,14 +170,14 @@ impl<'i> Iterator for IterOffsets<'i> {
 impl Offset for Argv<'_> {
     #[inline(always)]
     fn offset_from(&self, start: &Self) -> usize {
-        start.remaining - self.remaining
+        (start.remaining - self.remaining) as usize
     }
 }
 
 impl SliceLen for Argv<'_> {
     #[inline(always)]
     fn slice_len(&self) -> usize {
-        self.remaining
+        self.remaining as usize
     }
 }
 
@@ -191,13 +193,13 @@ impl<'i> Stream for Argv<'i> {
     fn iter_offsets(&self) -> Self::IterOffsets {
         IterOffsets {
             words: self.words.iter(),
-            skip: self.skip,
+            skip: self.skip as usize,
             offset: 0,
         }
     }
     #[inline(always)]
     fn eof_offset(&self) -> usize {
-        self.remaining
+        self.remaining as usize
     }
     #[inline(always)]
     fn next_token(&mut self) -> Option<Self::Token> {
@@ -223,7 +225,7 @@ impl<'i> Stream for Argv<'i> {
         let mut iter = self.iter_offsets();
         match iter.nth(tokens) {
             Some((at, _)) => Ok(at),
-            None if tokens == self.words.len() => Ok(self.remaining),
+            None if tokens == self.words.len() => Ok(self.remaining as usize),
             None => Err(Needed::new(tokens - self.words.len())),
         }
     }

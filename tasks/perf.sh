@@ -20,7 +20,7 @@ if [ $# -eq 0 ]; then
 fi
 ARGV=("$@")
 RUNS=${RUNS:-31}
-FRAMEWORKS=(usage wa wa-comb bpaf clap)
+FRAMEWORKS=(usage wa wa-disp wa-comb bpaf clap)
 
 cargo build --release -q -p bench 2>/dev/null || cargo build --release -p bench
 
