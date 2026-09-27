@@ -6,12 +6,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/check_commit_message.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check_commit_message.py",
             "if": "Bash(git commit*)"
           },
           {
             "type": "command",
-            "command": "python3 .claude/hooks/check_rustdoc.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check_rustdoc.py",
             "if": "Bash(git commit*)",
             "timeout": 600,
             "statusMessage": "Checking rustdoc (cargo doc + doctests)..."
@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 .claude/hooks/check_comment_length.py"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check_comment_length.py"
           }
         ]
       }
