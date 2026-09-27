@@ -11,16 +11,18 @@ where the references disagree and we picked a side.
 ## 0. Foundations
 
 - [x] Workspace: `winnow-args` (runtime), `winnow-args-derive` (proc-macro), `bench`
-- [x] Input is `&BStr`: the whole command line as one NUL-terminated byte buffer
-      (`ArgvBuf`), so every winnow byte parser works and a checkpoint is one pointer
-- [x] Custom `Stream` (`Argv`) whose checkpoint also captures the lexer mode
-      (word start / inside a short bundle / after `--`), so `alt` backtracking is sound
+- [x] Input is `&[&BStr]`: argv borrowed word by word, never copied, joined or
+      re-split; words may hold spaces or NUL
+- [x] Custom `Stream` (`Argv`) whose tokens are words and whose checkpoint is the
+      whole state, including the lexer mode (word start / inside a short bundle /
+      after `--`), so `alt` backtracking is sound
+- [x] Offsets count bytes plus one separator per word, so reading one letter of
+      a bundle is progress for `repeat`
 - [x] Error type implements `ParserError` + `ModalError` directly (no `ErrMode`
       wrapper); backtracking errors do not allocate
 - [x] No `unsafe` in `winnow-args`
-- [ ] `no_std` + `alloc` (winnow supports it; only `ArgvBuf::from_env` needs std)
-- [ ] Zero-copy entry for callers that already have a NUL-joined buffer
-      (`/proc/self/cmdline`, the kernel's own argv block)
+- [ ] `no_std` + `alloc` (winnow supports it; only `Args::parse` needs std)
+- [x] No allocation per parse when the caller holds `&[&OsStr]` (Unix)
 
 ## 1. Long options
 
@@ -120,7 +122,9 @@ where the references disagree and we picked a side.
 ## 10. Conformance and performance
 
 - [x] `bench/` with usage's methodology: `PARSE_N` binaries, cold parse = N=1
-      minus N=0 cachegrind instruction counts, same argv for every framework
+      minus N=0 instruction counts, same argv for every framework
+- [x] Timings next to the counts: cold (first parse in a fresh process, median
+      over processes) and warm (min / median in a hot loop)
 - [x] Compared against usage (the zero-alloc reference), bpaf 0.10 (local
       checkout) and clap 4; falls back to `perf stat` medians where valgrind
       cannot run (this aarch64 host)
