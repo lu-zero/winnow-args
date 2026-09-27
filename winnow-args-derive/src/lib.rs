@@ -470,6 +470,9 @@ struct Field {
     hyphen_values: bool,
     /// A flag's value must be attached.
     require_equals: bool,
+    /// The long spelling that sets a `bool` false; the slot is then an
+    /// `Option<bool>` until the end, so a default fills only what was not given.
+    negate: Option<String>,
 }
 
 impl Field {
@@ -484,6 +487,7 @@ impl Field {
             None => quote!(::core::option::Option::None),
         };
         let long = opt_str(self.longs().first().copied());
+        let negate = opt_str(self.negate.as_deref());
         let (positional, trailing) = match &self.role {
             Role::Positional { double_dash, .. } => (true, *double_dash == DoubleDash::Required),
             _ => (false, false),
@@ -508,6 +512,7 @@ impl Field {
             ::winnow_args::help::Item {
                 short: #short,
                 long: #long,
+                negate: #negate,
                 value_name: #value_name,
                 help: #help,
                 long_help: #long_help,
@@ -601,6 +606,9 @@ impl Field {
     fn has(&self) -> TokenStream2 {
         let slot = slot(&self.ident);
         match &self.kind {
+            Kind::Switch if self.negate.is_some() => {
+                quote!((#slot == ::core::option::Option::Some(true)))
+            }
             Kind::Switch => quote!(#slot),
             Kind::Count(_) => quote!((#slot != 0)),
             Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_some()),
@@ -612,6 +620,9 @@ impl Field {
     /// the command line left it unset and no `overrides` displaced it.
     fn fallback(&self, env: bool, displaced: bool) -> TokenStream2 {
         let slot = slot(&self.ident);
+        if self.negate.is_some() {
+            return self.negatable_fallback(env);
+        }
         let has = self.has();
         let not_displaced = displaced.then(|| {
             let displaced = format_ident!("__displaced_{}", self.ident);
@@ -676,6 +687,29 @@ impl Field {
                 }
             })
             .unwrap_or_default()
+    }
+
+    /// A negatable switch's fallback: only when neither spelling was given.
+    fn negatable_fallback(&self, env: bool) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        let value = if env {
+            let Some(var) = &self.env else {
+                return quote!();
+            };
+            let name = LitStr::new(var, Span::call_site());
+            quote! {
+                if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
+                    #slot = ::core::option::Option::Some(__wa::env::truthy(&__raw));
+                }
+            }
+        } else {
+            let Some(default) = &self.default else {
+                return quote!();
+            };
+            let default = default == "true";
+            quote!(#slot = ::core::option::Option::Some(#default);)
+        };
+        quote!(if #slot.is_none() { #value })
     }
 
     /// A positional word converted to `ty`, checked against `choices` first.
@@ -798,6 +832,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let slots = fields.iter().map(|f| {
         let ident = slot(&f.ident);
         match &f.kind {
+            Kind::Switch if f.negate.is_some() => {
+                quote!(let mut #ident: ::core::option::Option<bool> = ::core::option::Option::None;)
+            }
             Kind::Switch => quote!(let mut #ident: bool = false;),
             Kind::Count(ty) => quote!(let mut #ident: #ty = 0;),
             Kind::Optional(ty) | Kind::Required(ty) => {
@@ -814,6 +851,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         let displace = rules.displace(&fields, f);
         let stored = match &f.kind {
+            Kind::Switch if f.negate.is_some() => quote! {
+                __arg.check_switch()?;
+                #ident = ::core::option::Option::Some(true);
+            },
             Kind::Switch => quote! {
                 __arg.check_switch()?;
                 #ident = true;
@@ -858,6 +899,24 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let body = store(f);
         Some(quote!(#pattern => { #body }))
     });
+    let negated = |f: &Field| {
+        let no = LitByteStr::new(f.negate.as_ref()?.as_bytes(), Span::call_site());
+        let ident = slot(&f.ident);
+        let displace = rules.displace(&fields, f);
+        Some((
+            quote!(#no),
+            quote! {
+                __arg.check_switch()?;
+                #ident = ::core::option::Option::Some(false);
+                #displace
+            },
+        ))
+    };
+    let negated_arms = fields.iter().filter_map(|f| {
+        let (pattern, body) = negated(f)?;
+        Some(quote!(#pattern => { #body }))
+    });
+    let long_arms = long_arms.chain(negated_arms);
     let short_arms = fields.iter().filter_map(|f| {
         let pattern = LitChar::new(f.short()?, Span::call_site());
         let body = store(f);
@@ -996,6 +1055,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let body = store(f);
             Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
         });
+        let global_negated = fields.iter().filter(is_global).filter_map(|f| {
+            let (pattern, body) = negated(f)?;
+            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
+        });
+        let global_longs = global_longs.chain(global_negated);
         let global_shorts = fields.iter().filter(is_global).filter_map(|f| {
             let pattern = LitChar::new(f.short()?, Span::call_site());
             let body = store(f);
@@ -1194,6 +1258,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = &f.ident;
         let slot = slot(ident);
         match &f.kind {
+            Kind::Switch if f.negate.is_some() => quote!(#ident: #slot.unwrap_or(false)),
             Kind::Switch | Kind::Count(_) | Kind::Optional(_) | Kind::Many(_) => {
                 quote!(#ident: #slot)
             }
@@ -1545,6 +1610,9 @@ impl Rules {
             let slot = slot(&other.ident);
             let displaced = format_ident!("__displaced_{}", other.ident);
             let clear = match &other.kind {
+                Kind::Switch if other.negate.is_some() => {
+                    quote!(#slot = ::core::option::Option::None;)
+                }
                 Kind::Switch => quote!(#slot = false;),
                 Kind::Count(_) => quote!(#slot = 0;),
                 Kind::Optional(_) | Kind::Required(_) => {
@@ -1695,6 +1763,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negative_numbers = false;
     let mut hyphen_values = false;
     let mut require_equals = false;
+    let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
@@ -1739,6 +1808,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("negate") {
+                negate = Some(if meta.input.peek(syn::Token![=]) {
+                    let name = meta.value()?.parse::<LitStr>()?.value();
+                    // usage spells it `"--no-color"`.
+                    Some(name.strip_prefix("--").unwrap_or(&name).to_owned())
+                } else {
+                    None
+                });
             } else if meta.path.is_ident("require_equals") {
                 require_equals = true;
             } else if meta.path.is_ident("allow_hyphen_values") {
@@ -1796,7 +1873,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -1887,8 +1964,30 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if (env.is_some() || default.is_some()) && matches!(role, Role::Subcommand) {
         return error("a subcommand field takes no `env` or `default`".into());
     }
-    if default.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
-        return error("`default` needs a field that takes a value".into());
+    let negate = match negate {
+        None => None,
+        Some(_) if !matches!(kind, Kind::Switch) || !matches!(role, Role::Flag { .. }) => {
+            return error("`negate` is for `bool` flags".into());
+        }
+        Some(Some(name)) => Some(name),
+        Some(None) => match &role {
+            Role::Flag { long: Some(l), .. } => Some(format!("no-{l}")),
+            _ => return error("`negate` without a name needs a `long` to prefix".into()),
+        },
+    };
+    if let Some(no) = &negate {
+        if no.is_empty() || no.starts_with('-') || no.contains('=') {
+            return error(format!("`{no}` is not a usable long name"));
+        }
+    }
+    match (&default, &negate) {
+        (Some(d), Some(_)) if d != "true" && d != "false" => {
+            return error("a negatable flag's `default` is \"true\" or \"false\"".into());
+        }
+        (Some(_), None) if matches!(kind, Kind::Switch | Kind::Count(_)) => {
+            return error("`default` needs a field that takes a value, or `negate`".into());
+        }
+        _ => {}
     }
     Ok(Field {
         ident,
@@ -1913,7 +2012,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         negative_numbers,
         hyphen_values,
         require_equals,
+        negate,
     })
+}
+
+/// Every long spelling of `f`, its negation included.
+fn spellings(f: &Field) -> Vec<&str> {
+    let mut longs = f.longs();
+    longs.extend(f.negate.as_deref());
+    longs
 }
 
 fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
@@ -1924,8 +2031,8 @@ fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
                 _ => None,
             }
             .or_else(|| {
-                let longs = b.longs();
-                a.longs()
+                let longs = spellings(b);
+                spellings(a)
                     .into_iter()
                     .find(|l| longs.contains(l))
                     .map(|l| format!("--{l}"))

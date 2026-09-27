@@ -24,6 +24,7 @@ struct Fields {
     offset: Option<i32>,
     args: Option<String>,
     inspect: Option<String>,
+    cache: bool,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -47,6 +48,7 @@ macro_rules! fields {
     ($cli:expr, $use:path) => {{
         let c = $cli;
         Fields {
+            cache: c.cache(),
             verbose: c.verbose as usize,
             path: c.path,
             include: c.include,

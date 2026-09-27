@@ -39,6 +39,8 @@ pub struct Item {
     pub short: Option<char>,
     /// `--name`.
     pub long: Option<&'static str>,
+    /// `--no-name`, the spelling that sets it false.
+    pub negate: Option<&'static str>,
     /// The value's placeholder; `None` for a switch.
     pub value_name: Option<&'static str>,
     /// First paragraph of the description.
@@ -230,6 +232,9 @@ fn flag_spec(item: &Item) -> String {
         (None, Some(l)) => format!("    --{l}"),
         (None, None) => String::new(),
     };
+    if let Some(no) = item.negate {
+        let _ = write!(spec, " / --{no}");
+    }
     if let Some(value) = item.value_name {
         let _ = write!(spec, " <{value}>");
     }

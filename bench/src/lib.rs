@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS --inspect[=PORT] -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS --inspect[=PORT] --[no-]cache -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -26,6 +26,8 @@ pub mod wa_derive {
         pub args: Option<String>,
         #[arg(long, require_equals, default_missing = "9229")]
         pub inspect: Option<String>,
+        #[arg(long, negate, default = "true")]
+        pub cache: bool,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
@@ -62,6 +64,13 @@ pub mod wa_derive {
         #[arg(positional, value_name = "TOOL")]
         pub tools: Vec<String>,
     }
+
+    impl Cli {
+        /// Whether caching is on, however this framework holds it.
+        pub fn cache(&self) -> bool {
+            self.cache
+        }
+    }
 }
 
 /// winnow-args, combinators: `dispatch!` on the item kind, so words skip the flags.
@@ -85,6 +94,8 @@ pub mod wa_comb {
         pub offset: Option<i32>,
         pub args: Option<String>,
         pub inspect: Option<String>,
+        /// Unset until `--cache` or `--no-cache`: the default is read by `cache()`.
+        pub cache: Option<bool>,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
@@ -144,6 +155,14 @@ pub mod wa_comb {
     const OFFSET: Named = long("offset").allow_negative_numbers();
     const ARGS: Named = long("args").allow_hyphen_values();
     const INSPECT: Named = long("inspect").require_equals();
+    const CACHE: Named = long("cache");
+    const NO_CACHE: Named = long("no-cache");
+
+    impl Cli {
+        pub fn cache(&self) -> bool {
+            self.cache.unwrap_or(true)
+        }
+    }
 
     /// What the derive does after its loop: `--jobs` fallbacks, then the constraints.
     pub fn finish(cli: &mut Cli, input: &Argv<'_>) -> Result<(), Error> {
@@ -187,6 +206,7 @@ pub mod wa_comb {
                     OFFSET.argument_as().map(|o| c.offset = Some(o)),
                     ARGS.argument_as().map(|a| c.args = Some(a)),
                     INSPECT.argument_or("9229").map(|i| c.inspect = Some(i)),
+                    CACHE.negated_by(NO_CACHE).map(|v| c.cache = Some(v)),
                 )),
             )),
             Kind::Word => alt((
@@ -281,6 +301,8 @@ pub mod wa_disp {
                 a.value_or_with(ValueOptions { require_equals: true, ..ValueOptions::DEFAULT }, BStr::new("9229"))
                     .map(|i| c.inspect = Some(i))
             },
+            a @ Arg::Long(LongFlag { name: b"cache", .. }) => a.switch().map(|()| c.cache = Some(true)),
+            a @ Arg::Long(LongFlag { name: b"no-cache", .. }) => a.switch().map(|()| c.cache = Some(false)),
             a @ Arg::Long(LongFlag { name: b"offset", .. }) => {
                 a.value_as_with(ValueOptions { negative_numbers: true, ..ValueOptions::DEFAULT }).map(|o| c.offset = Some(o))
             },
@@ -361,6 +383,8 @@ pub mod bpaf010 {
         pub args: Option<String>,
         #[bpaf(external(inspect_p))]
         pub inspect: Option<String>,
+        #[bpaf(external(cache_p))]
+        pub cache: bool,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
@@ -406,6 +430,14 @@ pub mod bpaf010 {
         let port = bpaf::long("inspect").argument::<String>("PORT").adjacent();
         let bare = bpaf::long("inspect").req_flag(String::from("9229"));
         bpaf::construct!([port, bare]).optional()
+    }
+
+    /// `--cache` / `--no-cache`, the last one given winning.
+    fn cache_p() -> impl bpaf::Parser<Output = bool> {
+        use bpaf::Parser as _;
+        let yes = bpaf::long("cache").req_flag(true);
+        let no = bpaf::long("no-cache").req_flag(false);
+        bpaf::construct!([yes, no]).last().fallback(true)
     }
 
     /// bpaf's derive has no negative numbers; `negative_lit` is the combinator.
@@ -477,6 +509,13 @@ pub mod bpaf010 {
         #[bpaf(positional("TOOL"))]
         pub tools: Vec<String>,
     }
+
+    impl Cli {
+        /// Whether caching is on, however this framework holds it.
+        pub fn cache(&self) -> bool {
+            self.cache
+        }
+    }
 }
 
 /// clap 4, derived.
@@ -504,6 +543,11 @@ pub mod clap4 {
         pub args: Option<String>,
         #[arg(long, require_equals = true, num_args = 0..=1, default_missing_value = "9229")]
         pub inspect: Option<String>,
+        /// clap has no negation: two flags overriding each other, read by `cache()`.
+        #[arg(long = "cache", overrides_with = "no_cache")]
+        pub cache_flag: bool,
+        #[arg(long, overrides_with = "cache_flag")]
+        pub no_cache: bool,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
@@ -539,6 +583,13 @@ pub mod clap4 {
         pub global: bool,
         #[arg(value_name = "TOOL")]
         pub tools: Vec<String>,
+    }
+
+    impl Cli {
+        /// Whether caching is on, however this framework holds it.
+        pub fn cache(&self) -> bool {
+            !self.no_cache
+        }
     }
 }
 
@@ -603,6 +654,8 @@ pub mod usage {
             default_missing = "9229"
         )]
         pub inspect: ::std::option::Option<::std::string::String>,
+        #[usage(long = "cache", negate = "--no-cache", default = "true")]
+        pub cache: bool,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(
@@ -653,5 +706,12 @@ pub mod usage {
         pub global: bool,
         #[usage(arg, name = "TOOL")]
         pub tools: ::std::vec::Vec<::std::string::String>,
+    }
+
+    impl Cli {
+        /// Whether caching is on, however this framework holds it.
+        pub fn cache(&self) -> bool {
+            self.cache
+        }
     }
 }
