@@ -1,3 +1,4 @@
 -v --path /tmp/x
 -v --path /tmp/x a b c
 -vvv --path /tmp/x
+-v --path /tmp/x -I a -I b -I c
