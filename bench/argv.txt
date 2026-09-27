@@ -11,3 +11,5 @@
 -v --path /tmp/x -j 8
 -v --path /tmp/x --json --strict
 -v --path /tmp/x a -- node app.js -v
+-v --path /tmp/x --write
+-v -w ./x --path /tmp/x

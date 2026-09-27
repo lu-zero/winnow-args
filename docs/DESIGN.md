@@ -84,7 +84,8 @@ product and usage's `Partial` work too.
    `Named` implements `Parser<Argv, Arg, Error>` for one occurrence; `args`
    repeats the item and then reports leftovers precisely. `dispatch!` on
    `token::kind` keeps words away from the flag branches. Inside the flag
-   `alt`, each branch still re-lexes, so flag cost grows with the flag count.
+   `alt`, each branch still re-lexes, so flag cost grows with the flag count. winnow's `alt` takes at most 9
+   parsers; a larger flag set nests them.
 2. **Name dispatch.** One `dispatch!` on `token::arg`, with arms such as
    `a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. }))`.
    rustc compiles the names into a `match`, and each item is lexed once.

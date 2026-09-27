@@ -151,19 +151,35 @@ impl<'i> Arg<'i> {
     ///   lone `-` is a value; `--` is not.
     #[inline(always)]
     pub fn read_value(&self, input: &mut Argv<'i>) -> Result<&'i BStr, Error> {
+        match self.next_value(input) {
+            Some(v) => Ok(v),
+            None => Err(Error::missing_value(self.offset(), self.spelling())),
+        }
+    }
+
+    /// [`Arg::read_value`] for a flag whose value may be left out: where that
+    /// would report a missing value, `--color` alone or before another flag,
+    /// this gives `missing` instead.
+    #[inline(always)]
+    pub fn read_value_or(&self, input: &mut Argv<'i>, missing: &'static BStr) -> &'i BStr {
+        self.next_value(input).unwrap_or(missing)
+    }
+
+    #[inline(always)]
+    fn next_value(&self, input: &mut Argv<'i>) -> Option<&'i BStr> {
         match self {
-            Arg::Long(LongFlag { value: Some(v), .. }) => Ok(v),
+            Arg::Long(LongFlag { value: Some(v), .. }) => Some(v),
             Arg::Short(_) if input.mode() == Mode::Bundle => {
                 let v = input.take_word();
-                Ok(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
+                Some(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
             }
             _ => {
                 if input.is_empty()
                     || (input.mode() != Mode::Stopped && is_flag_like(input.front()))
                 {
-                    return Err(Error::missing_value(self.offset(), self.spelling()));
+                    return None;
                 }
-                Ok(input.take_word())
+                Some(input.take_word())
             }
         }
     }
@@ -198,6 +214,14 @@ impl<'i> Arg<'i> {
     /// [`Arg::read_value`] as a parser, for a `dispatch!` arm.
     pub fn value(&self) -> impl Parser<Argv<'i>, &'i BStr, Error> {
         move |input: &mut Argv<'i>| self.read_value(input)
+    }
+
+    /// [`Arg::read_value_or`], converted, as a parser for a `dispatch!` arm.
+    pub fn value_or<T: FromArg>(&self, missing: &'static BStr) -> impl Parser<Argv<'i>, T, Error> {
+        move |input: &mut Argv<'i>| {
+            let v = self.read_value_or(input, missing);
+            self.convert(v)
+        }
     }
 
     /// [`Arg::read_value_as`] as a parser, for a `dispatch!` arm.

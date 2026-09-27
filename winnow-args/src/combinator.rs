@@ -145,6 +145,19 @@ impl<const N: usize> Named<N> {
         })
     }
 
+    /// An option whose value may be left out: a bare `--name`, or one followed by
+    /// another flag, gives `missing`. `--name=v` and `--name v` give `v`.
+    pub fn argument_or<'i, T: FromArg>(
+        mut self,
+        missing: &'static str,
+    ) -> impl Parser<Argv<'i>, T, Error> {
+        trace("argument_or", move |input: &mut Argv<'i>| {
+            self.parse_next(input)?
+                .value_or(BStr::new(missing))
+                .parse_next(input)
+        })
+    }
+
     /// An option whose value is split on `delimiter`, each piece converted:
     /// `--tags a,b` gives two.
     pub fn arguments_as<'i, T: FromArg>(

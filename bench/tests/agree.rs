@@ -20,6 +20,7 @@ struct Fields {
     jobs: Option<u32>,
     /// `--quiet`, `--json`, `--toml`, `--strict`.
     switches: [bool; 4],
+    write: Option<String>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -51,6 +52,7 @@ macro_rules! fields {
             color: c.color.map(|w| format!("{w:?}")),
             jobs: Some(c.jobs).flatten_jobs(),
             switches: [c.quiet, c.json, c.toml, c.strict],
+            write: c.write,
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};
