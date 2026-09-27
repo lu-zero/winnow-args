@@ -1,0 +1,4 @@
+use -g node@20
+-C /tmp install node@20 python@3.12
+ls --json
+settings set color false

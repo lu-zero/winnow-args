@@ -17,3 +17,9 @@ clap = { version = "4", features = ["derive", "env"] }
 # The reference: usage's compiled, zero-allocation parser, as its mise shadow uses it.
 usage-argv = { path = "../../usage/argv", features = ["spec"] }
 usage-derive = { path = "../../usage/derive" }
+# mise at full scale: usage's shadows of `mise.usage.kdl`, unmodified, and ours
+# (`shadow-mise-wa`, translated from usage's by tasks/gen-mise-shadow.py).
+shadow-mise = { path = "../../usage/benches/shadows/mise" }
+shadow-mise-clap = { path = "../../usage/benches/shadows/mise-clap" }
+shadow-mise-bpaf010 = { path = "../../usage/benches/shadows/mise-bpaf010" }
+shadow-mise-wa = { path = "shadow-mise" }

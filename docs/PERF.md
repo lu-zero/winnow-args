@@ -441,3 +441,36 @@ subcommand level adds its name for the usage line; `report` prints it.
 Warm instructions per parse and warm ns (min). Carrying help costs a parse
 nothing measurable; the `+19` on the subcommand line is the `map_err` that
 records the subcommand's name. The text costs 6.7 KB of binary.
+
+## 17. mise at full scale
+
+`tasks/gen-mise-shadow.py` translates usage's shadow of `mise.usage.kdl` (211
+commands, 35 subcommand enums, 23 value enums) into winnow-args' vocabulary,
+dropping only metadata that does not affect parsing (listed in the checklist)
+and dropping no selector. It compiled after four fixes the toy CLI had not
+needed: a repeated `long` as another spelling, `help` on a variant,
+`required` on a switch, and `double_dash = "automatic"` next to `"required"`
+(mise's `run`), which needed `Mode::Values` so an automatic stop is not
+mistaken for a `--`. `SUITE=mise tasks/perf.sh` runs it against usage's own
+shadows, unmodified. `bench/tests/mise.rs` checks that the benchmark line binds
+the same fields in all four, and that usage and winnow-args accept and reject
+the same 19 varied lines.
+
+| `mise …` | usage | wa | bpaf 0.10 | clap 4 |
+|---|------:|------:|------:|------:|
+| `use -g node@20` instr | 7 549 | 3 810 (0.5×) | 1 195 054 (158×) | 4 944 348 (654×) |
+| cold ns | 13 980 | 9 920 | 444 766 | 1 498 040 |
+| warm ns | 783 | 320 | 166 360 | 766 525 |
+| `-C /tmp install node@20 python@3.12` warm ns | 921 | 442 | 167 029 | 770 596 |
+| `ls --json` warm ns | 598 | 281 | 167 604 | 765 835 |
+| `settings set color false` warm ns | 700 | 278 | 171 928 | 802 250 |
+| stripped bytes | 1 174 488 | 1 611 408 | 2 951 704 | 2 243 536 |
+
+Load ~6 of 128. The ratio against usage holds from the toy CLI (0.4–0.6× on
+instructions, ~0.4× warm): the derive's cost stays per command in scope, not per
+command in the CLI. The binary is 37 % larger than usage's: each struct's loop
+inlines the lexer and its continuations (`#[inline(always)]`, steps 5, 9, 14),
+where usage walks shared static tables with one parser. Cold times, which
+include first-touch page faults, gain less than warm ones for the same reason.
+`run build` is rejected by every shadow: mise's tasks arrive through `mount`,
+which none of them model.

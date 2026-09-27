@@ -8,19 +8,33 @@
 #
 #   tasks/perf.sh                      # every line of bench/argv.txt, one table each
 #   tasks/perf.sh -vp/tmp/x            # any argv; every binary gets the same one
+#   SUITE=mise tasks/perf.sh           # mise's full CLI: bench/mise-argv.txt
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+SUITE=${SUITE:-example}
+if [ "$SUITE" = mise ]; then
+  FRAMEWORKS=(usage wa bpaf clap)
+  PREFIX=parse-n-mise-
+  SWEEP=time-sweep-mise
+  LINES=bench/mise-argv.txt
+else
+  FRAMEWORKS=(usage wa wa-disp wa-comb bpaf clap)
+  PREFIX=parse-n-
+  SWEEP=time-sweep
+  LINES=bench/argv.txt
+fi
+export SUITE
 
 if [ $# -eq 0 ]; then
   while IFS= read -r line; do
     # shellcheck disable=SC2086 # a line is several words on purpose
     [ -n "$line" ] && "$0" $line && echo
-  done <bench/argv.txt
+  done <"$LINES"
   exit
 fi
 ARGV=("$@")
 RUNS=${RUNS:-31}
-FRAMEWORKS=(usage wa wa-disp wa-comb bpaf clap)
 
 cargo build --release -q -p bench 2>/dev/null || cargo build --release -p bench
 
@@ -73,7 +87,7 @@ declare -A warm_min warm_median
 while read -r name min med; do
   warm_min[$name]=$min
   warm_median[$name]=$med
-done < <(./target/release/time-sweep "${ARGV[@]}")
+done < <("./target/release/$SWEEP" "${ARGV[@]}")
 
 echo "argv: ${ARGV[*]}"
 echo "instructions: $counter; cold ns: median of $RUNS processes; warm ns: min / median of 2000 rounds"
@@ -84,7 +98,7 @@ printf '|%s|%s|%s|%s|%s|%s|%s|%s|\n' ----------- ---------: --------: ---------:
 base_instr=
 base_cold=
 for fw in "${FRAMEWORKS[@]}"; do
-  bin="parse-n-$fw"
+  bin="$PREFIX$fw"
   got=$(PARSE_N=1 "./target/release/$bin" "${ARGV[@]}")
   [ "$got" = 1 ] || echo "warning: $bin did not accept the argv (printed $got)" >&2
   instr=$(($(instructions "$bin" 1) - $(instructions "$bin" 0)))
