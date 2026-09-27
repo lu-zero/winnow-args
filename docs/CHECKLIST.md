@@ -71,8 +71,11 @@ where the references disagree and we picked a side.
       environment > default; `with_env` for deterministic tests
 - [x] Value enums: `#[derive(ValueEnum)]` (a `FromArg` match on bytes; `name`, `alias`)
 - [x] `choices("a", "b")` on string flags and positionals; `invalid_choice` lists the names
-- [ ] `conflicts` (77 in mise), `overrides` (37), `requires` (23), `group` (20),
-      `required` (10), `required_unless` (7)
+- [x] `conflicts`, `overrides`, `requires`, struct-level `group("name", required,
+      multiple)` + `group = "name"`, `required`, `required_unless`; exclusivity
+      judged on what was supplied, requiredness on what has a value
+- [ ] Selectors naming an ancestor's global flag (usage resolves those at runtime)
+- [ ] `requires_if`, `required_if_eq`, `default_if`, `exclusive`
 - [ ] `value_optional` + `default_missing` (3)
 - [ ] `restart_token` (2, on mise's `run`)
 
@@ -158,8 +161,8 @@ where the references disagree and we picked a side.
 
 ## Audit: usage's mise shadow (45 attribute keys)
 
-Parsing semantics still missing, by use count: `conflicts` 77, `overrides` 37,
-`requires` 23, `group` 20, `double_dash` 13, `required` 10, `required_unless` 7,
+Parsing semantics still missing, by use count: ~~`conflicts` 77, `overrides` 37,
+`requires` 23, `group` 20~~, `double_dash` 13, ~~`required` 10, `required_unless` 7~~,
 `value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
 `arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).

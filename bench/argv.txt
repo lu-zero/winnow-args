@@ -9,3 +9,4 @@
 -v --path /tmp/x -I a,b,c
 -v --path /tmp/x --color always
 -v --path /tmp/x -j 8
+-v --path /tmp/x --json --strict

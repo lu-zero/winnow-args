@@ -35,6 +35,10 @@ pub enum ErrorKind {
     MissingArgument,
     /// A required subcommand was not given.
     MissingSubcommand,
+    /// `conflicting_flags`: two arguments that exclude each other were both given.
+    Conflict,
+    /// A required group had none of its members.
+    MissingOneOf,
     /// A value that its type rejected.
     InvalidValue,
     /// `invalid_choice`: a value outside a fixed set.
@@ -101,6 +105,27 @@ impl Error {
     /// The required positional `name` was never filled. The offset is the end of the line.
     pub fn missing_argument(offset: usize, name: impl Into<String>) -> Self {
         Self::with_token(ErrorKind::MissingArgument, offset, name.into())
+    }
+
+    /// `name` requires `target`, which has no value. The offset is the end of the line.
+    pub fn required_by(offset: usize, target: impl Into<String>, name: &str) -> Self {
+        let mut error = Self::with_token(ErrorKind::MissingRequired, offset, target.into());
+        error.detail_mut().value = Some(name.to_owned());
+        error
+    }
+
+    /// `name` and `other` exclude each other and were both given.
+    pub fn conflict(offset: usize, name: impl Into<String>, other: &str) -> Self {
+        let mut error = Self::with_token(ErrorKind::Conflict, offset, name.into());
+        error.detail_mut().value = Some(other.to_owned());
+        error
+    }
+
+    /// The required group `group` had none of `members`.
+    pub fn missing_one_of(offset: usize, group: impl Into<String>, members: &[&str]) -> Self {
+        let mut error = Self::with_token(ErrorKind::MissingOneOf, offset, group.into());
+        error.detail_mut().value = Some(members.join(", "));
+        error
     }
 
     /// A required subcommand was not given. The offset is the end of the line.
@@ -186,7 +211,20 @@ impl fmt::Display for Error {
                 "`{token}` does not take a value, got `{}`",
                 self.value().unwrap_or_default()
             ),
-            ErrorKind::MissingRequired => write!(f, "`{token}` is required"),
+            ErrorKind::MissingRequired => match self.value() {
+                Some(by) => write!(f, "`{token}` is required by `{by}`"),
+                None => write!(f, "`{token}` is required"),
+            },
+            ErrorKind::Conflict => write!(
+                f,
+                "`{token}` cannot be used with `{}`",
+                self.value().unwrap_or_default()
+            ),
+            ErrorKind::MissingOneOf => write!(
+                f,
+                "one of {} is required ({token})",
+                self.value().unwrap_or_default()
+            ),
             ErrorKind::MissingArgument => write!(f, "missing argument `{token}`"),
             ErrorKind::MissingSubcommand => f.write_str("a subcommand is required"),
             ErrorKind::InvalidValue | ErrorKind::InvalidChoice => {

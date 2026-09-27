@@ -291,6 +291,18 @@ struct Field {
     env: Option<String>,
     /// Value used when neither the command line nor the environment did.
     default: Option<String>,
+    /// Selectors that may not be supplied together with this field.
+    conflicts: Vec<String>,
+    /// Selectors this field replaces, and that replace it: the last one given wins.
+    overrides: Vec<String>,
+    /// Selectors that must have a value when this field is supplied.
+    requires: Vec<String>,
+    /// Must end up with a value (for `Option` and `Vec` fields).
+    required: bool,
+    /// Required unless one of these selectors has a value.
+    required_unless: Vec<String>,
+    /// The struct-level group this field belongs to.
+    group: Option<String>,
 }
 
 impl Field {
@@ -338,16 +350,28 @@ impl Field {
         })
     }
 
-    /// Fill the field from its environment variable, then its default, when the
-    /// command line left it unset.
-    fn fallbacks(&self) -> TokenStream2 {
+    /// Whether the field holds a value. Read before defaults this is "supplied"
+    /// (command line or environment); after them it is "has a value".
+    fn has(&self) -> TokenStream2 {
         let slot = slot(&self.ident);
-        let unset = match &self.kind {
-            Kind::Switch => quote!(!#slot),
-            Kind::Count(_) => quote!(#slot == 0),
-            Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_none()),
-            Kind::Many(_) => quote!(#slot.is_empty()),
-        };
+        match &self.kind {
+            Kind::Switch => quote!(#slot),
+            Kind::Count(_) => quote!((#slot != 0)),
+            Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_some()),
+            Kind::Many(_) => quote!((!#slot.is_empty())),
+        }
+    }
+
+    /// Fill the field from its environment variable (`env`) or its default when
+    /// the command line left it unset and no `overrides` displaced it.
+    fn fallback(&self, env: bool, displaced: bool) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        let has = self.has();
+        let not_displaced = displaced.then(|| {
+            let displaced = format_ident!("__displaced_{}", self.ident);
+            quote!(&& !#displaced)
+        });
+        let unset = quote!(!#has #not_displaced);
         let assign = |value: TokenStream2, source: &str| match &self.kind {
             Kind::Optional(ty) | Kind::Required(ty) => {
                 let value = self.source_value(ty, value, source);
@@ -365,39 +389,47 @@ impl Field {
             },
             Kind::Switch | Kind::Count(_) => unreachable!("handled below"),
         };
-        let env = self.env.as_ref().map(|var| {
-            let name = LitStr::new(var, Span::call_site());
-            let apply = match &self.kind {
-                Kind::Switch => quote!(#slot = __wa::env::truthy(&__raw);),
-                Kind::Count(ty) => quote! {
-                    if let ::core::option::Option::Some(::core::result::Result::Ok(__n)) =
-                        __raw.to_str().map(str::parse::<#ty>)
-                    {
-                        #slot = __n;
+        if !env {
+            return self
+                .default
+                .as_ref()
+                .map(|value| {
+                    let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
+                    let assign = assign(quote!(__wa::BStr::new(#bytes)), &self.display());
+                    quote!(if #unset { #assign })
+                })
+                .unwrap_or_default();
+        }
+        self.env
+            .as_ref()
+            .map(|var| {
+                let name = LitStr::new(var, Span::call_site());
+                let apply = match &self.kind {
+                    Kind::Switch => quote!(#slot = __wa::env::truthy(&__raw);),
+                    Kind::Count(ty) => quote! {
+                        if let ::core::option::Option::Some(::core::result::Result::Ok(__n)) =
+                            __raw.to_str().map(str::parse::<#ty>)
+                        {
+                            #slot = __n;
+                        }
+                    },
+                    _ => {
+                        let assign = assign(quote!(__value), &format!("${var}"));
+                        quote! {
+                            let __value = __wa::BStr::new(__raw.as_encoded_bytes());
+                            #assign
+                        }
                     }
-                },
-                _ => {
-                    let assign = assign(quote!(__value), &format!("${var}"));
-                    quote! {
-                        let __value = __wa::BStr::new(__raw.as_encoded_bytes());
-                        #assign
+                };
+                quote! {
+                    if #unset {
+                        if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
+                            #apply
+                        }
                     }
                 }
-            };
-            quote! {
-                if #unset {
-                    if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
-                        #apply
-                    }
-                }
-            }
-        });
-        let default = self.default.as_ref().map(|value| {
-            let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
-            let assign = assign(quote!(__wa::BStr::new(#bytes)), &self.display());
-            quote!(if #unset { #assign })
-        });
-        quote!(#env #default)
+            })
+            .unwrap_or_default()
     }
 
     /// A positional word converted to `ty`, checked against `choices` first.
@@ -474,6 +506,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     check_duplicates(&fields)?;
     let positionals: Vec<&Field> = fields.iter().filter(|f| f.is_positional()).collect();
     check_positional_order(&positionals)?;
+    let groups = struct_groups(input)?;
+    let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -495,7 +529,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // What storing one flag occurrence looks like; the same for both spellings.
     let store = |f: &Field| {
         let ident = slot(&f.ident);
-        match &f.kind {
+        let displace = rules.displace(&fields, f);
+        let stored = match &f.kind {
             Kind::Switch => quote! {
                 __arg.check_switch()?;
                 #ident = true;
@@ -528,7 +563,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
             },
-        }
+        };
+        quote!(#stored #displace)
     };
 
     let long_arms = fields.iter().filter_map(|f| {
@@ -673,7 +709,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
     let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
-    let fallbacks = fields.iter().map(Field::fallbacks);
+    let displaced = rules.displaced_slots(&fields);
+    let env_fallbacks = fields
+        .iter()
+        .map(|f| f.fallback(true, rules.is_displaced(&fields, f)));
+    let default_fallbacks = fields
+        .iter()
+        .map(|f| f.fallback(false, rules.is_displaced(&fields, f)));
+    let exclusive = rules.exclusive(&fields, &groups);
+    let supplied = rules.supplied(&fields);
+    let required = rules.required(&fields, &groups);
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
@@ -712,6 +757,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 #(#slots)*
+                #(#displaced)*
                 #position
                 #filled_slot
                 while !__input.is_empty() {
@@ -729,11 +775,306 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #word_arm
                     }
                 }
-                #(#fallbacks)*
+                #(#env_fallbacks)*
+                #exclusive
+                #supplied
+                #(#default_fallbacks)*
+                #required
                 ::core::result::Result::Ok(Self { #(#build),* })
             }
         }
     })
+}
+
+/// A struct-level `group("name", required, multiple)`.
+struct Group {
+    name: String,
+    required: bool,
+    multiple: bool,
+}
+
+fn struct_groups(input: &DeriveInput) -> syn::Result<Vec<Group>> {
+    let mut groups = Vec::new();
+    for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+        attr.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("group") {
+                return Err(meta.error("expected `group(\"name\", required, multiple)`"));
+            }
+            let content;
+            syn::parenthesized!(content in meta.input);
+            let name = content.parse::<LitStr>()?.value();
+            let (mut required, mut multiple) = (false, false);
+            while !content.is_empty() {
+                content.parse::<syn::Token![,]>()?;
+                let flag = content.parse::<Ident>()?;
+                match flag.to_string().as_str() {
+                    "required" => required = true,
+                    "multiple" => multiple = true,
+                    _ => {
+                        return Err(syn::Error::new(
+                            flag.span(),
+                            "expected `required` or `multiple`",
+                        ));
+                    }
+                }
+            }
+            groups.push(Group {
+                name,
+                required,
+                multiple,
+            });
+            Ok(())
+        })?;
+    }
+    Ok(groups)
+}
+
+/// The relations between fields, resolved to field indices.
+struct Rules {
+    /// Pairs `(a, b)` that may not both be supplied; each unordered pair once.
+    conflicts: Vec<(usize, usize)>,
+    /// For each field, the fields it displaces when bound (symmetric).
+    beats: Vec<Vec<usize>>,
+    /// `(field, target)`: `field` supplied needs `target` to have a value.
+    requires: Vec<(usize, usize)>,
+    /// `(field, others)`: `field` needs a value unless one of `others` has one.
+    required_unless: Vec<(usize, Vec<usize>)>,
+    /// Members of each struct-level group, in `groups` order.
+    members: Vec<Vec<usize>>,
+}
+
+impl Rules {
+    fn new(fields: &[Field], groups: &[Group]) -> syn::Result<Self> {
+        let resolve = |from: &Field, selector: &str| -> syn::Result<usize> {
+            fields
+                .iter()
+                .position(
+                    |f| match (selector.strip_prefix("--"), selector.strip_prefix('-')) {
+                        (Some(long), _) => f.longs().contains(&long),
+                        (None, Some(short)) => {
+                            let mut chars = short.chars();
+                            chars
+                                .next()
+                                .is_some_and(|c| chars.next().is_none() && f.short() == Some(c))
+                        }
+                        (None, None) => {
+                            matches!(&f.role, Role::Positional { name } if name == selector)
+                                || f.ident == selector
+                        }
+                    },
+                )
+                .ok_or_else(|| {
+                    syn::Error::new(
+                        from.ident.span(),
+                        format!("`{selector}` names no flag or positional of this struct"),
+                    )
+                })
+        };
+        let mut rules = Rules {
+            conflicts: Vec::new(),
+            beats: vec![Vec::new(); fields.len()],
+            requires: Vec::new(),
+            required_unless: Vec::new(),
+            members: vec![Vec::new(); groups.len()],
+        };
+        for (i, f) in fields.iter().enumerate() {
+            for selector in &f.conflicts {
+                let j = resolve(f, selector)?;
+                let pair = (i.min(j), i.max(j));
+                if !rules.conflicts.contains(&pair) {
+                    rules.conflicts.push(pair);
+                }
+            }
+            for selector in &f.overrides {
+                let j = resolve(f, selector)?;
+                if !rules.beats[i].contains(&j) {
+                    rules.beats[i].push(j);
+                }
+                if !rules.beats[j].contains(&i) {
+                    rules.beats[j].push(i);
+                }
+            }
+            for selector in &f.requires {
+                rules.requires.push((i, resolve(f, selector)?));
+            }
+            if !f.required_unless.is_empty() {
+                let others = f
+                    .required_unless
+                    .iter()
+                    .map(|selector| resolve(f, selector))
+                    .collect::<syn::Result<_>>()?;
+                rules.required_unless.push((i, others));
+            }
+            if let Some(group) = &f.group {
+                let g = groups
+                    .iter()
+                    .position(|g| &g.name == group)
+                    .ok_or_else(|| {
+                        syn::Error::new(
+                            f.ident.span(),
+                            format!("no `#[arg(group(\"{group}\"))]` on the struct"),
+                        )
+                    })?;
+                rules.members[g].push(i);
+            }
+        }
+        Ok(rules)
+    }
+
+    /// Whether an `overrides` can unset `f`, so its fallbacks must check.
+    fn is_displaced(&self, fields: &[Field], f: &Field) -> bool {
+        !self.beats[index_of(fields, f)].is_empty()
+    }
+
+    /// `let mut __displaced_x = false;` for every field an `overrides` can unset.
+    fn displaced_slots(&self, fields: &[Field]) -> Vec<TokenStream2> {
+        fields
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !self.beats[*i].is_empty())
+            .map(|(_, f)| {
+                let displaced = format_ident!("__displaced_{}", f.ident);
+                quote!(let mut #displaced = false;)
+            })
+            .collect()
+    }
+
+    /// After binding `f`: unset what it beats, and mark `f` as standing.
+    fn displace(&self, fields: &[Field], f: &Field) -> TokenStream2 {
+        let i = index_of(fields, f);
+        if self.beats[i].is_empty() {
+            return quote!();
+        }
+        let standing = format_ident!("__displaced_{}", f.ident);
+        let clears = self.beats[i].iter().map(|&j| {
+            let other = &fields[j];
+            let slot = slot(&other.ident);
+            let displaced = format_ident!("__displaced_{}", other.ident);
+            let clear = match &other.kind {
+                Kind::Switch => quote!(#slot = false;),
+                Kind::Count(_) => quote!(#slot = 0;),
+                Kind::Optional(_) | Kind::Required(_) => {
+                    quote!(#slot = ::core::option::Option::None;)
+                }
+                Kind::Many(_) => quote!(#slot.clear();),
+            };
+            quote!(#clear #displaced = true;)
+        });
+        quote!(#standing = false; #(#clears)*)
+    }
+
+    /// Conflicts and at-most-one groups, judged on what was supplied.
+    fn exclusive(&self, fields: &[Field], groups: &[Group]) -> TokenStream2 {
+        let pairs = self.conflicts.iter().map(|&(a, b)| {
+            let (fa, fb) = (&fields[a], &fields[b]);
+            let (has_a, has_b) = (fa.has(), fb.has());
+            let (name_a, name_b) = (fa.display(), fb.display());
+            quote! {
+                if #has_a && #has_b {
+                    return ::core::result::Result::Err(
+                        __wa::Error::conflict(__input.offset(), #name_a, #name_b),
+                    );
+                }
+            }
+        });
+        let at_most_one = groups.iter().zip(&self.members).filter(|(g, _)| !g.multiple).map(|(_, members)| {
+            let checks = members.iter().map(|&m| {
+                let has = fields[m].has();
+                let name = fields[m].display();
+                quote! {
+                    if #has {
+                        if let ::core::option::Option::Some(__first) = __first {
+                            return ::core::result::Result::Err(
+                                __wa::Error::conflict(__input.offset(), __first, #name),
+                            );
+                        }
+                        __first = ::core::option::Option::Some(#name);
+                    }
+                }
+            });
+            quote! {{
+                let mut __first: ::core::option::Option<&'static str> = ::core::option::Option::None;
+                #(#checks)*
+            }}
+        });
+        quote!(#(#pairs)* #(#at_most_one)*)
+    }
+
+    /// Whether each `requires`-declaring field was supplied, before defaults fill it.
+    fn supplied(&self, fields: &[Field]) -> TokenStream2 {
+        let mut seen = Vec::new();
+        let snapshots = self.requires.iter().filter_map(|&(i, _)| {
+            if seen.contains(&i) {
+                return None;
+            }
+            seen.push(i);
+            let supplied = format_ident!("__supplied_{}", fields[i].ident);
+            let has = fields[i].has();
+            Some(quote!(let #supplied = #has;))
+        });
+        quote!(#(#snapshots)*)
+    }
+
+    /// `required`, `required_unless`, required groups and `requires`, judged on
+    /// what has a value, defaults included.
+    fn required(&self, fields: &[Field], groups: &[Group]) -> TokenStream2 {
+        let missing = |f: &Field| {
+            let name = f.display();
+            match f.role {
+                Role::Positional { .. } => {
+                    quote!(__wa::Error::missing_argument(__input.offset(), #name))
+                }
+                _ => quote!(__wa::Error::missing_required(__input.offset(), #name)),
+            }
+        };
+        let plain = fields.iter().filter(|f| f.required).map(|f| {
+            let has = f.has();
+            let error = missing(f);
+            quote!(if !#has { return ::core::result::Result::Err(#error); })
+        });
+        let unless = self.required_unless.iter().map(|(i, others)| {
+            let has = fields[*i].has();
+            let others = others.iter().map(|&j| fields[j].has());
+            let error = missing(&fields[*i]);
+            quote!(if !#has #(&& !#others)* { return ::core::result::Result::Err(#error); })
+        });
+        let one_of = groups
+            .iter()
+            .zip(&self.members)
+            .filter(|(g, _)| g.required)
+            .map(|(g, members)| {
+                let name = &g.name;
+                let has = members.iter().map(|&m| fields[m].has());
+                let names = members.iter().map(|&m| fields[m].display());
+                quote! {
+                    if #(!#has)&&* {
+                        return ::core::result::Result::Err(
+                            __wa::Error::missing_one_of(__input.offset(), #name, &[#(#names),*]),
+                        );
+                    }
+                }
+            });
+        let requires = self.requires.iter().map(|&(i, j)| {
+            let supplied = format_ident!("__supplied_{}", fields[i].ident);
+            let has = fields[j].has();
+            let (by, target) = (fields[i].display(), fields[j].display());
+            quote! {
+                if #supplied && !#has {
+                    return ::core::result::Result::Err(
+                        __wa::Error::required_by(__input.offset(), #target, #by),
+                    );
+                }
+            }
+        });
+        quote!(#(#plain)* #(#unless)* #(#one_of)* #(#requires)*)
+    }
+}
+
+fn index_of(fields: &[Field], f: &Field) -> usize {
+    fields
+        .iter()
+        .position(|g| g.ident == f.ident)
+        .expect("a field of this struct")
 }
 
 fn slot(ident: &Ident) -> Ident {
@@ -755,6 +1096,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut choices = None;
     let mut env = None;
     let mut default = None;
+    let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
+    let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -782,6 +1125,18 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("conflicts") {
+                conflicts.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("overrides") {
+                overrides.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("requires") {
+                requires.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("required_unless") {
+                required_unless.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("required") {
+                required = true;
+            } else if meta.path.is_ident("group") {
+                group = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("env") {
                 env = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("default") {
@@ -802,7 +1157,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter`, `choices`, `env`, `default` or `value_name`",
+                    "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
+                     `positional`, `value_name`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
+                     `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
             Ok(())
@@ -870,6 +1227,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if default.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`default` needs a field that takes a value".into());
     }
+    if required && !matches!(kind, Kind::Optional(_) | Kind::Many(_)) {
+        return error("`required` is for `Option` and `Vec` fields; a `T` field already is".into());
+    }
     Ok(Field {
         ident,
         kind,
@@ -878,6 +1238,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         choices,
         env,
         default,
+        conflicts,
+        overrides,
+        requires,
+        required,
+        required_unless,
+        group,
     })
 }
 
