@@ -38,7 +38,8 @@ where the references disagree and we picked a side.
       dropped (usage)
 - [x] Several long names: `alias = "…"` / `alias("…", …)`; `Named<N>::longs([…])`
 - [x] `allow_negative_numbers` on flags and positionals; `ValueOptions`, `token::number`
-- [ ] `allow_hyphen_values`, `require_equals`
+- [x] `allow_hyphen_values` (flags): the next word, `--` included
+- [ ] `require_equals`
 - [ ] `--no-name` negation
 - [ ] Non-UTF-8 names are rejected cleanly (names are ASCII-ish in practice)
 

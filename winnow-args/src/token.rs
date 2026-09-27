@@ -201,6 +201,7 @@ impl<'i> Arg<'i> {
                 let next = input.front();
                 if input.mode() == Mode::Word
                     && is_flag_like(next)
+                    && !options.hyphen_values
                     && !(options.negative_numbers && is_negative_number(next))
                 {
                     return None;
@@ -305,12 +306,15 @@ impl<'i> Word<'i> {
 pub struct ValueOptions {
     /// A negative number is a value, not a flag: `--offset -1`.
     pub negative_numbers: bool,
+    /// Any next word is the value, `--` and flag-like ones included: `--args -x`.
+    pub hyphen_values: bool,
 }
 
 impl ValueOptions {
     /// Any word that is not flag-like.
     pub const DEFAULT: Self = Self {
         negative_numbers: false,
+        hyphen_values: false,
     };
 }
 

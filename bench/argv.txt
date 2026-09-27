@@ -14,3 +14,4 @@
 -v --path /tmp/x --write
 -v -w ./x --path /tmp/x
 -v --path /tmp/x --offset -3
+-v --path /tmp/x --args -destroy

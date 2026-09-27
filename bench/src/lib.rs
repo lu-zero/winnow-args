@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -22,6 +22,8 @@ pub mod wa_derive {
         pub write: Option<String>,
         #[arg(long, allow_negative_numbers)]
         pub offset: Option<i32>,
+        #[arg(long, allow_hyphen_values)]
+        pub args: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
@@ -79,6 +81,7 @@ pub mod wa_comb {
         pub strict: bool,
         pub write: Option<String>,
         pub offset: Option<i32>,
+        pub args: Option<String>,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
@@ -136,6 +139,7 @@ pub mod wa_comb {
     const STRICT: Named = long("strict");
     const WRITE: Named = short('w').long("write");
     const OFFSET: Named = long("offset").allow_negative_numbers();
+    const ARGS: Named = long("args").allow_hyphen_values();
 
     /// What the derive does after its loop: `--jobs` fallbacks, then the constraints.
     pub fn finish(cli: &mut Cli, input: &Argv<'_>) -> Result<(), Error> {
@@ -177,6 +181,7 @@ pub mod wa_comb {
                     STRICT.switch().map(|()| c.strict = true),
                     WRITE.argument_or("./bin/mise").map(|w| c.write = Some(w)),
                     OFFSET.argument_as().map(|o| c.offset = Some(o)),
+                    ARGS.argument_as().map(|a| c.args = Some(a)),
                 )),
             )),
             Kind::Word => alt((
@@ -263,8 +268,12 @@ pub mod wa_disp {
             a @ Arg::Long(LongFlag { name: b"json", .. }) => a.switch().map(|()| c.json = true),
             a @ Arg::Long(LongFlag { name: b"toml", .. }) => a.switch().map(|()| c.toml = true),
             a @ Arg::Long(LongFlag { name: b"strict", .. }) => a.switch().map(|()| c.strict = true),
+            a @ Arg::Long(LongFlag { name: b"args", .. }) => {
+                a.value_as_with(ValueOptions { hyphen_values: true, ..ValueOptions::DEFAULT })
+                    .map(|v| c.args = Some(v))
+            },
             a @ Arg::Long(LongFlag { name: b"offset", .. }) => {
-                a.value_as_with(ValueOptions { negative_numbers: true }).map(|o| c.offset = Some(o))
+                a.value_as_with(ValueOptions { negative_numbers: true, ..ValueOptions::DEFAULT }).map(|o| c.offset = Some(o))
             },
             a @ (Arg::Long(LongFlag { name: b"write", .. }) | Arg::Short(ShortFlag { letter: 'w', .. })) => {
                 a.value_or(BStr::new("./bin/mise")).map(|w| c.write = Some(w))
@@ -336,6 +345,11 @@ pub mod bpaf010 {
         pub write: Option<String>,
         #[bpaf(external(offset_p))]
         pub offset: Option<i32>,
+        // bpaf 0.10 has no hyphen values, and pairing `literal("--args")` with
+        // `any` breaks `optional()`: a plain argument, which refuses `-destroy`.
+        // The agreement test skips bpaf on such lines.
+        #[bpaf(long("args"), argument("ARGS"))]
+        pub args: Option<String>,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
@@ -465,6 +479,8 @@ pub mod clap4 {
         pub write: Option<String>,
         #[arg(long, allow_negative_numbers = true)]
         pub offset: Option<i32>,
+        #[arg(long, allow_hyphen_values = true)]
+        pub args: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
@@ -554,6 +570,8 @@ pub mod usage {
         pub write: ::std::option::Option<::std::string::String>,
         #[usage(long = "offset", value_name = "N", allow_negative_numbers)]
         pub offset: ::std::option::Option<i32>,
+        #[usage(long = "args", value_name = "ARGS", allow_hyphen_values)]
+        pub args: ::std::option::Option<::std::string::String>,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(

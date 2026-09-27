@@ -22,6 +22,7 @@ struct Fields {
     switches: [bool; 4],
     write: Option<String>,
     offset: Option<i32>,
+    args: Option<String>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -55,6 +56,7 @@ macro_rules! fields {
             switches: [c.quiet, c.json, c.toml, c.strict],
             write: c.write,
             offset: c.offset,
+            args: c.args,
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};
@@ -103,12 +105,16 @@ fn frameworks_agree_on_every_benchmarked_line() {
         }
         // See `bench::bpaf010::Cli::cmd`: bpaf cannot route words after `--`
         // away from a greedy positional before it.
-        let bpaf_can = !strs.contains(&"--");
-        let bpaf = bench::bpaf010::cli_p()
-            .run_inner(&strs[..])
-            .map(|c| fields!(c, bench::bpaf010::Commands::Use))
-            .unwrap_or_else(|e| panic!("bpaf rejected {line:?}: {e:?}"));
+        // Nor take a flag-like word as a value (`bench::bpaf010::Cli::args`).
+        let bpaf_can = !strs.contains(&"--")
+            && !strs
+                .windows(2)
+                .any(|w| w[0] == "--args" && w[1].starts_with('-'));
         if bpaf_can {
+            let bpaf = bench::bpaf010::cli_p()
+                .run_inner(&strs[..])
+                .map(|c| fields!(c, bench::bpaf010::Commands::Use))
+                .unwrap_or_else(|e| panic!("bpaf rejected {line:?}: {e:?}"));
             assert_eq!(bpaf, usage, "bpaf disagrees with usage on {line:?}");
         }
         let clap = bench::clap4::Cli::try_parse_from(clap_argv)
