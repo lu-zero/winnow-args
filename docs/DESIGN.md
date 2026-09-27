@@ -17,40 +17,37 @@
 
 The goal: bpaf's composition shape, winnow's combinators, usage's cost.
 
-## The stream: one `BStr`, words terminated by NUL
+## The stream: `&[&BStr]`, one token per word
 
-`ArgvBuf` copies argv into one buffer, `word\0word\0…`. NUL can't appear in a
-real argv on Unix or Windows, so it can mark word ends. `Argv` wraps the
-`&BStr` and implements winnow's `Stream` by delegation.
+`Argv` borrows argv as `&[&BStr]` and is a winnow `Stream` whose tokens are
+words. Nothing is copied or joined, a word is never re-split (`"a b"` stays
+one value), and any byte, NUL included, may appear in a word. On Unix,
+`&OsStr` → `&BStr` is free (`as_encoded_bytes`), so a caller that already
+holds `&[&OsStr]`, as usage's harness does, parses with no allocation.
 
-Alternatives considered:
+Earlier drafts flattened argv into one NUL-terminated buffer so that every
+winnow byte parser applied directly. That cost a copy per parse (most of the
+remaining cost) and relied on NUL never appearing in a word; it is gone.
 
-- **`TokenSlice<&BStr>` (a stream of words).** Zero-copy, but every word-level
-  parser has to run a byte-level sub-parser on the word, and winnow's
-  `ParserError<I>` is keyed by input type. That means two error worlds and
-  explicit bridging at every flag.
-- **Pre-lex into a `Vec<Token>`.** A bundle can't be lexed without the
-  table: `-pfoo` is `-p foo` if `p` takes a value and `-p -f -o -o` if it
-  doesn't. So a lexer can't be context-free here.
+Offsets are counted as if each word were followed by one separator. So a
+position inside a short bundle is still one number, which shrinks as the lexer
+reads a letter. `repeat`'s "parser must consume" check and error offsets
+therefore work inside `-vq` too. Generic winnow token parsers (`any`, `take`)
+see whole words; `next_slice` must not split a word.
 
-The flat buffer costs one allocation per parse (~40 bytes for typical lines).
-Offsets are byte positions, so errors can point at the letter inside `-vx`.
+## Mode lives in the stream, and the checkpoint is the whole state
 
-## Mode lives in the stream, and the checkpoint saves it
-
-A flat position alone can't say whether the next `p` starts a word or is the
-next letter of `-vp`, or whether we are past `--`. `Argv` carries
-`Mode::{Word, Bundle, Stopped}`, and `ArgvCheckpoint` saves it together with
-the byte position.
+A word position alone can't say whether we are part-way through `-vp` or past
+`--`. `Argv` carries the byte position inside the current word and
+`Mode::{Word, Bundle, Stopped}`, and its checkpoint is a copy of the whole
+(small, `Copy`) struct.
 
 Two winnow facts drove this:
 
 - `Stateful<I, S>` does not restore `S` on `reset`, so it's unsound under `alt`.
 - `winnow::stream::Checkpoint::new` is `pub(crate)`, so a custom stream needs its
-  own checkpoint type. `Stream::Checkpoint` only asks for `Offset + Clone + Debug`.
-
-Every mode change also consumes bytes, so `repeat`'s "parser must consume"
-guard still works.
+  own checkpoint type. `Stream::Checkpoint` only asks for `Offset + Clone + Debug`,
+  which `Argv` itself satisfies.
 
 ## Lexer, then continuation
 
@@ -94,17 +91,36 @@ product and usage's `Partial` work too.
 
 ## Numbers (aarch64, `tasks/perf.sh`)
 
-This host's glibc uses an instruction valgrind can't decode, so counts come
-from `perf stat -e instructions:u`, the median of 31 runs (±~100 noise).
+Three measurements per framework, all on the same argv:
 
-| argv                      | usage | wa derive | wa comb | bpaf 0.10 | clap 4 |
-|---------------------------|------:|----------:|--------:|----------:|-------:|
-| `-v --path /tmp/x`        | 1563  | 1368      | 1939    | 31351     | 24315  |
-| `-vp/tmp/x`               | 1300  | 1038      | 1378    | 35994     | 22796  |
-| `--verbose --path=/tmp/x` | 1589  | 1544      | 2078    | 31441     | 23674  |
+- **instr**: instructions for one cold parse, `PARSE_N=1` minus `PARSE_N=0`.
+  This host's glibc uses an instruction valgrind can't decode, so it's the
+  `perf stat -e instructions:u` median of 31 runs (±~100 noise).
+- **cold ns**: wall time of the first parse in a fresh process, median over 31
+  processes. This includes first-touch page faults, and is what a CLI pays.
+- **warm ns**: in-process min / median over 2000 short rounds (`time-sweep`).
 
-Wall clock (min of 2000 rounds): usage ~140 ns, wa derive ~136 ns, wa comb
-~217 ns, clap ~2.5 µs, bpaf ~3.5 µs.
+| argv | framework | instr | cold ns | warm ns (min) |
+|------|-----------|------:|--------:|--------------:|
+| `-v --path /tmp/x` | usage | 1428 | 3280 | 140 |
+| | wa derive | 570 | 1460 | 46 |
+| | wa combinators | 1216 | 1660 | 157 |
+| | bpaf 0.10 | 31280 | 56781 | 3455 |
+| | clap 4 | 24413 | 26961 | 2557 |
+| `-vp/tmp/x` | usage | 1266 | 2900 | 125 |
+| | wa derive | 509 | 1020 | 39 |
+| | wa combinators | 1101 | 1700 | 139 |
+| | bpaf 0.10 | 36032 | 73421 | 4104 |
+| | clap 4 | 22865 | 21521 | 2394 |
+| `--verbose --path=/tmp/x` | usage | 1557 | 2360 | 153 |
+| | wa derive | 611 | 1600 | 49 |
+| | wa combinators | 1263 | 1960 | 160 |
+| | bpaf 0.10 | 31347 | 58941 | 3491 |
+| | clap 4 | 23800 | 32060 | 2522 |
+
+Cold ns varies a few hundred ns between runs; compare ratios, not digits.
+Warm, the combinators cost ~3× the derive because each `alt` branch re-lexes
+the token.
 
 Caveat: this is a two-flag CLI. usage's static tables are built for mise scale
 (211 commands), and it also does work we skip (help/version flags, spec
