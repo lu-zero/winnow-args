@@ -65,17 +65,17 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         let pattern = LitByteStr::new(name.as_bytes(), Span::call_site());
         let parse = match &variant.fields {
-            Fields::Unit => quote!(__wa::finish(__input).map(|()| Self::#ident)),
+            Fields::Unit => quote!(__wa::finish_with(__input, __globals).map(|()| Self::#ident)),
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                 let ty = &fields.unnamed[0].ty;
                 match boxed(ty) {
                     Some(inner) => quote! {
-                        <#inner as ::winnow_args::Args>::parse_argv(__input)
+                        <#inner as ::winnow_args::Args>::parse_argv_with(__input, __globals)
                             .map(|v| Self::#ident(::std::boxed::Box::new(v)))
                     },
-                    None => {
-                        quote!(<#ty as ::winnow_args::Args>::parse_argv(__input).map(Self::#ident))
-                    }
+                    None => quote! {
+                        <#ty as ::winnow_args::Args>::parse_argv_with(__input, __globals).map(Self::#ident)
+                    },
                 }
             }
             _ => {
@@ -102,6 +102,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             fn parse_subcommand(
                 __name: &[u8],
                 __input: &mut ::winnow_args::Argv<'_>,
+                __globals: &mut dyn ::winnow_args::Globals,
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 match __name {
@@ -115,8 +116,9 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
 
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
-            fn parse_argv(
+            fn parse_argv_with(
                 __input: &mut ::winnow_args::Argv<'_>,
+                __globals: &mut dyn ::winnow_args::Globals,
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 if __input.is_empty() {
@@ -125,7 +127,9 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 let __arg = __wa::arg(__input)?;
                 if let __wa::Arg::Word(__word) = __arg {
                     if <Self as __wa::Subcommand>::has(&**__word.value) {
-                        return <Self as __wa::Subcommand>::parse_subcommand(&**__word.value, __input);
+                        return <Self as __wa::Subcommand>::parse_subcommand(
+                            &**__word.value, __input, __globals,
+                        );
                     }
                 }
                 ::core::result::Result::Err(__arg.unexpected())
@@ -177,6 +181,8 @@ enum Role {
     Flag {
         short: Option<char>,
         long: Option<String>,
+        /// Also accepted after a subcommand word, at any depth.
+        global: bool,
     },
     Positional {
         name: String,
@@ -351,12 +357,49 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             _ => unreachable!("rejected for subcommands in `field`"),
         };
         let not_filled = track_filled.then(|| quote!(!__filled &&));
+        let is_global = |f: &&Field| matches!(f.role, Role::Flag { global: true, .. });
+        let global_longs = fields.iter().filter(is_global).filter_map(|f| {
+            let pattern = LitByteStr::new(f.long()?.as_bytes(), Span::call_site());
+            let body = store(f);
+            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
+        });
+        let global_shorts = fields.iter().filter(is_global).filter_map(|f| {
+            let pattern = LitChar::new(f.short()?, Span::call_site());
+            let body = store(f);
+            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
+        });
+        // The subcommand sees this struct's globals first, then its ancestors'.
+        let (inherit, handler) = if fields.iter().any(|f| is_global(&f)) {
+            let setup = quote! {
+                let mut __inherit = __wa::globals(|__arg, __input| {
+                    match __arg {
+                        __wa::Arg::Long(__flag) => match __flag.name {
+                            #(#global_longs)*
+                            _ => {}
+                        },
+                        __wa::Arg::Short(__flag) => match __flag.letter {
+                            #(#global_shorts)*
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                    __globals.bind(__arg, __input)
+                });
+            };
+            (setup, quote!(&mut __inherit))
+        } else {
+            (quote!(), quote!(&mut *__globals))
+        };
         quote! {
             if #not_filled !__word.after_separator {
                 if <#ty as __wa::Subcommand>::has(&**__word.value) {
-                    #ident = ::core::option::Option::Some(
-                        <#ty as __wa::Subcommand>::parse_subcommand(&**__word.value, __input)?
-                    );
+                    let __sub = {
+                        #inherit
+                        <#ty as __wa::Subcommand>::parse_subcommand(
+                            &**__word.value, __input, #handler,
+                        )?
+                    };
+                    #ident = ::core::option::Option::Some(__sub);
                     break;
                 }
             }
@@ -403,8 +446,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
-            fn parse_argv(
+            fn parse_argv_with(
                 __input: &mut ::winnow_args::Argv<'_>,
+                __globals: &mut dyn ::winnow_args::Globals,
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 #(#slots)*
@@ -415,11 +459,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#long_arms)*
-                            _ => { #unexpected; }
+                            _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
                         },
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
-                            _ => { #unexpected; }
+                            _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
                         },
                         __wa::Arg::Separator { .. } => {}
                         #word_arm
@@ -444,6 +488,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut positional = false;
     let mut count = false;
     let mut subcommand = false;
+    let mut global = false;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -467,11 +512,13 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 count = true;
             } else if meta.path.is_ident("subcommand") {
                 subcommand = true;
+            } else if meta.path.is_ident("global") {
+                global = true;
             } else if meta.path.is_ident("value_name") {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `positional`, `subcommand`, `count` or `value_name`",
+                    "expected `short`, `long`, `global`, `positional`, `subcommand`, `count` or `value_name`",
                 ));
             }
             Ok(())
@@ -485,7 +532,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         kind(&f.ty)
     };
     let role = if subcommand {
-        if positional || count || short.is_some() || long.is_some() {
+        if positional || count || global || short.is_some() || long.is_some() {
             return error("a subcommand field takes no other `arg` options".into());
         }
         if !matches!(kind, Kind::Optional(_) | Kind::Required(_)) {
@@ -493,8 +540,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         Role::Subcommand
     } else if positional {
-        if short.is_some() || long.is_some() {
-            return error("a positional field has no `short` or `long` name".into());
+        if short.is_some() || long.is_some() || global {
+            return error("a positional field has no `short`, `long` or `global`".into());
         }
         if matches!(kind, Kind::Switch | Kind::Count(_)) {
             return error("a positional field cannot be `bool` or `count`".into());
@@ -517,7 +564,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return error(format!("`{c}` is not a usable short name"));
             }
         }
-        Role::Flag { short, long }
+        Role::Flag {
+            short,
+            long,
+            global,
+        }
     };
 
     Ok(Field { ident, kind, role })

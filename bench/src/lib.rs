@@ -7,7 +7,7 @@ pub mod wa_derive {
 
     #[derive(winnow_args::Args, Debug)]
     pub struct Cli {
-        #[arg(short, long, count)]
+        #[arg(short, long, count, global)]
         pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
@@ -65,16 +65,25 @@ pub mod wa_comb {
 
     const GLOBAL: Named = short('g').long("global");
 
-    fn use_args(input: &mut Argv<'_>) -> Result<UseArgs, Error> {
-        let mut u = UseArgs::default();
-        let c = &mut u;
-        args(dispatch! {kind;
-            Kind::Long | Kind::Short => GLOBAL.switch().map(|()| c.global = true),
-            Kind::Word => positional("TOOL").map(|t| c.tools.push(t)),
-            Kind::Separator => fail,
-        })
-        .parse_next(input)?;
-        Ok(u)
+    /// `use`, also accepting the parent's global flags through `globals`.
+    fn use_args<'i, G>(mut globals: G) -> impl Parser<Argv<'i>, UseArgs, Error>
+    where
+        G: Parser<Argv<'i>, (), Error>,
+    {
+        move |input: &mut Argv<'i>| {
+            let mut u = UseArgs::default();
+            let (c, g) = (&mut u, &mut globals);
+            args(dispatch! {kind;
+                Kind::Long | Kind::Short => alt((
+                    GLOBAL.switch().map(|()| c.global = true),
+                    g.by_ref(),
+                )),
+                Kind::Word => positional("TOOL").map(|t| c.tools.push(t)),
+                Kind::Separator => fail,
+            })
+            .parse_next(input)?;
+            Ok(u)
+        }
     }
 
     const VERBOSE: Named = short('v').long("verbose");
@@ -91,9 +100,15 @@ pub mod wa_comb {
                 INCLUDE.argument_as().map(|i| c.include.push(i)),
             )),
             Kind::Word => alt((
-                cond(c.files.is_empty(), command("use", use_args))
-                    .verify_map(|found| found)
-                    .map(|u| c.command = Some(Commands::Use(u))),
+                cond(
+                    c.files.is_empty(),
+                    command(
+                        "use",
+                        use_args(VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1))),
+                    ),
+                )
+                .verify_map(|found| found)
+                .map(|u| c.command = Some(Commands::Use(u))),
                 positional("FILE").map(|f| c.files.push(f)),
             )),
             Kind::Separator => fail,
@@ -110,16 +125,20 @@ pub mod wa_disp {
     use winnow::prelude::*;
     use winnow_args::combinator::args;
     use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
-    use winnow_args::{Argv, Error};
+    use winnow_args::{Argv, Error, Globals, globals};
 
     pub use super::wa_comb::{Cli, Commands, UseArgs};
 
-    fn use_args(input: &mut Argv<'_>) -> Result<UseArgs, Error> {
+    /// `use`; flags it does not know are offered to the parent's `globals`.
+    fn use_args<'i>(input: &mut Argv<'i>, globals: &mut dyn Globals) -> Result<UseArgs, Error> {
         let mut u = UseArgs::default();
         let c = &mut u;
         args(dispatch! {arg;
             a @ (Arg::Long(LongFlag { name: b"global", .. }) | Arg::Short(ShortFlag { letter: 'g', .. })) => {
                 a.switch().map(|()| c.global = true)
+            },
+            a @ (Arg::Long(_) | Arg::Short(_)) => |input: &mut Argv<'i>| {
+                if globals.bind(&a, input)? { Ok(()) } else { Err(a.unexpected()) }
             },
             Arg::Word(w) => w.value_as("TOOL").map(|t| c.tools.push(t)),
             _ => fail,
@@ -128,7 +147,7 @@ pub mod wa_disp {
         Ok(u)
     }
 
-    pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
+    pub fn cli<'i>(input: &mut Argv<'i>) -> Result<Cli, Error> {
         let mut cli = Cli::default();
         let c = &mut cli;
         args(dispatch! {arg;
@@ -142,7 +161,20 @@ pub mod wa_disp {
                 a.value_as().map(|i| c.include.push(i))
             },
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && *w.value == "use" => {
-                use_args.map(|u| c.command = Some(Commands::Use(u)))
+                |input: &mut Argv<'i>| {
+                    let verbose = &mut c.verbose;
+                    let mut inherit = globals(|a, _| match a {
+                        Arg::Long(LongFlag { name: b"verbose", .. }) | Arg::Short(ShortFlag { letter: 'v', .. }) => {
+                            a.check_switch()?;
+                            *verbose = verbose.saturating_add(1);
+                            Ok(true)
+                        }
+                        _ => Ok(false),
+                    });
+                    let u = use_args(input, &mut inherit)?;
+                    c.command = Some(Commands::Use(u));
+                    Ok(())
+                }
             },
             Arg::Word(w) => w.value_as("FILE").map(|f| c.files.push(f)),
             _ => fail,
@@ -161,7 +193,7 @@ pub mod bpaf010 {
     #[derive(Debug, Clone, Bpaf)]
     #[bpaf(options, generate(cli_p))]
     pub struct Cli {
-        #[bpaf(short('v'), long("verbose"), req_flag(()), count)]
+        #[bpaf(external(verbose_p))]
         pub verbose: usize,
         #[bpaf(short('p'), long("path"), argument("PATH"))]
         pub path: Option<PathBuf>,
@@ -173,6 +205,16 @@ pub mod bpaf010 {
         pub command: Option<Commands>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
+    }
+
+    /// bpaf's derive has no `global`; the combinator does.
+    fn verbose_p() -> impl bpaf::Parser<Output = usize> {
+        use bpaf::Parser as _;
+        bpaf::short('v')
+            .long("verbose")
+            .req_flag(())
+            .count()
+            .global()
     }
 
     #[derive(Debug, Clone, Bpaf)]
@@ -198,7 +240,7 @@ pub mod clap4 {
 
     #[derive(clap::Parser, Debug)]
     pub struct Cli {
-        #[arg(short, long, action = clap::ArgAction::Count)]
+        #[arg(short, long, action = clap::ArgAction::Count, global = true)]
         pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
@@ -256,7 +298,7 @@ pub mod usage {
     #[derive(Cli)]
     #[usage(bin = "example", name = "example")]
     pub struct Cli {
-        #[usage(long = "verbose", short = 'v', count)]
+        #[usage(long = "verbose", short = 'v', count, global)]
         pub verbose: u8,
         #[usage(long = "path", short = 'p', value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
