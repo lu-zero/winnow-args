@@ -30,7 +30,7 @@
 //! that layer knows the field's type.
 
 use winnow::combinator::{repeat, trace};
-use winnow::error::ModalError as _;
+use winnow::error::{ModalError as _, ParserError as _};
 use winnow::prelude::*;
 
 use crate::error::Error;
@@ -139,6 +139,29 @@ impl<'i> Parser<Argv<'i>, Arg<'i>, Error> for Named {
 pub fn positional<'i, T: FromArg>(name: &'static str) -> impl Parser<Argv<'i>, T, Error> {
     trace("positional", move |input: &mut Argv<'i>| {
         token::word(input)?.value_as(name).parse_next(input)
+    })
+}
+
+/// A subcommand: the word `name`, then `inner` for the rest of the line.
+///
+/// Once the word matches, `inner`'s errors are committed. After `--` no word is
+/// a subcommand.
+pub fn command<'i, O, P>(name: &'static str, mut inner: P) -> impl Parser<Argv<'i>, O, Error>
+where
+    P: Parser<Argv<'i>, O, Error>,
+{
+    trace("command", move |input: &mut Argv<'i>| {
+        let start = input.checkpoint();
+        match token::word(input) {
+            Ok(word) if *word.value == *name.as_bytes() && !word.after_separator => {
+                inner.parse_next(input).map_err(|e| e.cut())
+            }
+            Ok(_) => {
+                input.reset(&start);
+                Err(Error::from_input(input))
+            }
+            Err(e) => Err(e),
+        }
     })
 }
 

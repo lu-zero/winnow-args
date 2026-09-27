@@ -33,6 +33,8 @@ pub enum ErrorKind {
     MissingRequired,
     /// `missing_required_arg`: a required positional argument was never filled.
     MissingArgument,
+    /// A required subcommand was not given.
+    MissingSubcommand,
     /// A value that its type rejected.
     InvalidValue,
 }
@@ -97,6 +99,16 @@ impl Error {
     /// The required positional `name` was never filled. The offset is the end of the line.
     pub fn missing_argument(offset: usize, name: impl Into<String>) -> Self {
         Self::with_token(ErrorKind::MissingArgument, offset, name.into())
+    }
+
+    /// A required subcommand was not given. The offset is the end of the line.
+    pub fn missing_subcommand(offset: usize) -> Self {
+        Self {
+            kind: ErrorKind::MissingSubcommand,
+            cut: true,
+            offset,
+            detail: None,
+        }
     }
 
     /// `value` given to `flag` at `offset` was rejected by its type.
@@ -168,6 +180,7 @@ impl fmt::Display for Error {
             ),
             ErrorKind::MissingRequired => write!(f, "`{token}` is required"),
             ErrorKind::MissingArgument => write!(f, "missing argument `{token}`"),
+            ErrorKind::MissingSubcommand => f.write_str("a subcommand is required"),
             ErrorKind::InvalidValue => {
                 write!(
                     f,

@@ -156,3 +156,35 @@ Warm ns (min). Against step 4 the derive gained 6–37 ns per line. `wa-disp`
 costs the same per flag however many flags there are; `wa-comb` still pays per
 preceding flag (the `-I` line). What separates `wa-disp` from the derive is
 winnow's `repeat`/`alt` bookkeeping in `args`, not the matching.
+
+## 6. Subcommands: `[use -g/--global [TOOL]...]`
+
+`#[arg(subcommand)]` holds a `#[derive(Subcommand)]` enum; a word selects it
+only before any positional is filled and never after `--`, and the child parses
+the rest of the line. bpaf 0.10 needed the command field *before* its greedy
+`FILE` positional, or it took `use` as a file.
+
+| framework | `-v --path /tmp/x` | Δ vs 5 | `… a b c` | Δ vs 5 | `-vvv …` | `-I …` | `… use -g node@20` |
+|-----------|------:|------:|------:|------:|------:|------:|------:|
+| usage     | 160   | +3    | 353   | +12   | 216   | 371   | 344   |
+| wa        | 49    | +3    | 119   | +4    | 59    | 134   | 109   |
+| wa-disp   | 106   | +7    | 205   | +9    | 144   | 243   | 220   |
+| wa-comb   | 133   | +8    | 254   | +38   | 188   | 430   | 251   |
+| bpaf 0.10 | 6169  | +720  | 7872  | +1000 | 8326  | 8501  | 9633  |
+| clap 4    | 4191  | +1160 | 5225  | +1085 | 5041  | 6335  | 7137  |
+
+Warm ns (min). Cold ns was unusually noisy this run for everyone (usage
+3.9–8.6 µs), so this entry leans on warm time and instructions (wa 487 / 1664
+/ 593 / 1955 / 1386 against usage's 1518 / 4100 / 2027 / 4415 / 3680).
+
+The first measurement showed wa ~30 ns slower on every line *with or without*
+the subcommand field. Adding `Word::after_separator` had pushed `token::arg`
+past rustc's inlining threshold, which brought back the step-5 stall. It is now
+`#[inline(always)]`; warm per-parse on `… a b c` is 1315 instructions, ~412
+cycles and ~24 stall cycles, against 1282 / ~434 / ~35 before the feature.
+Routing itself costs the derive ~15–30 instructions per parse: one inlined
+`matches!` of the word against the enum's names (`Subcommand::has`).
+
+The combinators' `cond(files.is_empty(), command("use", …))` branch is tried
+by every word, hence `wa-comb`'s +38 on `… a b c`; `wa-disp` does the same
+check in a match guard.

@@ -95,6 +95,8 @@ pub struct Word<'i> {
     pub value: &'i BStr,
     /// Where it starts.
     pub offset: usize,
+    /// Whether it came after `--`, where no word names a subcommand.
+    pub after_separator: bool,
 }
 
 impl<'i> Arg<'i> {
@@ -301,7 +303,9 @@ pub fn kind(input: &mut Argv<'_>) -> Result<Kind, Error> {
 }
 
 /// Lex the next item. Backtracks at the end of the command line.
-#[inline]
+// `always`: returned out of line, `Result<Arg, Error>` goes through memory and
+// stalls on store-to-load forwarding (docs/PERF.md, step 5).
+#[inline(always)]
 pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
     let kind = kind(input)?;
     let offset = input.offset();
@@ -337,6 +341,7 @@ pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
             })
         }
         Kind::Word => Arg::Word(Word {
+            after_separator: input.mode() == Mode::Stopped,
             value: input.take_word(),
             offset,
         }),
@@ -350,6 +355,7 @@ pub fn word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
     }
     let offset = input.offset();
     Ok(Word {
+        after_separator: input.mode() == Mode::Stopped,
         value: input.take_word(),
         offset,
     })

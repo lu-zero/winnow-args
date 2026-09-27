@@ -44,7 +44,7 @@ pub use stream::{Argv, words};
 pub use value::FromArg;
 
 #[cfg(feature = "derive")]
-pub use winnow_args_derive::Args;
+pub use winnow_args_derive::{Args, Subcommand};
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
@@ -82,9 +82,25 @@ pub trait Args: Sized {
     }
 }
 
+/// An enum of subcommands, selected by a word.
+///
+/// Derived with `#[derive(Subcommand)]`; a struct holds one in an
+/// `#[arg(subcommand)]` field. The derive also implements [`Args`] for the enum,
+/// so it can be the whole command line.
+pub trait Subcommand: Sized {
+    /// Whether `name` names a subcommand. Asked of every eligible word, so kept
+    /// apart from [`Subcommand::parse_subcommand`] and cheap to inline.
+    fn has(name: &[u8]) -> bool;
+
+    /// Parse the rest of `input` as the subcommand `name`, which [`Subcommand::has`].
+    fn parse_subcommand(name: &[u8], input: &mut Argv<'_>) -> Result<Self, Error>;
+}
+
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::Subcommand;
     pub use crate::error::Error;
     pub use crate::stream::Argv;
+    pub use crate::token::finish;
     pub use crate::token::{Arg, arg};
 }
