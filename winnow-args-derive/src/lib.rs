@@ -32,7 +32,7 @@ enum Kind {
     Optional(Type),
     /// `T`: one value, required.
     Required(Type),
-    /// `Vec<T>`: every remaining word; positionals only.
+    /// `Vec<T>`: a repeatable flag's values, or every remaining word.
     Many(Type),
 }
 
@@ -138,7 +138,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     __wa::value_as::<#ty>(__input, &__arg, __offset)?
                 );
             },
-            Kind::Many(_) => unreachable!("rejected for flags in `field`"),
+            Kind::Many(ty) => quote! {
+                #ident.push(__wa::value_as::<#ty>(__input, &__arg, __offset)?);
+            },
         }
     };
 
@@ -292,7 +294,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let kind = if count {
         Kind::Count(f.ty.clone())
     } else {
-        kind(&f.ty, positional)
+        kind(&f.ty)
     };
     let role = if positional {
         if short.is_some() || long.is_some() {
@@ -305,9 +307,6 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             name: value_name.unwrap_or_else(|| bare.to_uppercase()),
         }
     } else {
-        if matches!(kind, Kind::Required(_)) && is_vec(&f.ty) {
-            return error("repeatable flags (`Vec<T>`) are not supported yet".into());
-        }
         // Like bpaf: a flag with no names is `--field-name`.
         if short.is_none() && long.is_none() {
             long = Some(bare.replace('_', "-"));
@@ -386,11 +385,7 @@ fn inner(segment: &syn::PathSegment) -> Option<&Type> {
     }
 }
 
-fn is_vec(ty: &Type) -> bool {
-    last_segment(ty).is_some_and(|s| s.ident == "Vec")
-}
-
-fn kind(ty: &Type, positional: bool) -> Kind {
+fn kind(ty: &Type) -> Kind {
     if let Some(last) = last_segment(ty) {
         if last.ident == "bool" && last.arguments.is_none() {
             return Kind::Switch;
@@ -399,7 +394,7 @@ fn kind(ty: &Type, positional: bool) -> Kind {
             if last.ident == "Option" {
                 return Kind::Optional(inner.clone());
             }
-            if last.ident == "Vec" && positional {
+            if last.ident == "Vec" {
                 return Kind::Many(inner.clone());
             }
         }

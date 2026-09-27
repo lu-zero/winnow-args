@@ -63,8 +63,8 @@ where the references disagree and we picked a side.
 - [x] Required option: absent → `missing_required_flag`
 - [x] Repeated single-value option: last one wins (usage, clap)
 - [x] Counting switch (`-vvv` → 3), `#[arg(count)]` on any integer, saturating
-- [ ] Repeatable option into `Vec<T>`
-- [ ] Variadic option (`--include a b`)
+- [x] Repeatable option into `Vec<T>`, one value per occurrence, in order
+- [ ] Variadic option (`--include a b`); value delimiters (`--env=a,b`)
 - [ ] Defaults, env fallback
 - [ ] Choices / value enums
 - [ ] Conflicts, requires, groups

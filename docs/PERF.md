@@ -77,3 +77,26 @@ and track the same way: wa 553 / 1840 / 726 instr against usage's 1382 / 3938 / 
 Only bpaf pays to carry a count (~780 ns, its `req_flag(()).count()` repeat
 machinery); the rest is noise. Each extra letter in `-vvv` costs wa ~8 ns,
 the combinators ~16, usage ~29, clap ~390, bpaf ~1100.
+
+## 3. Repeatable options: `-I/--include=DIR...`
+
+A `Vec<T>` flag collects one value per occurrence, in order (clap and bpaf
+infer it from `Vec`; usage says `var`). The derive pushes into the slot; the
+combinators fold `argument_as()` into a `Vec`.
+
+| framework | `-v --path /tmp/x` | Δ vs 2 | `… a b c` | Δ vs 2 | `-vvv …` | `… -I a -I b -I c` |
+|-----------|------:|-----:|-----:|-----:|-----:|-----:|
+| usage     | 157   | +14  | 342  | +12  | 210  | 360  |
+| wa        | 53    | +4   | 136  | +5   | 69   | 165  |
+| wa-comb   | 226   | +45  | 567  | +149 | 254  | 525  |
+| bpaf 0.10 | 5518  | +873 | 6917 | +800 | 7658 | 7869 |
+| clap 4    | 2978  | +243 | 4049 | +107 | 3858 | 5196 |
+
+Warm ns (min); three repeated sweeps agreed within 1 ns, so the carrying costs
+are real, not drift. Instructions track the same way (wa 631 / 1905 / 812 / 2188
+against usage's 1441 / 3997 / 1985 / 4437).
+
+The combinators now show their structural cost: every word goes through each
+flag branch of the `alt`, each of which lexes, fails, and resets, before
+reaching the positional. `… a b c` got 149 ns slower from one more flag,
+~50 ns per word. The derive's `match` does not grow with the flag count.

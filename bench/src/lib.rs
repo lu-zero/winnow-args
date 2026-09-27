@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH [FILE]...` in five spellings.
+//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR... [FILE]...` in five spellings.
 
 /// winnow-args, derived.
 pub mod wa_derive {
@@ -10,6 +10,8 @@ pub mod wa_derive {
         pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
+        #[arg(short = 'I', long)]
+        pub include: Vec<PathBuf>,
         #[arg(positional, value_name = "FILE")]
         pub files: Vec<PathBuf>,
     }
@@ -28,27 +30,32 @@ pub mod wa_comb {
     pub struct Cli {
         pub verbose: u8,
         pub path: Option<PathBuf>,
+        pub include: Vec<PathBuf>,
         pub files: Vec<PathBuf>,
     }
 
     const VERBOSE: Named = short('v').long("verbose");
     const PATH: Named = short('p').long("path");
+    const INCLUDE: Named = short('I').long("include");
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
         let mut verbose = 0u8;
         let mut path = None;
+        let mut include = Vec::new();
         let mut files = Vec::new();
         args(alt((
             VERBOSE
                 .switch()
                 .map(|()| verbose = verbose.saturating_add(1)),
             PATH.argument_as::<PathBuf>().map(|p| path = Some(p)),
+            INCLUDE.argument_as::<PathBuf>().map(|i| include.push(i)),
             positional::<PathBuf>("FILE").map(|f| files.push(f)),
         )))
         .parse_next(input)?;
         Ok(Cli {
             verbose,
             path,
+            include,
             files,
         })
     }
@@ -67,6 +74,8 @@ pub mod bpaf010 {
         pub verbose: usize,
         #[bpaf(short('p'), long("path"), argument("PATH"))]
         pub path: Option<PathBuf>,
+        #[bpaf(short('I'), long("include"), argument("DIR"))]
+        pub include: Vec<PathBuf>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
     }
@@ -82,6 +91,8 @@ pub mod clap4 {
         pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
+        #[arg(short = 'I', long, value_name = "DIR")]
+        pub include: Vec<PathBuf>,
         #[arg(value_name = "FILE")]
         pub files: Vec<PathBuf>,
     }
@@ -123,6 +134,8 @@ pub mod usage {
         pub verbose: u8,
         #[usage(long = "path", short = 'p', value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
+        #[usage(long = "include", short = 'I', value_name = "DIR", var)]
+        pub include: ::std::vec::Vec<::std::path::PathBuf>,
         #[usage(arg, name = "FILE")]
         pub files: ::std::vec::Vec<::std::path::PathBuf>,
     }
