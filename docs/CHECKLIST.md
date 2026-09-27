@@ -62,7 +62,7 @@ where the references disagree and we picked a side.
 - [x] `Option<T>` option: absent → `None`
 - [x] Required option: absent → `missing_required_flag`
 - [x] Repeated single-value option: last one wins (usage, clap)
-- [ ] Counting switch (`-vvv` → 3)
+- [x] Counting switch (`-vvv` → 3), `#[arg(count)]` on any integer, saturating
 - [ ] Repeatable option into `Vec<T>`
 - [ ] Variadic option (`--include a b`)
 - [ ] Defaults, env fallback

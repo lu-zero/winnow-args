@@ -56,3 +56,24 @@ The derive pays nothing to carry positionals. The combinators pay ~14 ns per
 parse for one more `alt` branch, which every word and the final end-of-line
 attempt try. Using them costs about 30 ns per `PathBuf` word for wa, most of
 it the allocation; usage pays about 60 ns.
+
+## 2. Counting switch: `-v/--verbose...`
+
+`verbose` becomes a count in every framework (`#[arg(count)]`, clap `ArgAction::Count`,
+bpaf `req_flag(()), count`, usage `count`). The derive's slot is the integer
+itself, incremented with `saturating_add`; the combinators fold `switch()`.
+
+| framework | `-v --path /tmp/x` | Δ vs 1 | `… a b c` | Δ vs 1 | `-vvv --path /tmp/x` |
+|-----------|-------------------:|-------:|----------:|-------:|---------------------:|
+| usage     | 143 | 0    | 330  | +2   | 201  |
+| wa        | 49  | +4   | 131  | −4   | 64   |
+| wa-comb   | 181 | −2   | 418  | −4   | 212  |
+| bpaf 0.10 | 4645| +779 | 6117 | +782 | 6842 |
+| clap 4    | 2735| −100 | 3942 | +60  | 3510 |
+
+Warm ns (min). Instructions and cold times are in the `tasks/perf.sh` output
+and track the same way: wa 553 / 1840 / 726 instr against usage's 1382 / 3938 / 1953.
+
+Only bpaf pays to carry a count (~780 ns, its `req_flag(()).count()` repeat
+machinery); the rest is noise. Each extra letter in `-vvv` costs wa ~8 ns,
+the combinators ~16, usage ~29, clap ~390, bpaf ~1100.

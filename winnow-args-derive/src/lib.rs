@@ -26,6 +26,8 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 enum Kind {
     /// `bool`: present or not.
     Switch,
+    /// `#[arg(count)]` on an integer: how many times it was given.
+    Count(Type),
     /// `Option<T>`: one value, may be absent.
     Optional(Type),
     /// `T`: one value, required.
@@ -109,6 +111,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         match &f.kind {
             Kind::Switch => quote!(let mut #ident: bool = false;),
+            Kind::Count(ty) => quote!(let mut #ident: #ty = 0;),
             Kind::Optional(ty) | Kind::Required(ty) => {
                 quote!(let mut #ident: ::core::option::Option<#ty> = ::core::option::Option::None;)
             }
@@ -125,6 +128,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             Kind::Switch => quote! {
                 __wa::no_value(&__arg, __offset)?;
                 #ident = true;
+            },
+            Kind::Count(_) => quote! {
+                __wa::no_value(&__arg, __offset)?;
+                #ident = #ident.saturating_add(1);
             },
             Kind::Optional(ty) | Kind::Required(ty) => quote! {
                 #ident = ::core::option::Option::Some(
@@ -165,7 +172,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 Kind::Many(ty) => quote! {
                     #i => #ident.push(__wa::positional_as::<#ty>(__word, __offset, #display)?),
                 },
-                Kind::Switch => unreachable!("rejected for positionals in `field`"),
+                Kind::Switch | Kind::Count(_) => {
+                    unreachable!("rejected for positionals in `field`")
+                }
             }
         });
         quote! {
@@ -181,7 +190,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = &f.ident;
         let slot = slot(ident);
         match &f.kind {
-            Kind::Switch | Kind::Optional(_) | Kind::Many(_) => quote!(#ident: #slot),
+            Kind::Switch | Kind::Count(_) | Kind::Optional(_) | Kind::Many(_) => {
+                quote!(#ident: #slot)
+            }
             Kind::Required(_) => {
                 let display = LitStr::new(&f.display(), Span::call_site());
                 let error = if f.is_positional() {
@@ -244,6 +255,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut short = None;
     let mut long = None;
     let mut positional = false;
+    let mut count = false;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -263,23 +275,31 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 });
             } else if meta.path.is_ident("positional") {
                 positional = true;
+            } else if meta.path.is_ident("count") {
+                count = true;
             } else if meta.path.is_ident("value_name") {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
-                return Err(meta.error("expected `short`, `long`, `positional` or `value_name`"));
+                return Err(
+                    meta.error("expected `short`, `long`, `positional`, `count` or `value_name`")
+                );
             }
             Ok(())
         })?;
     }
 
     let error = |msg: String| Err(syn::Error::new(f.span(), msg));
-    let kind = kind(&f.ty, positional);
+    let kind = if count {
+        Kind::Count(f.ty.clone())
+    } else {
+        kind(&f.ty, positional)
+    };
     let role = if positional {
         if short.is_some() || long.is_some() {
             return error("a positional field has no `short` or `long` name".into());
         }
-        if matches!(kind, Kind::Switch) {
-            return error("a positional field cannot be `bool`".into());
+        if matches!(kind, Kind::Switch | Kind::Count(_)) {
+            return error("a positional field cannot be `bool` or `count`".into());
         }
         Role::Positional {
             name: value_name.unwrap_or_else(|| bare.to_uppercase()),
@@ -336,7 +356,7 @@ fn check_positional_order(positionals: &[&Field]) -> syn::Result<()> {
     let rank = |f: &Field| match f.kind {
         Kind::Required(_) => 0,
         Kind::Optional(_) => 1,
-        Kind::Many(_) | Kind::Switch => 2,
+        Kind::Many(_) | Kind::Switch | Kind::Count(_) => 2,
     };
     for pair in positionals.windows(2) {
         if rank(pair[1]) < rank(pair[0]) || rank(pair[0]) == 2 {

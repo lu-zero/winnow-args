@@ -8,7 +8,7 @@ use clap::Parser as _;
 use winnow::Parser as _;
 use winnow_args::{Args as _, Argv};
 
-type Fields = (bool, Option<PathBuf>, Vec<PathBuf>);
+type Fields = (usize, Option<PathBuf>, Vec<PathBuf>);
 
 #[test]
 fn frameworks_agree_on_every_benchmarked_line() {
@@ -23,20 +23,20 @@ fn frameworks_agree_on_every_benchmarked_line() {
         let clap_argv = std::iter::once(OsString::from("example")).chain(args.iter().cloned());
 
         let usage = bench::usage::Cli::parse_from(&refs)
-            .map(|c| (c.verbose, c.path, c.files))
+            .map(|c| (c.verbose.into(), c.path, c.files))
             .unwrap_or_else(|_| panic!("usage rejected {line:?}"));
         let all: [(&str, Fields); 4] = [
             (
                 "wa",
                 bench::wa_derive::Cli::parse_from(&words)
-                    .map(|c| (c.verbose, c.path, c.files))
+                    .map(|c| (c.verbose.into(), c.path, c.files))
                     .unwrap(),
             ),
             (
                 "wa-comb",
                 bench::wa_comb::cli
                     .parse_next(&mut Argv::new(&words))
-                    .map(|c| (c.verbose, c.path, c.files))
+                    .map(|c| (c.verbose.into(), c.path, c.files))
                     .unwrap(),
             ),
             (
@@ -49,7 +49,7 @@ fn frameworks_agree_on_every_benchmarked_line() {
             (
                 "clap",
                 bench::clap4::Cli::try_parse_from(clap_argv)
-                    .map(|c| (c.verbose, c.path, c.files))
+                    .map(|c| (c.verbose.into(), c.path, c.files))
                     .unwrap(),
             ),
         ];

@@ -10,6 +10,6 @@ fn main() {
     let words = winnow_args::words(&args);
     bench::run(|| {
         bench::wa_derive::Cli::parse_from(black_box(&words))
-            .is_ok_and(|cli| cli.verbose && cli.path.is_some())
+            .is_ok_and(|cli| cli.verbose > 0 && cli.path.is_some())
     });
 }

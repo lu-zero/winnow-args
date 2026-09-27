@@ -1,4 +1,4 @@
-//! `example -v/--verbose -p/--path=PATH [FILE]...` in five spellings.
+//! `example -v/--verbose... -p/--path=PATH [FILE]...` in five spellings.
 
 /// winnow-args, derived.
 pub mod wa_derive {
@@ -6,8 +6,8 @@ pub mod wa_derive {
 
     #[derive(winnow_args::Args, Debug)]
     pub struct Cli {
-        #[arg(short, long)]
-        pub verbose: bool,
+        #[arg(short, long, count)]
+        pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
         #[arg(positional, value_name = "FILE")]
@@ -26,7 +26,7 @@ pub mod wa_comb {
 
     #[derive(Debug)]
     pub struct Cli {
-        pub verbose: bool,
+        pub verbose: u8,
         pub path: Option<PathBuf>,
         pub files: Vec<PathBuf>,
     }
@@ -35,11 +35,13 @@ pub mod wa_comb {
     const PATH: Named = short('p').long("path");
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
-        let mut verbose = false;
+        let mut verbose = 0u8;
         let mut path = None;
         let mut files = Vec::new();
         args(alt((
-            VERBOSE.switch().map(|()| verbose = true),
+            VERBOSE
+                .switch()
+                .map(|()| verbose = verbose.saturating_add(1)),
             PATH.argument_as::<PathBuf>().map(|p| path = Some(p)),
             positional::<PathBuf>("FILE").map(|f| files.push(f)),
         )))
@@ -61,8 +63,8 @@ pub mod bpaf010 {
     #[derive(Debug, Clone, Bpaf)]
     #[bpaf(options, generate(cli_p))]
     pub struct Cli {
-        #[bpaf(short('v'), long("verbose"), switch)]
-        pub verbose: bool,
+        #[bpaf(short('v'), long("verbose"), req_flag(()), count)]
+        pub verbose: usize,
         #[bpaf(short('p'), long("path"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(positional("FILE"))]
@@ -76,8 +78,8 @@ pub mod clap4 {
 
     #[derive(clap::Parser, Debug)]
     pub struct Cli {
-        #[arg(short, long)]
-        pub verbose: bool,
+        #[arg(short, long, action = clap::ArgAction::Count)]
+        pub verbose: u8,
         #[arg(short, long)]
         pub path: Option<PathBuf>,
         #[arg(value_name = "FILE")]
@@ -117,8 +119,8 @@ pub mod usage {
     #[derive(Cli)]
     #[usage(bin = "example", name = "example")]
     pub struct Cli {
-        #[usage(long = "verbose", short = 'v')]
-        pub verbose: bool,
+        #[usage(long = "verbose", short = 'v', count)]
+        pub verbose: u8,
         #[usage(long = "path", short = 'p', value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(arg, name = "FILE")]
