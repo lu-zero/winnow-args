@@ -107,8 +107,10 @@ where the references disagree and we picked a side.
       any depth, bundles included; a subcommand's own declaration wins
 - [x] `Globals` trait / `globals(closure)` for the combinators
 - [x] Subcommand aliases: `#[arg(alias = "…")]` on a variant; `command(["name", "alias"], …)`
-- [ ] `default_subcommand` and `arg_required_else_help` (mise's root has both);
-      external subcommands; hidden aliases (help only)
+- [x] Struct-level `default_subcommand` (corpus 09) and `arg_required_else_help`
+      (`ErrorKind::HelpRequested` until help exists)
+- [ ] `default_subcommand_on_empty`, `default_subcommand_flags`; external
+      subcommands; hidden aliases (help only)
 - [ ] Multicall (argv[0] selects)
 
 ## 6. Values
@@ -166,8 +168,8 @@ where the references disagree and we picked a side.
 
 Parsing semantics still missing, by use count: ~~`conflicts` 77, `overrides` 37,
 `requires` 23, `group` 20~~, ~~`double_dash` 13~~, ~~`required` 10, `required_unless` 7~~,
-~~`value_optional`/`default_missing` 3, `restart_token` 2~~, `default_subcommand` 1,
-`arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
+~~`value_optional`/`default_missing` 3, `restart_token` 2~~, ~~`default_subcommand` 1,
+`arg_required_else_help` 1~~; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).
 
 Help and metadata only, needed for help output but not for parsing: `help`,

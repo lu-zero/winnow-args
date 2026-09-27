@@ -42,6 +42,9 @@ pub enum ErrorKind {
     /// `arg_requires_double_dash`: a word reached an argument that only takes
     /// words after `--`.
     RequiresDoubleDash,
+    /// A command declared `arg_required_else_help` was given no arguments:
+    /// the caller should show its help rather than report a failure.
+    HelpRequested,
     /// A value that its type rejected.
     InvalidValue,
     /// `invalid_choice`: a value outside a fixed set.
@@ -136,6 +139,16 @@ impl Error {
         Self::with_token(ErrorKind::RequiresDoubleDash, offset, name.into())
     }
 
+    /// A bare invocation of a command that shows its help when given nothing.
+    pub fn help_requested(offset: usize) -> Self {
+        Self {
+            kind: ErrorKind::HelpRequested,
+            cut: true,
+            offset,
+            detail: None,
+        }
+    }
+
     /// A required subcommand was not given. The offset is the end of the line.
     pub fn missing_subcommand(offset: usize) -> Self {
         Self {
@@ -228,6 +241,7 @@ impl fmt::Display for Error {
                 "`{token}` cannot be used with `{}`",
                 self.value().unwrap_or_default()
             ),
+            ErrorKind::HelpRequested => f.write_str("no arguments given: showing help"),
             ErrorKind::RequiresDoubleDash => {
                 write!(f, "`{token}` can only be set after a `--` separator")
             }
