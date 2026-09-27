@@ -29,7 +29,7 @@
 //! two closures and [`args`]; in the derive, a `match` in a loop — because only
 //! that layer knows the field's type.
 
-use winnow::combinator::{repeat, trace};
+use winnow::combinator::{alt, repeat, trace};
 use winnow::error::{ModalError as _, ParserError as _};
 use winnow::prelude::*;
 
@@ -107,6 +107,18 @@ impl<const N: usize> Named<N> {
     pub const fn allow_hyphen_values(mut self) -> Self {
         self.options.hyphen_values = true;
         self
+    }
+
+    /// `true` for this flag, `false` for `no`: usage's `negate`, as in
+    /// `long("color").negated_by(long("no-color"))`. Fold with "last wins".
+    pub fn negated_by<'i, const M: usize>(
+        self,
+        no: Named<M>,
+    ) -> impl Parser<Argv<'i>, bool, Error> {
+        trace(
+            "negated_by",
+            alt((self.switch().value(true), no.switch().value(false))),
+        )
     }
 
     /// Only an attached value: `--name=v`, `-cv`; the next word is never taken.

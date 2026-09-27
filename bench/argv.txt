@@ -16,3 +16,4 @@
 -v --path /tmp/x --offset -3
 -v --path /tmp/x --args -destroy
 -v --path /tmp/x --inspect a
+-v --path /tmp/x --no-cache

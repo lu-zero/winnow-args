@@ -546,3 +546,27 @@ Warm ns (min), load average ~13–18. `wa-comb` tries `--inspect` eighth in its
 flag `alt`, and `argument_or` reads the value before failing the other branches:
 the linear `alt` cost again. Warm instructions per parse against step 19:
 wa 1326 → 1329 and 2158 → 2158; wa-disp 1626 → 1626 and 2685 → 2688.
+
+## 21. `negate`: `--no-cache`
+
+usage's `negate = "--no-color"`: a second long spelling that sets a `bool`
+false. `#[arg(long, negate)]` derives `--no-<long>`; the last spelling given
+wins, and a `default` ("true" or "false") or `env` fills only what neither
+spelling set, so the slot is an `Option<bool>` until the struct is built. Help
+lists `--color / --no-color`. Combinators: `Named::negated_by(no)` gives `true`
+or `false`; `dispatch!` needs only two arms. clap has no negation — the usual
+two flags with `overrides_with` each other; bpaf 0.10 takes two `req_flag`s,
+`last()`, `fallback(true)`.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `… --no-cache` |
+|-----------|------:|------:|------:|
+| usage     | 295   | 500   | 386   |
+| wa        | 129   | 199   | 139   |
+| wa-disp   | 188   | 303   | 222   |
+| wa-comb   | 236   | 428   | 626   |
+| bpaf 0.10 | 15526 | 17413 | 17292 |
+| clap 4    | 12911 | 15187 | 13557 |
+
+Warm ns (min), load average ~4–8. Warm instructions per parse against step 20:
+wa 1329 → 1338 and 2158 → 2167, the default filled into the new slot and
+unwrapped on every parse; wa-disp 1626 → 1628 and 2688 → 2690.

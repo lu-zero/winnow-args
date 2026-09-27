@@ -41,7 +41,8 @@ where the references disagree and we picked a side.
 - [x] `allow_hyphen_values` (flags): the next word, `--` included
 - [x] `require_equals`: only `--name=v`, `-nv`, `-n=v` bind; with `default_missing`
       a bare flag leaves the next word alone
-- [ ] `--no-name` negation
+- [x] `--no-name` negation: `negate[= "no-name"]` on `bool` flags, last spelling wins,
+      default/env fill only what neither set; `Named::negated_by`
 - [ ] Non-UTF-8 names are rejected cleanly (names are ASCII-ish in practice)
 
 ## 2. Short options
