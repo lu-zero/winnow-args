@@ -39,18 +39,23 @@ use crate::token::{self, Arg};
 use crate::value::FromArg;
 use winnow::stream::BStr;
 
-/// The names a flag answers to.
+/// The names a flag answers to: one short letter, and `N` long names (the first
+/// is the flag's name, the rest are aliases).
+///
+/// `N` is part of the type so the common `Named` stays 24 bytes: the parsers
+/// built from it copy it on every use, and larger copies stall
+/// (docs/PERF.md, step 8). Only a flag with aliases pays for them.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Named {
+pub struct Named<const N: usize = 1> {
     short: Option<char>,
-    long: Option<&'static str>,
+    longs: [Option<&'static str>; N],
 }
 
 /// A flag named `-c`.
 pub const fn short(c: char) -> Named {
     Named {
         short: Some(c),
-        long: None,
+        longs: [None],
     }
 }
 
@@ -58,28 +63,48 @@ pub const fn short(c: char) -> Named {
 pub const fn long(name: &'static str) -> Named {
     Named {
         short: None,
-        long: Some(name),
+        longs: [Some(name)],
     }
 }
 
-impl Named {
+impl<const N: usize> Named<N> {
     /// Also answer to `-c`.
     pub const fn short(mut self, c: char) -> Self {
         self.short = Some(c);
         self
     }
 
-    /// Also answer to `--name`.
-    pub const fn long(mut self, name: &'static str) -> Self {
-        self.long = Some(name);
-        self
+    /// Answer to `--name`, replacing any long names.
+    pub const fn long(self, name: &'static str) -> Named {
+        Named {
+            short: self.short,
+            longs: [Some(name)],
+        }
+    }
+
+    /// Answer to all of these long names, replacing any: the first is the
+    /// flag's name, the rest are aliases.
+    pub const fn longs<const M: usize>(self, names: [&'static str; M]) -> Named<M> {
+        let mut longs = [None; M];
+        let mut i = 0;
+        while i < M {
+            longs[i] = Some(names[i]);
+            i += 1;
+        }
+        Named {
+            short: self.short,
+            longs,
+        }
     }
 
     /// Whether `arg` is this flag.
     #[inline]
     pub fn matches(&self, arg: &Arg<'_>) -> bool {
         match arg {
-            Arg::Long(f) => self.long.is_some_and(|l| f.name == l.as_bytes()),
+            Arg::Long(f) => self
+                .longs
+                .iter()
+                .any(|l| l.is_some_and(|l| f.name == l.as_bytes())),
             Arg::Short(f) => self.short == Some(f.letter),
             Arg::Word(_) | Arg::Separator { .. } => false,
         }
@@ -87,7 +112,7 @@ impl Named {
 
     /// How to name the flag in a message: the long name if it has one.
     pub fn display(&self) -> String {
-        match (self.long, self.short) {
+        match (self.longs.first().copied().flatten(), self.short) {
             (Some(l), _) => format!("--{l}"),
             (None, Some(c)) => format!("-{c}"),
             (None, None) => String::new(),
@@ -122,7 +147,7 @@ impl Named {
 }
 
 /// One occurrence of the flag's name, value not yet read.
-impl<'i> Parser<Argv<'i>, Arg<'i>, Error> for Named {
+impl<'i, const N: usize> Parser<Argv<'i>, Arg<'i>, Error> for Named<N> {
     #[inline]
     fn parse_next(&mut self, input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
         token::arg
@@ -142,18 +167,39 @@ pub fn positional<'i, T: FromArg>(name: &'static str) -> impl Parser<Argv<'i>, T
     })
 }
 
-/// A subcommand: the word `name`, then `inner` for the rest of the line.
+/// The spellings of a subcommand: one name, or a name and its aliases.
+pub trait Names {
+    /// Whether `word` is one of them.
+    fn contains(&self, word: &[u8]) -> bool;
+}
+
+impl Names for &str {
+    #[inline]
+    fn contains(&self, word: &[u8]) -> bool {
+        self.as_bytes() == word
+    }
+}
+
+impl<const N: usize> Names for [&str; N] {
+    #[inline]
+    fn contains(&self, word: &[u8]) -> bool {
+        self.iter().any(|name| name.as_bytes() == word)
+    }
+}
+
+/// A subcommand: the word `name` (or any of `["name", "alias", …]`), then
+/// `inner` for the rest of the line.
 ///
 /// Once the word matches, `inner`'s errors are committed. After `--` no word is
 /// a subcommand.
-pub fn command<'i, O, P>(name: &'static str, mut inner: P) -> impl Parser<Argv<'i>, O, Error>
+pub fn command<'i, O, P>(name: impl Names, mut inner: P) -> impl Parser<Argv<'i>, O, Error>
 where
     P: Parser<Argv<'i>, O, Error>,
 {
     trace("command", move |input: &mut Argv<'i>| {
         let start = input.checkpoint();
         match token::word(input) {
-            Ok(word) if *word.value == *name.as_bytes() && !word.after_separator => {
+            Ok(word) if name.contains(word.value) && !word.after_separator => {
                 inner.parse_next(input).map_err(|e| e.cut())
             }
             Ok(_) => {

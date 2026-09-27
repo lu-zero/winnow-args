@@ -4,3 +4,5 @@
 -v --path /tmp/x -I a -I b -I c
 -v --path /tmp/x use -g node@20
 --path /tmp/x use -v -g node@20
+-v --dir /tmp/x
+-v --path /tmp/x u -g node@20
