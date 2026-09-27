@@ -9,7 +9,7 @@ pub mod wa_derive {
     pub struct Cli {
         #[arg(short, long, count, global)]
         pub verbose: u8,
-        #[arg(short, long)]
+        #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long)]
         pub include: Vec<PathBuf>,
@@ -21,6 +21,7 @@ pub mod wa_derive {
 
     #[derive(winnow_args::Subcommand, Debug)]
     pub enum Commands {
+        #[arg(alias = "u")]
         Use(UseArgs),
     }
 
@@ -87,7 +88,7 @@ pub mod wa_comb {
     }
 
     const VERBOSE: Named = short('v').long("verbose");
-    const PATH: Named = short('p').long("path");
+    const PATH: Named<2> = short('p').longs(["path", "dir"]);
     const INCLUDE: Named = short('I').long("include");
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
@@ -103,7 +104,7 @@ pub mod wa_comb {
                 cond(
                     c.files.is_empty(),
                     command(
-                        "use",
+                        ["use", "u"],
                         use_args(VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1))),
                     ),
                 )
@@ -154,13 +155,13 @@ pub mod wa_disp {
             a @ (Arg::Long(LongFlag { name: b"verbose", .. }) | Arg::Short(ShortFlag { letter: 'v', .. })) => {
                 a.switch().map(|()| c.verbose = c.verbose.saturating_add(1))
             },
-            a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. })) => {
+            a @ (Arg::Long(LongFlag { name: b"path" | b"dir", .. }) | Arg::Short(ShortFlag { letter: 'p', .. })) => {
                 a.value_as().map(|p| c.path = Some(p))
             },
             a @ (Arg::Long(LongFlag { name: b"include", .. }) | Arg::Short(ShortFlag { letter: 'I', .. })) => {
                 a.value_as().map(|i| c.include.push(i))
             },
-            Arg::Word(w) if c.files.is_empty() && !w.after_separator && *w.value == "use" => {
+            Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
                     let verbose = &mut c.verbose;
                     let mut inherit = globals(|a, _| match a {
@@ -195,7 +196,7 @@ pub mod bpaf010 {
     pub struct Cli {
         #[bpaf(external(verbose_p))]
         pub verbose: usize,
-        #[bpaf(short('p'), long("path"), argument("PATH"))]
+        #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(short('I'), long("include"), argument("DIR"))]
         pub include: Vec<PathBuf>,
@@ -220,7 +221,7 @@ pub mod bpaf010 {
     #[derive(Debug, Clone, Bpaf)]
     #[bpaf(generate(commands_p))]
     pub enum Commands {
-        #[bpaf(command("use"))]
+        #[bpaf(command("use"), short('u'))]
         Use(#[bpaf(external(useargs_p))] UseArgs),
     }
 
@@ -242,7 +243,7 @@ pub mod clap4 {
     pub struct Cli {
         #[arg(short, long, action = clap::ArgAction::Count, global = true)]
         pub verbose: u8,
-        #[arg(short, long)]
+        #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR")]
         pub include: Vec<PathBuf>,
@@ -254,6 +255,7 @@ pub mod clap4 {
 
     #[derive(clap::Subcommand, Debug)]
     pub enum Commands {
+        #[command(alias = "u")]
         Use(UseArgs),
     }
 
@@ -300,7 +302,7 @@ pub mod usage {
     pub struct Cli {
         #[usage(long = "verbose", short = 'v', count, global)]
         pub verbose: u8,
-        #[usage(long = "path", short = 'p', value_name = "PATH")]
+        #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(long = "include", short = 'I', value_name = "DIR", var)]
         pub include: ::std::vec::Vec<::std::path::PathBuf>,
@@ -312,7 +314,7 @@ pub mod usage {
 
     #[derive(Subcommands)]
     pub enum Commands {
-        #[usage(name = "use")]
+        #[usage(name = "use", alias = "u")]
         Use(Box<UseArgs>),
     }
 

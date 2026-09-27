@@ -36,7 +36,7 @@ where the references disagree and we picked a side.
 - [x] Missing value at end of line is an error
 - [x] **decision** `--verbose=x` on a switch is an error (clap, bpaf), not silently
       dropped (usage)
-- [ ] Several long names (aliases)
+- [x] Several long names: `alias = "…"` / `alias("…", …)`; `Named<N>::longs([…])`
 - [ ] Negative numbers as detached values (`--offset -1`)
 - [ ] `allow_hyphen_values`, `require_equals`, `default_missing`
 - [ ] `--no-name` negation
@@ -93,7 +93,8 @@ where the references disagree and we picked a side.
 - [x] Global flags (`#[arg(global)]`): accepted after the subcommand word at
       any depth, bundles included; a subcommand's own declaration wins
 - [x] `Globals` trait / `globals(closure)` for the combinators
-- [ ] Aliases, default subcommand, external subcommands
+- [x] Subcommand aliases: `#[arg(alias = "…")]` on a variant; `command(["name", "alias"], …)`
+- [ ] Default subcommand, external subcommands; hidden aliases (help only)
 - [ ] Multicall (argv[0] selects)
 
 ## 6. Values

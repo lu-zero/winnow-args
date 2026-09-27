@@ -45,25 +45,37 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut patterns = Vec::new();
     for variant in &data.variants {
         let mut name = None;
+        let mut alias = Vec::new();
         for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("name") {
                     name = Some(meta.value()?.parse::<LitStr>()?.value());
-                    Ok(())
+                } else if meta.path.is_ident("alias") {
+                    alias.extend(aliases(&meta)?);
                 } else {
-                    Err(meta.error("expected `name`"))
+                    return Err(meta.error("expected `name` or `alias`"));
                 }
+                Ok(())
             })?;
         }
         let ident = &variant.ident;
-        let name = name.unwrap_or_else(|| kebab_case(&ident.to_string()));
-        if let Some((_, other)) = names.iter().find(|(n, _)| *n == name) {
-            return Err(syn::Error::new(
-                ident.span(),
-                format!("`{name}` is already used by `{other}`"),
-            ));
+        let spellings: Vec<String> =
+            std::iter::once(name.unwrap_or_else(|| kebab_case(&ident.to_string())))
+                .chain(alias)
+                .collect();
+        for name in &spellings {
+            if let Some((_, other)) = names.iter().find(|(n, _)| n == name) {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!("`{name}` is already used by `{other}`"),
+                ));
+            }
+            names.push((name.clone(), ident));
         }
-        let pattern = LitByteStr::new(name.as_bytes(), Span::call_site());
+        let literals = spellings
+            .iter()
+            .map(|n| LitByteStr::new(n.as_bytes(), Span::call_site()));
+        let pattern = quote!(#(#literals)|*);
         let parse = match &variant.fields {
             Fields::Unit => quote!(__wa::finish_with(__input, __globals).map(|()| Self::#ident)),
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
@@ -87,7 +99,6 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         };
         arms.push(quote!(#pattern => #parse,));
         patterns.push(pattern);
-        names.push((name, ident));
     }
 
     let name = &input.ident;
@@ -138,6 +149,17 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
+/// `alias = "x"` or `alias("x", "y")`.
+fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
+    if meta.input.peek(syn::Token![=]) {
+        return Ok(vec![meta.value()?.parse::<LitStr>()?.value()]);
+    }
+    let content;
+    syn::parenthesized!(content in meta.input);
+    let names = syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+    Ok(names.iter().map(LitStr::value).collect())
+}
+
 /// `DryRun` → `dry-run`.
 fn kebab_case(ident: &str) -> String {
     let mut out = String::new();
@@ -181,6 +203,8 @@ enum Role {
     Flag {
         short: Option<char>,
         long: Option<String>,
+        /// More long names, matched like `long`.
+        aliases: Vec<String>,
         /// Also accepted after a subcommand word, at any depth.
         global: bool,
     },
@@ -215,11 +239,23 @@ impl Field {
         }
     }
 
-    fn long(&self) -> Option<&str> {
+    /// Every long spelling: the name, then its aliases.
+    fn longs(&self) -> Vec<&str> {
         match &self.role {
-            Role::Flag { long, .. } => long.as_deref(),
-            Role::Positional { .. } | Role::Subcommand => None,
+            Role::Flag { long, aliases, .. } => {
+                long.iter().chain(aliases).map(String::as_str).collect()
+            }
+            Role::Positional { .. } | Role::Subcommand => Vec::new(),
         }
+    }
+
+    /// The pattern matching any long spelling, if there is one.
+    fn long_pattern(&self) -> Option<TokenStream2> {
+        let longs = self.longs();
+        let literals = longs
+            .iter()
+            .map(|l| LitByteStr::new(l.as_bytes(), Span::call_site()));
+        (!longs.is_empty()).then(|| quote!(#(#literals)|*))
     }
 
     fn is_positional(&self) -> bool {
@@ -290,7 +326,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let long_arms = fields.iter().filter_map(|f| {
-        let pattern = LitByteStr::new(f.long()?.as_bytes(), Span::call_site());
+        let pattern = f.long_pattern()?;
         let body = store(f);
         Some(quote!(#pattern => { #body }))
     });
@@ -359,7 +395,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let not_filled = track_filled.then(|| quote!(!__filled &&));
         let is_global = |f: &&Field| matches!(f.role, Role::Flag { global: true, .. });
         let global_longs = fields.iter().filter(is_global).filter_map(|f| {
-            let pattern = LitByteStr::new(f.long()?.as_bytes(), Span::call_site());
+            let pattern = f.long_pattern()?;
             let body = store(f);
             Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
         });
@@ -489,6 +525,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut count = false;
     let mut subcommand = false;
     let mut global = false;
+    let mut alias = Vec::new();
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -514,11 +551,13 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 subcommand = true;
             } else if meta.path.is_ident("global") {
                 global = true;
+            } else if meta.path.is_ident("alias") {
+                alias.extend(aliases(&meta)?);
             } else if meta.path.is_ident("value_name") {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `global`, `positional`, `subcommand`, `count` or `value_name`",
+                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count` or `value_name`",
                 ));
             }
             Ok(())
@@ -532,7 +571,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         kind(&f.ty)
     };
     let role = if subcommand {
-        if positional || count || global || short.is_some() || long.is_some() {
+        if positional || count || global || short.is_some() || long.is_some() || !alias.is_empty() {
             return error("a subcommand field takes no other `arg` options".into());
         }
         if !matches!(kind, Kind::Optional(_) | Kind::Required(_)) {
@@ -540,8 +579,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         Role::Subcommand
     } else if positional {
-        if short.is_some() || long.is_some() || global {
-            return error("a positional field has no `short`, `long` or `global`".into());
+        if short.is_some() || long.is_some() || global || !alias.is_empty() {
+            return error("a positional field has no `short`, `long`, `alias` or `global`".into());
         }
         if matches!(kind, Kind::Switch | Kind::Count(_)) {
             return error("a positional field cannot be `bool` or `count`".into());
@@ -554,7 +593,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         if short.is_none() && long.is_none() {
             long = Some(bare.replace('_', "-"));
         }
-        if let Some(l) = &long {
+        for l in long.iter().chain(&alias) {
             if l.is_empty() || l.starts_with('-') || l.contains('=') {
                 return error(format!("`{l}` is not a usable long name"));
             }
@@ -567,6 +606,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         Role::Flag {
             short,
             long,
+            aliases: alias,
             global,
         }
     };
@@ -581,9 +621,12 @@ fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
                 (Some(x), Some(y)) if x == y => Some(format!("-{x}")),
                 _ => None,
             }
-            .or_else(|| match (a.long(), b.long()) {
-                (Some(x), Some(y)) if x == y => Some(format!("--{x}")),
-                _ => None,
+            .or_else(|| {
+                let longs = b.longs();
+                a.longs()
+                    .into_iter()
+                    .find(|l| longs.contains(l))
+                    .map(|l| format!("--{l}"))
             });
             if let Some(name) = clash {
                 return Err(syn::Error::new(

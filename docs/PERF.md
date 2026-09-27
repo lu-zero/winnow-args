@@ -215,3 +215,29 @@ the child's `parse_argv_with` now takes the handler and stays out of line
 Binding a global through the handler is free next to that: the global line
 costs the same as the local one. clap pays ~0.6–1.6 µs for `global = true`
 everywhere, since it propagates the argument into every subcommand at build time.
+
+## 8. Aliases: `--path` / `--dir`, `use` / `u`
+
+Long flags and subcommands take `alias = "…"` or `alias("…", …)`; mise has 77
+aliased names. The derive adds them to the same `match` arm as or-patterns
+(`b"path" | b"dir" =>`); the combinators take `short('p').longs(["path", "dir"])`
+and `command(["use", "u"], …)`.
+
+| framework | `-v --path /tmp/x` | Δ vs 7 | `-v --dir /tmp/x` | `… use -g node@20` | `… u -g node@20` | `-I …` |
+|-----------|------:|-----:|------:|------:|------:|------:|
+| usage     | 159   | −1   | 158   | 342   | 343   | 362   |
+| wa        | 48    | 0    | 47    | 116   | 114   | 138   |
+| wa-disp   | 104   | 0    | 104   | 231   | 232   | 246   |
+| wa-comb   | 134   | +1   | 133   | 265   | 261   | 411   |
+| bpaf 0.10 | 6431  | +351 | 6353  | 10049 | 10007 | 8924  |
+| clap 4    | 4782  | +33  | 4755  | 8959  | 8961  | 6905  |
+
+Warm ns (min). An alias costs exactly what the name costs, everywhere.
+
+The first combinator version put the aliases in `Named` as a slice, taking it
+from 24 to 40 bytes, and `wa-comb` got 20–25 % slower on every line (`-I …`
+425 → 526 ns, backend stalls ~300 → ~600 per parse): `dispatch!` rebuilds its
+arm parsers per item, each copying `Named`. A 32-byte enum layout did not help
+(the separately written tag is its own forwarding hazard); only the old
+24-byte layout did. `Named<const N: usize = 1>` keeps it: a plain `Named` is
+the old 24 bytes, and only a flag with aliases is a larger `Named<2>`.
