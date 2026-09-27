@@ -109,6 +109,12 @@ impl<const N: usize> Named<N> {
         self
     }
 
+    /// Only an attached value: `--name=v`, `-cv`; the next word is never taken.
+    pub const fn require_equals(mut self) -> Self {
+        self.options.require_equals = true;
+        self
+    }
+
     /// Take a negative number as a detached value: `--offset -1`.
     pub const fn allow_negative_numbers(mut self) -> Self {
         self.options.negative_numbers = true;
@@ -173,9 +179,9 @@ impl<const N: usize> Named<N> {
         missing: &'static str,
     ) -> impl Parser<Argv<'i>, T, Error> {
         trace("argument_or", move |input: &mut Argv<'i>| {
-            self.parse_next(input)?
-                .value_or(BStr::new(missing))
-                .parse_next(input)
+            let arg = self.parse_next(input)?;
+            let value = arg.read_value_or_with(input, self.options, BStr::new(missing));
+            arg.convert(value)
         })
     }
 
@@ -186,9 +192,11 @@ impl<const N: usize> Named<N> {
         delimiter: u8,
     ) -> impl Parser<Argv<'i>, Vec<T>, Error> {
         trace("arguments_as", move |input: &mut Argv<'i>| {
-            self.parse_next(input)?
-                .values_as(delimiter)
-                .parse_next(input)
+            let arg = self.parse_next(input)?;
+            let value = arg.read_value_with(input, self.options)?;
+            token::split(value, delimiter)
+                .map(|v| arg.convert(v))
+                .collect()
         })
     }
 }

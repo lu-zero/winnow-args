@@ -195,7 +195,7 @@ impl<'i> Arg<'i> {
                 Some(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
             }
             _ => {
-                if input.is_empty() {
+                if input.is_empty() || options.require_equals {
                     return None;
                 }
                 let next = input.front();
@@ -247,6 +247,18 @@ impl<'i> Arg<'i> {
     pub fn value_or<T: FromArg>(&self, missing: &'static BStr) -> impl Parser<Argv<'i>, T, Error> {
         move |input: &mut Argv<'i>| {
             let v = self.read_value_or(input, missing);
+            self.convert(v)
+        }
+    }
+
+    /// [`Arg::read_value_or_with`], converted, as a parser for a `dispatch!` arm.
+    pub fn value_or_with<T: FromArg>(
+        &self,
+        options: ValueOptions,
+        missing: &'static BStr,
+    ) -> impl Parser<Argv<'i>, T, Error> {
+        move |input: &mut Argv<'i>| {
+            let v = self.read_value_or_with(input, options, missing);
             self.convert(v)
         }
     }
@@ -308,6 +320,8 @@ pub struct ValueOptions {
     pub negative_numbers: bool,
     /// Any next word is the value, `--` and flag-like ones included: `--args -x`.
     pub hyphen_values: bool,
+    /// Only an attached value: `--inspect=9229`, `-i9229`; the next word is never taken.
+    pub require_equals: bool,
 }
 
 impl ValueOptions {
@@ -315,6 +329,7 @@ impl ValueOptions {
     pub const DEFAULT: Self = Self {
         negative_numbers: false,
         hyphen_values: false,
+        require_equals: false,
     };
 }
 
