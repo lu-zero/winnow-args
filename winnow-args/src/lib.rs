@@ -88,6 +88,16 @@ pub mod __private {
     pub use crate::token::{Arg, arg, no_value, unexpected, value};
     pub use crate::value::FromArg;
 
+    /// Convert the positional `word` read at `offset`, naming `name` on failure.
+    #[inline]
+    pub fn positional_as<T: FromArg>(
+        word: &winnow::stream::BStr,
+        offset: usize,
+        name: &str,
+    ) -> Result<T, Error> {
+        T::from_arg(word).map_err(|cause| Error::invalid_value(offset, name, word, cause))
+    }
+
     /// Read the value of `arg` and convert it, naming the flag on failure.
     #[inline]
     pub fn value_as<'i, T: FromArg>(

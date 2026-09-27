@@ -139,6 +139,19 @@ impl<'i> Parser<Argv<'i>, Arg<'i>, Error> for Named {
     }
 }
 
+/// A positional value: one word that is not a flag, converted with [`FromArg`].
+/// `name` is how errors refer to it.
+///
+/// This matches one word; which positional a word fills is up to the caller,
+/// as with flags.
+pub fn positional<'i, T: FromArg>(name: &'static str) -> impl Parser<Argv<'i>, T, Error> {
+    trace("positional", move |input: &mut Argv<'i>| {
+        let offset = input.offset();
+        let word = token::word(input)?;
+        T::from_arg(word).map_err(|cause| Error::invalid_value(offset, name, word, cause))
+    })
+}
+
 /// Apply `item` until it stops matching, then require the command line to be
 /// over. What is left is reported as an unknown flag or an unexpected argument.
 ///

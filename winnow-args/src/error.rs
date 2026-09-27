@@ -31,6 +31,8 @@ pub enum ErrorKind {
     UnexpectedValue,
     /// `missing_required_flag`: a required flag never appeared.
     MissingRequired,
+    /// `missing_required_arg`: a required positional argument was never filled.
+    MissingArgument,
     /// A value that its type rejected.
     InvalidValue,
 }
@@ -90,6 +92,11 @@ impl Error {
     /// The required `flag` never appeared. The offset is the end of the line.
     pub fn missing_required(offset: usize, flag: impl Into<String>) -> Self {
         Self::with_token(ErrorKind::MissingRequired, offset, flag.into())
+    }
+
+    /// The required positional `name` was never filled. The offset is the end of the line.
+    pub fn missing_argument(offset: usize, name: impl Into<String>) -> Self {
+        Self::with_token(ErrorKind::MissingArgument, offset, name.into())
     }
 
     /// `value` given to `flag` at `offset` was rejected by its type.
@@ -160,6 +167,7 @@ impl fmt::Display for Error {
                 self.value().unwrap_or_default()
             ),
             ErrorKind::MissingRequired => write!(f, "`{token}` is required"),
+            ErrorKind::MissingArgument => write!(f, "missing argument `{token}`"),
             ErrorKind::InvalidValue => {
                 write!(
                     f,
