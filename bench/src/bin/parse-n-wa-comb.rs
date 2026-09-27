@@ -11,6 +11,6 @@ fn main() {
     bench::run(|| {
         bench::wa_comb::cli
             .parse_next(&mut Argv::new(black_box(&words)))
-            .is_ok_and(|cli| cli.verbose && cli.path.is_some())
+            .is_ok_and(|cli| cli.verbose > 0 && cli.path.is_some())
     });
 }

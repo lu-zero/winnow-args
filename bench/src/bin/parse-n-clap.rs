@@ -9,6 +9,6 @@ fn main() {
     let args: Vec<_> = std::env::args_os().collect();
     bench::run(|| {
         bench::clap4::Cli::try_parse_from(black_box(&args))
-            .is_ok_and(|cli| cli.verbose && cli.path.is_some())
+            .is_ok_and(|cli| cli.verbose > 0 && cli.path.is_some())
     });
 }

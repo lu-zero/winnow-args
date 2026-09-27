@@ -9,6 +9,6 @@ fn main() {
     bench::run(|| {
         bench::bpaf010::cli_p()
             .run_inner(black_box(&refs[..]))
-            .is_ok_and(|cli| cli.verbose && cli.path.is_some())
+            .is_ok_and(|cli| cli.verbose > 0 && cli.path.is_some())
     });
 }
