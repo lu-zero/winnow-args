@@ -17,16 +17,17 @@ pub mod wa_derive {
     }
 }
 
-/// winnow-args, combinators.
+/// winnow-args, combinators: `dispatch!` on the item kind, so words skip the flags.
 pub mod wa_comb {
     use std::path::PathBuf;
 
-    use winnow::combinator::alt;
+    use winnow::combinator::{alt, dispatch, fail};
     use winnow::prelude::*;
     use winnow_args::combinator::{Named, args, positional, short};
+    use winnow_args::token::{Kind, kind};
     use winnow_args::{Argv, Error};
 
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct Cli {
         pub verbose: u8,
         pub path: Option<PathBuf>,
@@ -39,25 +40,19 @@ pub mod wa_comb {
     const INCLUDE: Named = short('I').long("include");
 
     pub fn cli(input: &mut Argv<'_>) -> Result<Cli, Error> {
-        let mut verbose = 0u8;
-        let mut path = None;
-        let mut include = Vec::new();
-        let mut files = Vec::new();
-        args(alt((
-            VERBOSE
-                .switch()
-                .map(|()| verbose = verbose.saturating_add(1)),
-            PATH.argument_as::<PathBuf>().map(|p| path = Some(p)),
-            INCLUDE.argument_as::<PathBuf>().map(|i| include.push(i)),
-            positional::<PathBuf>("FILE").map(|f| files.push(f)),
-        )))
-        .parse_next(input)?;
-        Ok(Cli {
-            verbose,
-            path,
-            include,
-            files,
+        let mut cli = Cli::default();
+        let c = &mut cli;
+        args(dispatch! {kind;
+            Kind::Long | Kind::Short => alt((
+                VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1)),
+                PATH.argument_as().map(|p| c.path = Some(p)),
+                INCLUDE.argument_as().map(|i| c.include.push(i)),
+            )),
+            Kind::Word => positional("FILE").map(|f| c.files.push(f)),
+            Kind::Separator => fail,
         })
+        .parse_next(input)?;
+        Ok(cli)
     }
 }
 
