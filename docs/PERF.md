@@ -520,3 +520,29 @@ so its field refuses `-destroy` and the agreement test skips bpaf there.
 Warm ns (min) under heavy load (average 22 → 29); `perf.sh` stopped after bpaf
 refused the last line, so clap has no number there. Warm instructions are the
 evidence: 1326 and 2158 per parse against step 18's 1323 and 2167.
+
+## 20. `require_equals`: `--inspect a`
+
+A flag declared `require_equals` binds only an attached value (`--inspect=9229`,
+`-i9229`, `-i=9229`); a detached one is a missing value, and with
+`default_missing` (aube's `--inspect[=PORT]`) the next word stays a positional.
+It is a third `ValueOptions` field; `Named::argument_or` and `arguments_as` now
+honour a `Named`'s options too, and `Arg::value_or_with` joins the `dispatch!`
+forms. clap says `require_equals = true, num_args = 0..=1`; bpaf 0.10's
+`adjacent` reports `--inspect a` as not adjacent rather than missing, so
+`on_missing_value` never fires (and loops until bpaf's no-progress check
+panics); an `adjacent` argument or a bare `req_flag("9229")` spells it instead.
+
+| framework | `-v --path /tmp/x` | `… a b c` | `… --inspect a` |
+|-----------|------:|------:|------:|
+| usage     | 283   | 495   | 483   |
+| wa        | 130   | 199   | 190   |
+| wa-disp   | 189   | 300   | 287   |
+| wa-comb   | 240   | 435   | 679   |
+| bpaf 0.10 | 13858 | 15963 | 15274 |
+| clap 4    | 11058 | 13340 | 13742 |
+
+Warm ns (min), load average ~13–18. `wa-comb` tries `--inspect` eighth in its
+flag `alt`, and `argument_or` reads the value before failing the other branches:
+the linear `alt` cost again. Warm instructions per parse against step 19:
+wa 1326 → 1329 and 2158 → 2158; wa-disp 1626 → 1626 and 2685 → 2688.

@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS --inspect[=PORT] -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -24,6 +24,8 @@ pub mod wa_derive {
         pub offset: Option<i32>,
         #[arg(long, allow_hyphen_values)]
         pub args: Option<String>,
+        #[arg(long, require_equals, default_missing = "9229")]
+        pub inspect: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, delimiter = ',')]
@@ -82,6 +84,7 @@ pub mod wa_comb {
         pub write: Option<String>,
         pub offset: Option<i32>,
         pub args: Option<String>,
+        pub inspect: Option<String>,
         pub path: Option<PathBuf>,
         pub include: Vec<PathBuf>,
         pub color: Option<Color>,
@@ -140,6 +143,7 @@ pub mod wa_comb {
     const WRITE: Named = short('w').long("write");
     const OFFSET: Named = long("offset").allow_negative_numbers();
     const ARGS: Named = long("args").allow_hyphen_values();
+    const INSPECT: Named = long("inspect").require_equals();
 
     /// What the derive does after its loop: `--jobs` fallbacks, then the constraints.
     pub fn finish(cli: &mut Cli, input: &Argv<'_>) -> Result<(), Error> {
@@ -182,6 +186,7 @@ pub mod wa_comb {
                     WRITE.argument_or("./bin/mise").map(|w| c.write = Some(w)),
                     OFFSET.argument_as().map(|o| c.offset = Some(o)),
                     ARGS.argument_as().map(|a| c.args = Some(a)),
+                    INSPECT.argument_or("9229").map(|i| c.inspect = Some(i)),
                 )),
             )),
             Kind::Word => alt((
@@ -272,6 +277,10 @@ pub mod wa_disp {
                 a.value_as_with(ValueOptions { hyphen_values: true, ..ValueOptions::DEFAULT })
                     .map(|v| c.args = Some(v))
             },
+            a @ Arg::Long(LongFlag { name: b"inspect", .. }) => {
+                a.value_or_with(ValueOptions { require_equals: true, ..ValueOptions::DEFAULT }, BStr::new("9229"))
+                    .map(|i| c.inspect = Some(i))
+            },
             a @ Arg::Long(LongFlag { name: b"offset", .. }) => {
                 a.value_as_with(ValueOptions { negative_numbers: true, ..ValueOptions::DEFAULT }).map(|o| c.offset = Some(o))
             },
@@ -350,6 +359,8 @@ pub mod bpaf010 {
         // The agreement test skips bpaf on such lines.
         #[bpaf(long("args"), argument("ARGS"))]
         pub args: Option<String>,
+        #[bpaf(external(inspect_p))]
+        pub inspect: Option<String>,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
         #[bpaf(external(include_p))]
@@ -385,6 +396,16 @@ pub mod bpaf010 {
             .argument::<String>("PATH")
             .on_missing_value(|| Ok("./bin/mise".into()))
             .optional()
+    }
+
+    /// `adjacent` refuses a detached value: `require_equals`. It reports
+    /// `--inspect a` as not adjacent rather than missing, so `on_missing_value`
+    /// never fires; a bare `--inspect` flag is the other branch.
+    fn inspect_p() -> impl bpaf::Parser<Output = Option<String>> {
+        use bpaf::Parser as _;
+        let port = bpaf::long("inspect").argument::<String>("PORT").adjacent();
+        let bare = bpaf::long("inspect").req_flag(String::from("9229"));
+        bpaf::construct!([port, bare]).optional()
     }
 
     /// bpaf's derive has no negative numbers; `negative_lit` is the combinator.
@@ -481,6 +502,8 @@ pub mod clap4 {
         pub offset: Option<i32>,
         #[arg(long, allow_hyphen_values = true)]
         pub args: Option<String>,
+        #[arg(long, require_equals = true, num_args = 0..=1, default_missing_value = "9229")]
+        pub inspect: Option<String>,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
         #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
@@ -572,6 +595,14 @@ pub mod usage {
         pub offset: ::std::option::Option<i32>,
         #[usage(long = "args", value_name = "ARGS", allow_hyphen_values)]
         pub args: ::std::option::Option<::std::string::String>,
+        #[usage(
+            long = "inspect",
+            value_name = "PORT",
+            require_equals,
+            value_optional,
+            default_missing = "9229"
+        )]
+        pub inspect: ::std::option::Option<::std::string::String>,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
         #[usage(

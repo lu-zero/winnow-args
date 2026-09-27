@@ -23,6 +23,7 @@ struct Fields {
     write: Option<String>,
     offset: Option<i32>,
     args: Option<String>,
+    inspect: Option<String>,
     /// `use`: `--global` and the tools.
     command: Option<(bool, Vec<String>)>,
 }
@@ -57,6 +58,7 @@ macro_rules! fields {
             write: c.write,
             offset: c.offset,
             args: c.args,
+            inspect: c.inspect,
             command: c.command.map(|$use(u)| (u.global, u.tools)),
         }
     }};
