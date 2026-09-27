@@ -42,17 +42,31 @@ pub enum ErrorKind {
     /// `arg_requires_double_dash`: a word reached an argument that only takes
     /// words after `--`.
     RequiresDoubleDash,
-    /// A command declared `arg_required_else_help` was given no arguments:
-    /// the caller should show its help rather than report a failure.
+    /// `-h`/`--help`, or a bare invocation of an `arg_required_else_help`
+    /// command: show [`Error::render_help`] rather than report a failure.
     HelpRequested,
+    /// `-V`/`--version`: show [`Error::version_text`].
+    VersionRequested,
     /// A value that its type rejected.
     InvalidValue,
     /// `invalid_choice`: a value outside a fixed set.
     InvalidChoice,
 }
 
+/// What `--help` or `--version` asked for, and where.
+#[derive(Debug)]
+struct Request {
+    command: &'static crate::help::Command,
+    long: bool,
+    /// A bare invocation rather than a flag: help belongs on stderr.
+    bare: bool,
+    /// Subcommand names from the root down to `command`.
+    path: Vec<&'static str>,
+}
+
 #[derive(Debug, Default)]
 struct Detail {
+    request: Option<Request>,
     /// The flag as spelled on the command line (or its display name), or the word.
     token: String,
     value: Option<String>,
@@ -139,14 +153,75 @@ impl Error {
         Self::with_token(ErrorKind::RequiresDoubleDash, offset, name.into())
     }
 
-    /// A bare invocation of a command that shows its help when given nothing.
-    pub fn help_requested(offset: usize) -> Self {
+    fn request(
+        kind: ErrorKind,
+        command: &'static crate::help::Command,
+        long: bool,
+        bare: bool,
+    ) -> Self {
         Self {
-            kind: ErrorKind::HelpRequested,
+            kind,
             cut: true,
-            offset,
-            detail: None,
+            offset: 0,
+            detail: Some(Box::new(Detail {
+                request: Some(Request {
+                    command,
+                    long,
+                    bare,
+                    path: Vec::new(),
+                }),
+                ..Detail::default()
+            })),
         }
+    }
+
+    /// `-h` (`long == false`) or `--help` for `command`.
+    pub fn help(command: &'static crate::help::Command, long: bool) -> Self {
+        Self::request(ErrorKind::HelpRequested, command, long, false)
+    }
+
+    /// A bare invocation of an `arg_required_else_help` command.
+    pub fn bare_help(command: &'static crate::help::Command) -> Self {
+        Self::request(ErrorKind::HelpRequested, command, false, true)
+    }
+
+    /// `-V`/`--version`.
+    pub fn version(command: &'static crate::help::Command) -> Self {
+        Self::request(ErrorKind::VersionRequested, command, false, false)
+    }
+
+    /// Record that this came from within subcommand `name`, for the usage line.
+    pub fn within(mut self, name: &'static str) -> Self {
+        if let Some(request) = self.detail.as_deref_mut().and_then(|d| d.request.as_mut()) {
+            request.path.insert(0, name);
+        }
+        self
+    }
+
+    /// The help to show for a [`ErrorKind::HelpRequested`], `program` leading the usage line.
+    pub fn render_help(&self, program: &str) -> Option<String> {
+        let request = self.detail.as_deref()?.request.as_ref()?;
+        if self.kind != ErrorKind::HelpRequested {
+            return None;
+        }
+        let mut path = vec![program];
+        path.extend(&request.path);
+        Some(crate::help::render(request.command, &path, request.long))
+    }
+
+    /// `program version` for a [`ErrorKind::VersionRequested`].
+    pub fn version_text(&self, program: &str) -> Option<String> {
+        let request = self.detail.as_deref()?.request.as_ref()?;
+        let version = request.command.version?;
+        (self.kind == ErrorKind::VersionRequested).then(|| format!("{program} {version}"))
+    }
+
+    /// Help for a bare invocation, which is an error to report rather than an answer.
+    pub fn is_bare_help(&self) -> bool {
+        self.detail
+            .as_deref()
+            .and_then(|d| d.request.as_ref())
+            .is_some_and(|r| r.bare)
     }
 
     /// A required subcommand was not given. The offset is the end of the line.
@@ -241,7 +316,8 @@ impl fmt::Display for Error {
                 "`{token}` cannot be used with `{}`",
                 self.value().unwrap_or_default()
             ),
-            ErrorKind::HelpRequested => f.write_str("no arguments given: showing help"),
+            ErrorKind::HelpRequested => f.write_str("help requested"),
+            ErrorKind::VersionRequested => f.write_str("version requested"),
             ErrorKind::RequiresDoubleDash => {
                 write!(f, "`{token}` can only be set after a `--` separator")
             }

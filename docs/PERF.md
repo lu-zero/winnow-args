@@ -420,3 +420,24 @@ for usage and winnow-args but not for them. When unused it costs nothing —
 warm instructions are unchanged from step 14 (1308 on `-v --path /tmp/x`,
 1952 on `… use -g node@20`); when used, the derive copies the 32-byte `Argv` once
 per item to re-read the word.
+
+## 16. Help and version
+
+The derive emits each command's help as `static` data (`Args::HELP`: doc
+comments, `help`/`long_help`/`help_heading`/`hide`, value names, `[env]`,
+`[default]`, `[possible values]`, visible aliases, subcommands with their own
+help). `-h`/`--help`/`-V`/`--version` are extra arms of the generated `match`
+(skipped where the command declares those names or disables them), as is the
+`help <cmd…>` word, which walks the help data like usage's parser does — clap and
+bpaf 0.10 supply it too. Help comes back as `ErrorKind::HelpRequested`; each
+subcommand level adds its name for the usage line; `report` prints it.
+
+| | `-v --path /tmp/x` | `… use -g node@20` | stripped bytes |
+|---|------:|------:|------:|
+| wa, step 15 | 1308 instr, 130 ns | 1952 instr | 368 984 |
+| wa, with help | 1300 instr, 131 ns | 1971 instr | 375 696 |
+| usage | 274 ns | 485 ns | 390 104 |
+
+Warm instructions per parse and warm ns (min). Carrying help costs a parse
+nothing measurable; the `+19` on the subcommand line is the `map_err` that
+records the subcommand's name. The text costs 6.7 KB of binary.

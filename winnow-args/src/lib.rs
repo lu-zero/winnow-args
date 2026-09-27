@@ -36,6 +36,7 @@
 pub mod combinator;
 pub mod env;
 pub mod error;
+pub mod help;
 pub mod stream;
 pub mod token;
 pub mod value;
@@ -63,6 +64,20 @@ pub trait Args: Sized {
     /// are offered to `globals`, its ancestors' global flags.
     fn parse_argv_with(input: &mut Argv<'_>, globals: &mut dyn Globals) -> Result<Self, Error>;
 
+    /// This command's help, rendered only when asked for.
+    const HELP: &'static help::Command = &help::Command {
+        name: "",
+        about: "",
+        long_about: "",
+        after_help: "",
+        after_long_help: "",
+        items: &[],
+        subcommands: &[],
+        subcommand_required: false,
+        help_flag: false,
+        version: None,
+    };
+
     /// Parse `words`, which should not include the program name.
     fn parse_from(words: &[&winnow::stream::BStr]) -> Result<Self, Error> {
         Self::parse_argv(&mut Argv::new(words))
@@ -78,17 +93,46 @@ pub trait Args: Sized {
         Self::parse_from(&words(&args))
     }
 
-    /// Parse the process's arguments, exiting with a message on failure.
+    /// Parse the process's arguments. Help and version are printed with exit
+    /// status 0; a failure is reported on stderr with status 2.
     fn parse() -> Self {
-        let args: Vec<_> = std::env::args_os().skip(1).collect();
+        let mut args = std::env::args_os();
+        let program = Self::HELP.name;
+        let argv0 = args.next().unwrap_or_default();
+        let program = if program.is_empty() {
+            std::path::Path::new(&argv0)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        } else {
+            program.to_owned()
+        };
+        let args: Vec<_> = args.collect();
         match Self::parse_from(&words(&args)) {
             Ok(parsed) => parsed,
-            Err(error) => {
-                eprintln!("error: {error}");
-                std::process::exit(2);
-            }
+            Err(error) => std::process::exit(report(&error, &program)),
         }
     }
+}
+
+/// Print what a failed parse means, and give the exit status: help and version
+/// on stdout with 0, a bare `arg_required_else_help` invocation's help on stderr
+/// with 2, anything else as an error on stderr with 2.
+pub fn report(error: &Error, program: &str) -> i32 {
+    if let Some(help) = error.render_help(program) {
+        if error.is_bare_help() {
+            eprintln!("{help}");
+            return 2;
+        }
+        println!("{help}");
+        return 0;
+    }
+    if let Some(version) = error.version_text(program) {
+        println!("{version}");
+        return 0;
+    }
+    eprintln!("error: {error}\n\nFor more information, try '--help'.");
+    2
 }
 
 /// An enum of subcommands, selected by a word.
@@ -150,6 +194,22 @@ pub mod __private {
     pub use crate::error::Error;
     pub use crate::stream::Argv;
     pub use crate::{Globals, Subcommand, globals};
+
+    /// `help a b …`: the long help of the command the words name, below `root`.
+    pub fn help_word(root: &'static crate::help::Command, input: &mut Argv<'_>) -> Error {
+        let mut words = Vec::new();
+        while !input.is_empty() && !is_flag_like(input.front()) {
+            words.push(input.take_word());
+        }
+        let (command, path) = crate::help::resolve(root, words.iter().map(|w| &***w));
+        path.into_iter()
+            .rev()
+            .fold(Error::help(command, true), Error::within)
+    }
+
+    fn is_flag_like(word: &[u8]) -> bool {
+        word.len() > 1 && word[0] == b'-'
+    }
 
     /// The end of a unit subcommand: only inherited global flags may follow.
     pub fn finish_with(input: &mut Argv<'_>, globals: &mut dyn Globals) -> Result<(), Error> {
