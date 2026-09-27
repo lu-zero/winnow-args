@@ -1,0 +1,15 @@
+[package]
+name = "winnow-args"
+description = "Command line argument parsing built from winnow parsers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["derive"]
+derive = ["dep:winnow-args-derive"]
+
+[dependencies]
+winnow.workspace = true
+winnow-args-derive = { workspace = true, optional = true }
