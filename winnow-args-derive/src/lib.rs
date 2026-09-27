@@ -43,9 +43,57 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
+    let mut subs = Vec::new();
     for variant in &data.variants {
         let ident = &variant.ident;
-        let pattern = byte_patterns(&variant_names(variant, &mut names)?);
+        let info = variant_names(variant, &mut names)?;
+        let pattern = byte_patterns(&info.names);
+        let primary = LitStr::new(&info.names[0], Span::call_site());
+        let inner = match &variant.fields {
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                let ty = &fields.unnamed[0].ty;
+                Some(boxed(ty).unwrap_or(ty).clone())
+            }
+            _ => None,
+        };
+        let command = match &inner {
+            Some(ty) => quote!(<#ty as ::winnow_args::Args>::HELP),
+            None => {
+                let about = &info.about;
+                quote!(&::winnow_args::help::Command {
+                    name: "",
+                    about: #about,
+                    long_about: #about,
+                    after_help: "",
+                    after_long_help: "",
+                    items: &[],
+                    subcommands: &[],
+                    subcommand_required: false,
+                    help_flag: true,
+                    version: ::core::option::Option::None,
+                })
+            }
+        };
+        let about = match (&inner, info.about.is_empty()) {
+            (Some(ty), true) => quote!(<#ty as ::winnow_args::Args>::HELP.about),
+            _ => {
+                let about = &info.about;
+                quote!(#about)
+            }
+        };
+        let shown = &info.names[1..=info.shown];
+        let all = &info.names;
+        let hide = info.hide;
+        subs.push(quote! {
+            ::winnow_args::help::Sub {
+                name: #primary,
+                aliases: &[#(#shown),*],
+                names: &[#(#all),*],
+                command: #command,
+                about: #about,
+                hide: #hide,
+            }
+        });
         let parse = match &variant.fields {
             Fields::Unit => quote!(__wa::finish_with(__input, __globals).map(|()| Self::#ident)),
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
@@ -67,9 +115,10 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
         };
-        arms.push(quote!(#pattern => #parse,));
+        arms.push(quote!(#pattern => (#parse).map_err(|e| e.within(#primary)),));
         patterns.push(pattern);
     }
+    let (about, long_about) = docs(&input.attrs);
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -97,21 +146,47 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
 
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
+            const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
+                name: "",
+                about: #about,
+                long_about: #long_about,
+                after_help: "",
+                after_long_help: "",
+                items: &[],
+                subcommands: &[#(#subs),*],
+                subcommand_required: true,
+                help_flag: true,
+                version: ::core::option::Option::None,
+            };
+
             fn parse_argv_with(
                 __input: &mut ::winnow_args::Argv<'_>,
                 __globals: &mut dyn ::winnow_args::Globals,
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
+                let __help = <Self as ::winnow_args::Args>::HELP;
                 if __input.is_empty() {
                     return ::core::result::Result::Err(__wa::Error::missing_subcommand(__input.offset()));
                 }
                 let __arg = __wa::arg(__input)?;
-                if let __wa::Arg::Word(__word) = __arg {
-                    if <Self as __wa::Subcommand>::has(&**__word.value) {
-                        return <Self as __wa::Subcommand>::parse_subcommand(
-                            &**__word.value, __input, __globals,
-                        );
+                match __arg {
+                    __wa::Arg::Word(__word) => {
+                        if <Self as __wa::Subcommand>::has(&**__word.value) {
+                            return <Self as __wa::Subcommand>::parse_subcommand(
+                                &**__word.value, __input, __globals,
+                            );
+                        }
+                        if &**__word.value == b"help" {
+                            return ::core::result::Result::Err(__wa::help_word(__help, __input));
+                        }
                     }
+                    __wa::Arg::Long(__flag) if __flag.name == b"help" => {
+                        return ::core::result::Result::Err(__wa::Error::help(__help, true));
+                    }
+                    __wa::Arg::Short(__flag) if __flag.letter == 'h' => {
+                        return ::core::result::Result::Err(__wa::Error::help(__help, false));
+                    }
+                    _ => {}
                 }
                 ::core::result::Result::Err(__arg.unexpected())
             }
@@ -145,7 +220,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 "a `ValueEnum` variant holds no data",
             ));
         }
-        let spellings = variant_names(variant, &mut names)?;
+        let spellings = variant_names(variant, &mut names)?.names;
         choices.push(LitStr::new(&spellings[0], Span::call_site()));
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
@@ -169,32 +244,46 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
-/// A variant's spellings, `name` (or kebab-case) first then its aliases,
-/// checked against `seen` for duplicates.
+/// A variant's spellings and help.
+struct Variant {
+    /// `name` (or kebab-case) first, then shown aliases, then hidden ones.
+    names: Vec<String>,
+    /// How many of `names` after the first are shown in help.
+    shown: usize,
+    hide: bool,
+    about: String,
+}
+
+/// A variant's spellings, checked against `seen` for duplicates, and its help.
 fn variant_names<'a>(
     variant: &'a syn::Variant,
     seen: &mut Vec<(String, &'a Ident)>,
-) -> syn::Result<Vec<String>> {
-    let mut name = None;
-    let mut alias = Vec::new();
+) -> syn::Result<Variant> {
+    let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("name") {
                 name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("alias_hidden") {
+                hidden.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("hide") {
+                hide = true;
             } else {
-                return Err(meta.error("expected `name` or `alias`"));
+                return Err(meta.error("expected `name`, `alias`, `alias_hidden` or `hide`"));
             }
             Ok(())
         })?;
     }
     let ident = &variant.ident;
-    let spellings: Vec<String> =
+    let shown = alias.len();
+    let names: Vec<String> =
         std::iter::once(name.unwrap_or_else(|| kebab_case(&ident.to_string())))
             .chain(alias)
+            .chain(hidden)
             .collect();
-    for spelling in &spellings {
+    for spelling in &names {
         if let Some((_, other)) = seen.iter().find(|(n, _)| n == spelling) {
             return Err(syn::Error::new(
                 ident.span(),
@@ -203,7 +292,43 @@ fn variant_names<'a>(
         }
         seen.push((spelling.clone(), ident));
     }
-    Ok(spellings)
+    Ok(Variant {
+        names,
+        shown,
+        hide,
+        about: docs(&variant.attrs).0,
+    })
+}
+
+/// A doc comment as help: its first paragraph, and the whole of it.
+fn docs(attrs: &[syn::Attribute]) -> (String, String) {
+    let lines: Vec<String> = attrs
+        .iter()
+        .filter(|a| a.path().is_ident("doc"))
+        .filter_map(|a| match &a.meta {
+            syn::Meta::NameValue(nv) => match &nv.value {
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) => Some(s.value()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .map(|line| {
+            line.strip_prefix(' ')
+                .unwrap_or(&line)
+                .trim_end()
+                .to_owned()
+        })
+        .collect();
+    let long = lines.join("\n").trim().to_owned();
+    let short = long
+        .split("\n\n")
+        .next()
+        .unwrap_or_default()
+        .replace('\n', " ");
+    (short, long)
 }
 
 /// `b"a" | b"b"`.
@@ -317,9 +442,67 @@ struct Field {
     group: Option<String>,
     /// The value of a flag given without one.
     default_missing: Option<String>,
+    /// Help: first paragraph, whole text, section, hidden.
+    help: String,
+    long_help: String,
+    heading: Option<String>,
+    hide: bool,
+    /// A flag's value placeholder.
+    value_name: Option<String>,
 }
 
 impl Field {
+    /// This field's entry in `help::Command::items`.
+    fn help_item(&self) -> TokenStream2 {
+        let opt_str = |s: Option<&str>| match s {
+            Some(s) => quote!(::core::option::Option::Some(#s)),
+            None => quote!(::core::option::Option::None),
+        };
+        let short = match self.short() {
+            Some(c) => quote!(::core::option::Option::Some(#c)),
+            None => quote!(::core::option::Option::None),
+        };
+        let long = opt_str(self.longs().first().copied());
+        let (positional, trailing) = match &self.role {
+            Role::Positional { double_dash, .. } => (true, *double_dash == DoubleDash::Required),
+            _ => (false, false),
+        };
+        let display = self.display();
+        let value_name = if positional {
+            opt_str(Some(&display))
+        } else {
+            opt_str(self.value_name.as_deref())
+        };
+        let (help, long_help) = (&self.help, &self.long_help);
+        let heading = opt_str(self.heading.as_deref());
+        let hide = self.hide;
+        let required =
+            matches!(self.kind, Kind::Required(_)) && self.default.is_none() && self.env.is_none()
+                || self.required;
+        let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
+        let default = opt_str(self.default.as_deref());
+        let env = opt_str(self.env.as_deref());
+        let choices = self.choices.iter().flatten();
+        quote! {
+            ::winnow_args::help::Item {
+                short: #short,
+                long: #long,
+                value_name: #value_name,
+                help: #help,
+                long_help: #long_help,
+                heading: #heading,
+                hide: #hide,
+                positional: #positional,
+                required: #required,
+                multiple: #multiple,
+                trailing: #trailing,
+                default: #default,
+                env: #env,
+                choices: &[#(#choices),*],
+            }
+        }
+    }
+
     /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
     fn read(&self) -> TokenStream2 {
         match &self.default_missing {
@@ -567,7 +750,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         restart_token,
         default_subcommand,
         arg_required_else_help,
+        name: program_name,
+        version,
+        about,
+        long_about,
+        after_help,
+        after_long_help,
+        disable_help_flag,
+        disable_version_flag,
+        disable_help_subcommand,
     } = struct_options(input)?;
+    let (doc_about, doc_long_about) = docs(&input.attrs);
+    let about = about.unwrap_or(doc_about);
+    let long_about = long_about.unwrap_or(doc_long_about);
     let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;
@@ -801,6 +996,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } else {
             (quote!(), quote!(&mut *__globals))
         };
+        // `help a b`: the help of a subcommand, unless one is actually named `help`.
+        let help_word = (!disable_help_subcommand).then(|| {
+            quote! {
+                if &**__word.value == b"help" {
+                    return ::core::result::Result::Err(
+                        __wa::help_word(<Self as ::winnow_args::Args>::HELP, __input),
+                    );
+                }
+            }
+        });
         // Any other word selects the default subcommand, which reads it again as its own.
         let fallback = default_subcommand.as_ref().map(|name| {
             let name = LitByteStr::new(name.as_bytes(), Span::call_site());
@@ -826,6 +1031,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #ident = ::core::option::Option::Some(__sub);
                     break;
                 }
+                #help_word
                 #fallback
             }
         }
@@ -868,7 +1074,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let help_on_empty = arg_required_else_help.then(|| {
         quote! {
             if __input.is_empty() {
-                return ::core::result::Result::Err(__wa::Error::help_requested(__input.offset()));
+                return ::core::result::Result::Err(
+                    __wa::Error::bare_help(<Self as ::winnow_args::Args>::HELP),
+                );
             }
         }
     });
@@ -878,6 +1086,45 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`default_subcommand` needs an `#[arg(subcommand)]` field",
         ));
     }
+    // `-h`/`--help` and `-V`/`--version`, unless declared or disabled: arms after
+    // the struct's own, so a CLI naming its own `--help` keeps it.
+    let declares_long = |name: &str| fields.iter().any(|f| f.longs().contains(&name));
+    let declares_short = |c: char| fields.iter().any(|f| f.short() == Some(c));
+    let help = quote!(<Self as ::winnow_args::Args>::HELP);
+    let help_long = (!disable_help_flag && !declares_long("help")).then(
+        || quote!(b"help" => return ::core::result::Result::Err(__wa::Error::help(#help, true)),),
+    );
+    let help_short = (!disable_help_flag && !declares_short('h')).then(
+        || quote!('h' => return ::core::result::Result::Err(__wa::Error::help(#help, false)),),
+    );
+    let with_version = version.is_some() && !disable_version_flag;
+    let version_long = (with_version && !declares_long("version")).then(
+        || quote!(b"version" => return ::core::result::Result::Err(__wa::Error::version(#help)),),
+    );
+    let version_short = (with_version && !declares_short('V'))
+        .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
+    let help_flag = help_long.is_some() || help_short.is_some();
+    let help_version = match &version {
+        Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
+        _ => quote!(::core::option::Option::None),
+    };
+    let help_items = fields
+        .iter()
+        .filter(|f| !matches!(f.role, Role::Subcommand))
+        .map(Field::help_item);
+    let (help_subcommands, subcommand_required) = match subcommand {
+        Some(f) => {
+            let ty = match &f.kind {
+                Kind::Optional(ty) | Kind::Required(ty) => ty,
+                _ => unreachable!("rejected for subcommands in `field`"),
+            };
+            (
+                quote!(<#ty as ::winnow_args::Args>::HELP.subcommands),
+                matches!(f.kind, Kind::Required(_)),
+            )
+        }
+        None => (quote!(&[]), false),
+    };
     let displaced = rules.displaced_slots(&fields);
     let env_fallbacks = fields
         .iter()
@@ -920,6 +1167,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
+            const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
+                name: #program_name,
+                about: #about,
+                long_about: #long_about,
+                after_help: #after_help,
+                after_long_help: #after_long_help,
+                items: &[#(#help_items),*],
+                subcommands: #help_subcommands,
+                subcommand_required: #subcommand_required,
+                help_flag: #help_flag,
+                version: #help_version,
+            };
+
             fn parse_argv_with(
                 __input: &mut ::winnow_args::Argv<'_>,
                 __globals: &mut dyn ::winnow_args::Globals,
@@ -936,10 +1196,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#long_arms)*
+                            #help_long
+                            #version_long
                             _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
                         },
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
+                            #help_short
+                            #version_short
                             _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
                         },
                         __wa::Arg::Separator { .. } => {}
@@ -975,10 +1239,23 @@ struct StructOptions {
     default_subcommand: Option<String>,
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
+    /// The program name for the usage line; argv[0] when empty.
+    name: String,
+    /// `-V`/`--version` text: a literal, or `CARGO_PKG_VERSION`.
+    version: Option<TokenStream2>,
+    /// Help text around the lists; `about`/`long_about` default to the doc comment.
+    about: Option<String>,
+    long_about: Option<String>,
+    after_help: String,
+    after_long_help: String,
+    disable_help_flag: bool,
+    disable_version_flag: bool,
+    disable_help_subcommand: bool,
 }
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     let mut options = StructOptions::default();
+    let mut texts = StructOptions::default();
     let groups = &mut options.groups;
     let (restart, default_subcommand, help) = (
         &mut options.restart_token,
@@ -999,10 +1276,58 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 *help = true;
                 return Ok(());
             }
+            let text = |meta: &syn::meta::ParseNestedMeta<'_>| -> syn::Result<String> {
+                Ok(meta.value()?.parse::<LitStr>()?.value())
+            };
+            if meta.path.is_ident("name") {
+                texts.name = text(&meta)?;
+                return Ok(());
+            }
+            if meta.path.is_ident("version") {
+                texts.version = Some(if meta.input.peek(syn::Token![=]) {
+                    let version = meta.value()?.parse::<LitStr>()?;
+                    quote!(#version)
+                } else {
+                    quote!(::core::env!("CARGO_PKG_VERSION"))
+                });
+                return Ok(());
+            }
+            for (key, slot) in [
+                ("about", &mut texts.about),
+                ("long_about", &mut texts.long_about),
+            ] {
+                if meta.path.is_ident(key) {
+                    *slot = Some(text(&meta)?);
+                    return Ok(());
+                }
+            }
+            for (key, slot) in [
+                ("after_help", &mut texts.after_help),
+                ("after_long_help", &mut texts.after_long_help),
+            ] {
+                if meta.path.is_ident(key) {
+                    *slot = text(&meta)?;
+                    return Ok(());
+                }
+            }
+            for (key, slot) in [
+                ("disable_help_flag", &mut texts.disable_help_flag),
+                ("disable_version_flag", &mut texts.disable_version_flag),
+                (
+                    "disable_help_subcommand",
+                    &mut texts.disable_help_subcommand,
+                ),
+            ] {
+                if meta.path.is_ident(key) {
+                    *slot = true;
+                    return Ok(());
+                }
+            }
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
-                    "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand` \
-                     or `arg_required_else_help`",
+                    "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
+                     `arg_required_else_help`, `name`, `version`, `about`, `long_about`, \
+                     `after_help`, `after_long_help` or a `disable_*` option",
                 ));
             }
             let content;
@@ -1031,6 +1356,15 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             Ok(())
         })?;
     }
+    options.name = texts.name;
+    options.version = texts.version;
+    options.about = texts.about;
+    options.long_about = texts.long_about;
+    options.after_help = texts.after_help;
+    options.after_long_help = texts.after_long_help;
+    options.disable_help_flag = texts.disable_help_flag;
+    options.disable_version_flag = texts.disable_version_flag;
+    options.disable_help_subcommand = texts.disable_help_subcommand;
     Ok(options)
 }
 
@@ -1303,6 +1637,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut default = None;
     let mut double_dash = None;
     let (mut default_missing, mut value_optional) = (None, false);
+    let (doc_help, doc_long_help) = docs(&f.attrs);
+    let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
@@ -1332,6 +1668,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("help") {
+                help = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("long_help") {
+                long_help = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("help_heading") {
+                heading = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("hide") {
+                hide = true;
             } else if meta.path.is_ident("default_missing") {
                 default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("value_optional") {
@@ -1411,6 +1755,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
     }
+    let flag_value_name =
+        (!positional && !subcommand && !matches!(kind, Kind::Switch | Kind::Count(_)))
+            .then(|| value_name.clone().unwrap_or_else(|| bare.to_uppercase()));
     let role = if subcommand {
         if positional || count || global || short.is_some() || long.is_some() || !alias.is_empty() {
             return error("a subcommand field takes no other `arg` options".into());
@@ -1482,6 +1829,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         required_unless,
         group,
         default_missing,
+        long_help: long_help.or_else(|| help.clone()).unwrap_or(doc_long_help),
+        help: help.unwrap_or(doc_help),
+        heading,
+        hide,
+        value_name: flag_value_name,
     })
 }
 

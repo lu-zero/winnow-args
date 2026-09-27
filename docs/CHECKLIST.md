@@ -133,8 +133,15 @@ where the references disagree and we picked a side.
 
 ## 8. Help, version, completion
 
-- [ ] `-h/--help`, `-V/--version` supplied unless declared
-- [ ] Help rendering from derive doc comments
+- [x] `-h/--help`, `-V/--version` supplied unless declared or disabled
+      (`disable_help_flag`, `disable_version_flag`); `-vh` in a bundle
+- [x] Help rendering from doc comments and `help`, `long_help`, `help_heading`,
+      `hide`, `after_help`, `after_long_help`, `about`, `long_about`, `alias_hidden`
+- [x] `help <cmd…>` (usage, clap and bpaf all supply it); `disable_help_subcommand`
+- [x] `report`: help/version on stdout (0), bare `arg_required_else_help` help and
+      errors on stderr (2)
+- [ ] Wrapping to the terminal width; `[possible values]` for `ValueEnum` fields
+- [ ] A cargo feature to leave help data out of binaries that do not need it
 - [ ] Shell completions; emit a usage KDL spec
 
 ## 9. Derive (`winnow-args-derive`)
