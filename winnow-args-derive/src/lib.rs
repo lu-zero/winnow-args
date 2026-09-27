@@ -218,6 +218,8 @@ struct Field {
     ident: Ident,
     kind: Kind,
     role: Role,
+    /// Splits each value of a `Vec` field.
+    delimiter: Option<u8>,
 }
 
 impl Field {
@@ -319,8 +321,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     __arg.read_value_as::<#ty>(__input)?
                 );
             },
-            Kind::Many(ty) => quote! {
-                #ident.push(__arg.read_value_as::<#ty>(__input)?);
+            Kind::Many(ty) => match f.delimiter {
+                None => quote! {
+                    #ident.push(__arg.read_value_as::<#ty>(__input)?);
+                },
+                Some(d) => quote! {
+                    for __piece in __wa::split(__arg.read_value(__input)?, #d) {
+                        #ident.push(__arg.convert::<#ty>(__piece)?);
+                    }
+                },
             },
         }
     };
@@ -368,12 +377,22 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #filled
                     }
                 },
-                Kind::Many(ty) => quote! {
-                    #i => {
-                        #ident.push(__word.convert::<#ty>(#display)?);
-                        #filled
+                Kind::Many(ty) => {
+                    let push = match f.delimiter {
+                        None => quote!(#ident.push(__word.convert::<#ty>(#display)?);),
+                        Some(d) => quote! {
+                            for __piece in __word.split(#d) {
+                                #ident.push(__piece.convert::<#ty>(#display)?);
+                            }
+                        },
+                    };
+                    quote! {
+                        #i => {
+                            #push
+                            #filled
+                        }
                     }
-                },
+                }
                 Kind::Switch | Kind::Count(_) => {
                     unreachable!("rejected for positionals in `field`")
                 }
@@ -526,6 +545,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut subcommand = false;
     let mut global = false;
     let mut alias = Vec::new();
+    let mut delimiter = None;
     let mut value_name = None;
     for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
@@ -553,11 +573,17 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("delimiter") {
+                let c = meta.value()?.parse::<LitChar>()?;
+                if !c.value().is_ascii() {
+                    return Err(syn::Error::new(c.span(), "a delimiter is one ASCII character"));
+                }
+                delimiter = Some(c.value() as u8);
             } else if meta.path.is_ident("value_name") {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count` or `value_name`",
+                    "expected `short`, `long`, `alias`, `global`, `positional`, `subcommand`, `count`, `delimiter` or `value_name`",
                 ));
             }
             Ok(())
@@ -565,6 +591,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
 
     let error = |msg: String| Err(syn::Error::new(f.span(), msg));
+    if delimiter.is_some() && (count || !matches!(kind(&f.ty), Kind::Many(_))) {
+        return error("`delimiter` needs a `Vec<T>` field to put the pieces in".into());
+    }
     let kind = if count {
         Kind::Count(f.ty.clone())
     } else {
@@ -611,7 +640,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
     };
 
-    Ok(Field { ident, kind, role })
+    Ok(Field {
+        ident,
+        kind,
+        role,
+        delimiter,
+    })
 }
 
 fn check_duplicates(fields: &[Field]) -> syn::Result<()> {

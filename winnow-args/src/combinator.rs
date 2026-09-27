@@ -144,6 +144,19 @@ impl<const N: usize> Named<N> {
             self.parse_next(input)?.value_as().parse_next(input)
         })
     }
+
+    /// An option whose value is split on `delimiter`, each piece converted:
+    /// `--tags a,b` gives two.
+    pub fn arguments_as<'i, T: FromArg>(
+        mut self,
+        delimiter: u8,
+    ) -> impl Parser<Argv<'i>, Vec<T>, Error> {
+        trace("arguments_as", move |input: &mut Argv<'i>| {
+            self.parse_next(input)?
+                .values_as(delimiter)
+                .parse_next(input)
+        })
+    }
 }
 
 /// One occurrence of the flag's name, value not yet read.

@@ -1,4 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR... [FILE]... [use -g/--global [TOOL]...]`
+//! `example -v/--verbose... -p/--path=PATH -I/--include=DIR[,DIR]... [FILE]... [use -g/--global [TOOL]...]`
 //! in six spellings.
 
 /// winnow-args, derived.
@@ -11,7 +11,7 @@ pub mod wa_derive {
         pub verbose: u8,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
-        #[arg(short = 'I', long)]
+        #[arg(short = 'I', long, delimiter = ',')]
         pub include: Vec<PathBuf>,
         #[arg(positional, value_name = "FILE")]
         pub files: Vec<PathBuf>,
@@ -98,7 +98,9 @@ pub mod wa_comb {
             Kind::Long | Kind::Short => alt((
                 VERBOSE.switch().map(|()| c.verbose = c.verbose.saturating_add(1)),
                 PATH.argument_as().map(|p| c.path = Some(p)),
-                INCLUDE.argument_as().map(|i| c.include.push(i)),
+                INCLUDE
+                    .arguments_as(b',')
+                    .map(|i: Vec<PathBuf>| c.include.extend(i)),
             )),
             Kind::Word => alt((
                 cond(
@@ -125,7 +127,7 @@ pub mod wa_disp {
     use winnow::combinator::{dispatch, fail};
     use winnow::prelude::*;
     use winnow_args::combinator::args;
-    use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
+    use winnow_args::token::{Arg, LongFlag, ShortFlag, arg, split};
     use winnow_args::{Argv, Error, Globals, globals};
 
     pub use super::wa_comb::{Cli, Commands, UseArgs};
@@ -159,7 +161,12 @@ pub mod wa_disp {
                 a.value_as().map(|p| c.path = Some(p))
             },
             a @ (Arg::Long(LongFlag { name: b"include", .. }) | Arg::Short(ShortFlag { letter: 'I', .. })) => {
-                a.value_as().map(|i| c.include.push(i))
+                |input: &mut Argv<'i>| {
+                    for piece in split(a.read_value(input)?, b',') {
+                        c.include.push(a.convert(piece)?);
+                    }
+                    Ok(())
+                }
             },
             Arg::Word(w) if c.files.is_empty() && !w.after_separator && (*w.value == "use" || *w.value == "u") => {
                 |input: &mut Argv<'i>| {
@@ -198,7 +205,7 @@ pub mod bpaf010 {
         pub verbose: usize,
         #[bpaf(short('p'), long("path"), long("dir"), argument("PATH"))]
         pub path: Option<PathBuf>,
-        #[bpaf(short('I'), long("include"), argument("DIR"))]
+        #[bpaf(external(include_p))]
         pub include: Vec<PathBuf>,
         // bpaf tries items in order: the command must come before the greedy
         // positional, or `use` is taken as a FILE.
@@ -206,6 +213,21 @@ pub mod bpaf010 {
         pub command: Option<Commands>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
+    }
+
+    /// bpaf has no value delimiter: split each occurrence afterwards.
+    fn include_p() -> impl bpaf::Parser<Output = Vec<PathBuf>> {
+        use bpaf::Parser as _;
+        bpaf::short('I')
+            .long("include")
+            .argument::<String>("DIR")
+            .many()
+            .map(|all| {
+                all.iter()
+                    .flat_map(|v| v.split(','))
+                    .map(PathBuf::from)
+                    .collect()
+            })
     }
 
     /// bpaf's derive has no `global`; the combinator does.
@@ -245,7 +267,7 @@ pub mod clap4 {
         pub verbose: u8,
         #[arg(short, long, alias = "dir")]
         pub path: Option<PathBuf>,
-        #[arg(short = 'I', long, value_name = "DIR")]
+        #[arg(short = 'I', long, value_name = "DIR", value_delimiter = ',')]
         pub include: Vec<PathBuf>,
         #[arg(value_name = "FILE")]
         pub files: Vec<PathBuf>,
@@ -304,7 +326,13 @@ pub mod usage {
         pub verbose: u8,
         #[usage(long = "path", short = 'p', alias = "dir", value_name = "PATH")]
         pub path: ::std::option::Option<::std::path::PathBuf>,
-        #[usage(long = "include", short = 'I', value_name = "DIR", var)]
+        #[usage(
+            long = "include",
+            short = 'I',
+            value_name = "DIR",
+            var,
+            delimiter = ','
+        )]
         pub include: ::std::vec::Vec<::std::path::PathBuf>,
         #[usage(arg, name = "FILE")]
         pub files: ::std::vec::Vec<::std::path::PathBuf>,

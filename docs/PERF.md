@@ -241,3 +241,36 @@ arm parsers per item, each copying `Named`. A 32-byte enum layout did not help
 (the separately written tag is its own forwarding hazard); only the old
 24-byte layout did. `Named<const N: usize = 1>` keeps it: a plain `Named` is
 the old 24 bytes, and only a flag with aliases is a larger `Named<2>`.
+
+## 9. Value delimiters: `-I/--include=DIR[,DIR]...`
+
+`delimiter = ','` on a `Vec` flag or positional splits each value; every piece
+is converted on its own and a positional piece keeps its own offset. The derive
+splits inline and pushes into the field; `Named::arguments_as(b',')` returns a
+`Vec` per occurrence; a `dispatch!` arm can loop over `token::split` instead.
+bpaf has no delimiter, so its field splits after `many()`.
+
+| framework | `-v --path /tmp/x` | `-vvv …` | `-I a -I b -I c` | Δ vs 8 | `-I a,b,c` | `… use -g node@20` |
+|-----------|------:|------:|------:|------:|------:|------:|
+| usage     | 161   | 212   | 378   | +16   | 286   | 364   |
+| wa        | 55    | 67    | 136   | −2    | 122   | 123   |
+| wa-disp   | 103   | 140   | 243   | −3    | 200   | 228   |
+| wa-comb   | 134   | 188   | 545   | +134  | 340   | 258   |
+| bpaf 0.10 | 6536  | 8537  | 9383  | +459  | 7511  | 9993  |
+| clap 4    | 4832  | 5723  | 7236  | +331  | 6164  | 9056  |
+
+Warm ns (min). One word with three values is cheaper than three occurrences
+for everyone.
+
+Two things moved that the feature did not ask for:
+
+- The larger generated loop pushed `Arg::check_switch` and `Arg::read_value`
+  out of line, so every letter of `-vvv` became a call (56 → 69 ns). Both are
+  `#[inline(always)]` now, like `token::arg`.
+- After that, the flags-only line still reads ~6 ns above step 8 with the same
+  instructions (529 vs 526) and backend stalls (~32) but ~10 % more cycles:
+  code placement, not work. Deltas under ~10 % between builds are not signal
+  without instructions and stalls agreeing.
+
+`wa-comb`'s `-I a -I b -I c` got 134 ns slower because `arguments_as` allocates
+a `Vec` per occurrence; `wa-disp`'s loop over `split` does not.

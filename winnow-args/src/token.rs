@@ -132,7 +132,7 @@ impl<'i> Arg<'i> {
 
     /// Finish a switch. Only a long flag can have been given a value,
     /// `--verbose=yes`, which is an error; in `-vx` the `x` is another letter.
-    #[inline]
+    #[inline(always)]
     pub fn check_switch(&self) -> Result<(), Error> {
         match self {
             Arg::Long(LongFlag { value: Some(v), .. }) => {
@@ -149,7 +149,7 @@ impl<'i> Arg<'i> {
     /// - `-nvalue`, `-n=value`: the rest of the bundle, less one `=`.
     /// - `--name value`, `-n value`: the next word, unless it is flag-like. A
     ///   lone `-` is a value; `--` is not.
-    #[inline]
+    #[inline(always)]
     pub fn read_value(&self, input: &mut Argv<'i>) -> Result<&'i BStr, Error> {
         match self {
             Arg::Long(LongFlag { value: Some(v), .. }) => Ok(v),
@@ -172,8 +172,22 @@ impl<'i> Arg<'i> {
     #[inline]
     pub fn read_value_as<T: FromArg>(&self, input: &mut Argv<'i>) -> Result<T, Error> {
         let v = self.read_value(input)?;
-        T::from_arg(v)
-            .map_err(|cause| Error::invalid_value(self.offset(), self.spelling(), v, cause))
+        self.convert(v)
+    }
+
+    /// Convert `value`, one of this flag's values, naming the flag on failure.
+    #[inline]
+    pub fn convert<T: FromArg>(&self, value: &BStr) -> Result<T, Error> {
+        T::from_arg(value)
+            .map_err(|cause| Error::invalid_value(self.offset(), self.spelling(), value, cause))
+    }
+
+    /// [`Arg::read_value`] split on `delimiter`, each piece converted.
+    pub fn values_as<T: FromArg>(&self, delimiter: u8) -> impl Parser<Argv<'i>, Vec<T>, Error> {
+        move |input: &mut Argv<'i>| {
+            let value = self.read_value(input)?;
+            split(value, delimiter).map(|v| self.convert(v)).collect()
+        }
     }
 
     /// [`Arg::check_switch`] as a parser, for a `dispatch!` arm.
@@ -192,7 +206,25 @@ impl<'i> Arg<'i> {
     }
 }
 
+/// The pieces of `value` between `delimiter`s; empty pieces are kept.
+#[inline]
+pub fn split(value: &BStr, delimiter: u8) -> impl Iterator<Item = &BStr> {
+    value.split(move |&b| b == delimiter).map(BStr::new)
+}
+
 impl<'i> Word<'i> {
+    /// The pieces of the word between `delimiter`s, each at its own offset.
+    #[inline]
+    pub fn split(&self, delimiter: u8) -> impl Iterator<Item = Word<'i>> {
+        let (base, after_separator) = (self.offset, self.after_separator);
+        let start = self.value.as_ptr() as usize;
+        split(self.value, delimiter).map(move |value| Word {
+            value,
+            offset: base + (value.as_ptr() as usize - start),
+            after_separator,
+        })
+    }
+
     /// Convert the word with [`FromArg`]; `name` is how errors refer to it.
     #[inline]
     pub fn convert<T: FromArg>(&self, name: &str) -> Result<T, Error> {

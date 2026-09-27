@@ -161,5 +161,5 @@ pub mod __private {
         }
         Ok(())
     }
-    pub use crate::token::{Arg, arg};
+    pub use crate::token::{Arg, arg, split};
 }

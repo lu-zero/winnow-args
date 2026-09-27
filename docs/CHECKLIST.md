@@ -64,7 +64,9 @@ where the references disagree and we picked a side.
 - [x] Repeated single-value option: last one wins (usage, clap)
 - [x] Counting switch (`-vvv` → 3), `#[arg(count)]` on any integer, saturating
 - [x] Repeatable option into `Vec<T>`, one value per occurrence, in order
-- [ ] Variadic option (`--include a b`); value delimiters (`--env=a,b`)
+- [x] Value delimiters: `delimiter = ','` on `Vec` flags and positionals, each
+      piece converted alone; `Named::arguments_as`, `Arg::values_as`, `token::split`
+- [ ] Variadic option (`--include a b`); `dont_delimit_trailing_values`
 - [ ] Defaults, env fallback
 - [ ] Choices / value enums
 - [ ] Conflicts, requires, groups
