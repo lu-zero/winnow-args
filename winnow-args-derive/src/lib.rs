@@ -260,6 +260,7 @@ fn variant_names<'a>(
     seen: &mut Vec<(String, &'a Ident)>,
 ) -> syn::Result<Variant> {
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
+    let mut help: Option<String> = None;
     for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("name") {
@@ -270,8 +271,15 @@ fn variant_names<'a>(
                 hidden.extend(aliases(&meta)?);
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("help") {
+                help = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("long_help") {
+                // The listing shows one line; the subcommand's own help has the rest.
+                meta.value()?.parse::<LitStr>()?;
             } else {
-                return Err(meta.error("expected `name`, `alias`, `alias_hidden` or `hide`"));
+                return Err(meta.error(
+                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`",
+                ));
             }
             Ok(())
         })?;
@@ -296,7 +304,14 @@ fn variant_names<'a>(
         names,
         shown,
         hide,
-        about: docs(&variant.attrs).0,
+        about: help
+            .map(|h| {
+                h.split("\n\n")
+                    .next()
+                    .unwrap_or_default()
+                    .replace('\n', " ")
+            })
+            .unwrap_or_else(|| docs(&variant.attrs).0),
     })
 }
 
@@ -736,15 +751,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     }
     let trailing = trailing.first().copied();
-    if let (Some(t), Some(_)) = (
-        trailing,
-        fields.iter().find(|f| dd(f) == DoubleDash::Automatic),
-    ) {
-        return Err(syn::Error::new(
-            t.ident.span(),
-            "`double_dash = \"required\"` and `\"automatic\"` cannot share a struct",
-        ));
-    }
     let StructOptions {
         groups,
         restart_token,
@@ -1653,11 +1659,16 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                         .ok_or_else(|| meta.error("cannot infer a short name"))?
                 });
             } else if meta.path.is_ident("long") {
-                long = Some(if meta.input.peek(syn::Token![=]) {
+                let name = if meta.input.peek(syn::Token![=]) {
                     meta.value()?.parse::<LitStr>()?.value()
                 } else {
                     bare.replace('_', "-")
-                });
+                };
+                // A second `long` is another spelling, as in usage.
+                match long {
+                    None => long = Some(name),
+                    Some(_) => alias.push(name),
+                }
             } else if meta.path.is_ident("positional") {
                 positional = true;
             } else if meta.path.is_ident("count") {
@@ -1810,9 +1821,6 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if default.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`default` needs a field that takes a value".into());
-    }
-    if required && !matches!(kind, Kind::Optional(_) | Kind::Many(_)) {
-        return error("`required` is for `Option` and `Vec` fields; a `T` field already is".into());
     }
     Ok(Field {
         ident,

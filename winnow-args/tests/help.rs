@@ -45,8 +45,13 @@ enum Command {
     /// Installs a tool and adds the version to mise.toml
     #[arg(alias = "u")]
     Use(UseArgs),
-    /// List installed tools
-    #[arg(name = "ls", alias = "list", alias_hidden = "l")]
+    /// Replaced by the `help` attribute in the listing.
+    #[arg(
+        name = "ls",
+        alias = "list",
+        alias_hidden = "l",
+        help = "List installed tools"
+    )]
     Ls,
 }
 

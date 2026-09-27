@@ -31,6 +31,9 @@ pub enum Mode {
     Bundle,
     /// Past a `--`: every word is a value.
     Stopped,
+    /// Every word is a value, but no `--` was typed: an argument declared
+    /// `double_dash = "automatic"` has taken a value ([`Argv::stop_flags`]).
+    Values,
 }
 
 /// A command line being parsed: the [`Stream`] every parser in this crate reads.
@@ -80,8 +83,8 @@ impl<'i> Argv<'i> {
     /// argument declared `double_dash = "automatic"` does this once it has a value.
     #[inline]
     pub fn stop_flags(&mut self) {
-        if self.mode != Mode::Bundle {
-            self.mode = Mode::Stopped;
+        if self.mode == Mode::Word {
+            self.mode = Mode::Values;
         }
     }
 
@@ -89,7 +92,7 @@ impl<'i> Argv<'i> {
     /// `restart_token` starts a fresh invocation.
     #[inline]
     pub fn resume_flags(&mut self) {
-        if self.mode == Mode::Stopped {
+        if matches!(self.mode, Mode::Stopped | Mode::Values) {
             self.mode = Mode::Word;
         }
     }
