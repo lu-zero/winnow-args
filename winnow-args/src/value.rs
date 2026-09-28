@@ -14,6 +14,11 @@ use crate::error::BoxError;
 /// parses — flags still match — and only a value that is actually converted to
 /// text can be rejected for it.
 pub trait FromArg: Sized {
+    /// The values accepted, when there is a fixed set: help lists them as
+    /// `[possible values: …]`. Empty by default; `#[derive(ValueEnum)]` fills
+    /// it with each visible variant's name.
+    const CHOICES: &'static [&'static str] = &[];
+
     /// Convert one value.
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }

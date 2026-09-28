@@ -2,7 +2,7 @@
 //! `-h`, `--help`, `help <command>`, `-V`, or a bare `arg_required_else_help` call.
 
 use winnow::stream::BStr;
-use winnow_args::{Args, Error, ErrorKind, Subcommand, report, with_env};
+use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
 
 /// Dev tools, env vars, and tasks in one CLI
 ///
@@ -55,6 +55,16 @@ enum Command {
     Ls,
 }
 
+#[derive(ValueEnum, Debug)]
+enum When {
+    Auto,
+    Always,
+    Never,
+    /// Not for users.
+    #[arg(hide)]
+    Debug,
+}
+
 /// Installs a tool and adds the version to mise.toml.
 #[derive(Args, Debug)]
 #[arg(arg_required_else_help)]
@@ -69,6 +79,9 @@ struct UseArgs {
     /// Output format
     #[arg(long, choices("json", "toml"))]
     format: Option<String>,
+    /// When to use color
+    #[arg(long)]
+    color: Option<When>,
     /// Tool(s) to add
     #[arg(positional, value_name = "TOOL@VERSION")]
     tools: Vec<String>,
@@ -131,6 +144,11 @@ fn a_subcommand_help_names_its_path() {
     let text = help(&["use", "-h"]);
     assert!(text.starts_with("Installs a tool and adds the version to mise.toml.\n\nUsage: mise use [OPTIONS] [TOOL@VERSION]...\n"));
     assert!(text.contains("--format <FORMAT>  Output format [possible values: json, toml]"));
+    // A `ValueEnum`'s visible variants, without being declared again.
+    assert!(
+        text.contains("--color <COLOR>    When to use color [possible values: auto, always, never]"),
+        "{text}"
+    );
     // A bundle can ask for help too.
     assert!(help(&["-vh"]).starts_with("Dev tools"));
 }

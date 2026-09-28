@@ -650,3 +650,17 @@ The first cut collected every description into owned lines. The final one
 iterates borrowed slices, one scan per line that fits, and writes straight into
 the output. It is 4.7 KB more binary (1 844 800 → 1 849 568 stripped, for a
 binary that renders help).
+
+## 25. `[possible values]` for `ValueEnum` fields
+
+`FromArg` gains `const CHOICES: &'static [&'static str] = &[]`, which
+`#[derive(ValueEnum)]` fills with its visible variants' names, and a field's
+help item takes `<T as FromArg>::CHOICES` when it declares no `choices`. So
+usage's `value_enum` marker is not needed: mise's `bootstrap remote --only` and
+`--skip` now list their seventeen parts.
+
+Parsing is unchanged (3594 warm instructions on `use -g node@20`). Rendering
+`bootstrap remote -h` goes from 125 573 to 154 821 instructions for the two
+extra lists; `--help` is unchanged at 256 384. Both binaries grow 512 bytes: the
+lists are `static` help data, linked even where help is never rendered, which
+is what the next step is about.

@@ -150,7 +150,7 @@ where the references disagree and we picked a side.
 - [x] `report`: help/version on stdout (0), bare `arg_required_else_help` help and
       errors on stderr (2)
 - [x] Wrapping to `COLUMNS` (else 100); the column capped at two fifths of the page
-- [ ] `[possible values]` for `ValueEnum` fields
+- [x] `[possible values]` for `ValueEnum` fields: `FromArg::CHOICES`, the visible variants
 - [ ] A cargo feature to leave help data out of binaries that do not need it
 - [ ] Shell completions; emit a usage KDL spec
 
@@ -207,7 +207,7 @@ parses; each needs a home before the shadow is a faithful copy.
       `write`…), for tools that reason about what a command does
 - [ ] `author`, `bin`: program metadata (`bin` is folded into `name` today)
 - [ ] `hide_default_value`, `hide_env`: keep `[default: …]` / `[env: …]` out of help
-- [ ] `value_enum`: marks a `ValueEnum` field for help's `[possible values]`
+- [x] `value_enum`: not needed; the field's type supplies `[possible values]`
 - [ ] `mount`: dynamic subcommands discovered by running a command (mise's tasks)
 - [ ] `var`: explicit "repeatable" (winnow-args infers it from `Vec<T>`)
 - [ ] Selectors naming an ancestor's global flag (resolved at compile time today,
