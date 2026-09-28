@@ -409,7 +409,6 @@ fn depth_follows_the_terminal_and_the_environment() {
     assert_eq!(forced(&[("COLORTERM", "24bit")]), Depth::TrueColor);
     assert_eq!(forced(&[("TERM", "xterm-direct")]), Depth::TrueColor);
     assert_eq!(forced(&[("TERM_PROGRAM", "iTerm.app")]), Depth::TrueColor);
-    assert_eq!(forced(&[("WT_SESSION", "x")]), Depth::TrueColor);
     assert_eq!(
         forced(&[("TERM_PROGRAM", "Apple_Terminal")]),
         Depth::Ansi256

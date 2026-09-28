@@ -31,11 +31,11 @@ impl Depth {
     /// - a non-empty `NO_COLOR` means none, whatever else is set;
     /// - `FORCE_COLOR` (`1`–`3`, or empty/`true` for 1) or `CLICOLOR_FORCE`
     ///   (not `0`) give color even to a pipe;
-    /// - otherwise none for a pipe, `CLICOLOR=0`, `TERM=dumb`, or (outside
-    ///   Windows) no `TERM` at all;
+    /// - otherwise none for a pipe, `CLICOLOR=0`, `TERM=dumb`, or no `TERM`
+    ///   at all;
     /// - then 24-bit for `COLORTERM=truecolor`/`24bit`, a `TERM` ending in
-    ///   `direct` or `truecolor`, iTerm2, or Windows Terminal; 256 for a
-    ///   `TERM` ending in `256`/`256color` or Apple's Terminal; else 16.
+    ///   `direct` or `truecolor`, or iTerm2; 256 for a `TERM` ending in
+    ///   `256`/`256color` or Apple's Terminal; else 16.
     ///
     /// Under [`with_env`](crate::with_env) the stream never counts as a
     /// terminal, so the answer depends only on the variables given.
@@ -63,10 +63,7 @@ impl Depth {
         if forced == Depth::None {
             let terminal = is_terminal && !crate::env::overridden();
             let refused = var("CLICOLOR").is_some_and(|v| v == "0");
-            let dumb = match term.as_deref() {
-                Some(term) => term == "dumb",
-                None => !cfg!(windows),
-            };
+            let dumb = term.as_deref().is_none_or(|term| term == "dumb");
             if !terminal || refused || dumb {
                 return Depth::None;
             }
@@ -77,7 +74,6 @@ impl Depth {
             || term.ends_with("direct")
             || term.ends_with("truecolor")
             || program.as_deref() == Some("iTerm.app")
-            || var("WT_SESSION").is_some()
         {
             Depth::TrueColor
         } else if term.ends_with("256")
