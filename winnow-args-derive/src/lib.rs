@@ -429,6 +429,8 @@ enum DoubleDash {
     Required,
     /// Once it has a value, flags stop as if `--` had been typed.
     Automatic,
+    /// A `--` reaching it is one of its values, and stops nothing.
+    Preserve,
 }
 
 struct Field {
@@ -806,6 +808,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     }
     let trailing = trailing.first().copied();
+    // The positionals a `--` fills while they are next, by position.
+    let preserving: Vec<usize> = positionals
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| dd(f) == DoubleDash::Preserve)
+        .map(|(i, _)| i)
+        .collect();
+    if let (Some(t), false) = (trailing, preserving.is_empty()) {
+        return Err(syn::Error::new(
+            t.ident.span(),
+            "a `double_dash = \"preserve\"` positional keeps the `--` this one waits for",
+        ));
+    }
     let StructOptions {
         groups,
         restart_token,
@@ -1156,6 +1171,23 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             #positional_match
         }
     };
+    let separator_arm = if preserving.is_empty() {
+        quote!(__wa::Arg::Separator { .. } => {})
+    } else {
+        quote! {
+            __wa::Arg::Separator { offset: __offset } => {
+                if matches!(__position, #(#preserving)|*) {
+                    __input.resume_flags();
+                    let __word = __wa::Word {
+                        value: __wa::BStr::new(b"--"),
+                        offset: __offset,
+                        after_separator: false,
+                    };
+                    #positional_match
+                }
+            }
+        }
+    };
     let position = (!positionals.is_empty()).then(|| quote!(let mut __position: usize = 0;));
     let filled_slot = track_filled.then(|| quote!(let mut __filled = false;));
 
@@ -1326,7 +1358,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #version_short
                             _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
                         },
-                        __wa::Arg::Separator { .. } => {}
+                        #separator_arm
                         #word_arm
                     }
                 }
@@ -1832,10 +1864,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                     "required" => DoubleDash::Required,
                     "automatic" => DoubleDash::Automatic,
                     "optional" => DoubleDash::Optional,
+                    "preserve" => DoubleDash::Preserve,
                     _ => {
                         return Err(syn::Error::new(
                             mode.span(),
-                            "expected \"required\", \"automatic\" or \"optional\"",
+                            "expected \"required\", \"automatic\", \"optional\" or \"preserve\"",
                         ));
                     }
                 });

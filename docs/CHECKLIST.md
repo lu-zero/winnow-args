@@ -98,7 +98,8 @@ where the references disagree and we picked a side.
 - [ ] `var_min` / `var_max`; a variadic that is not last
 - [x] `double_dash = "required"` (words after `--` only, past earlier positionals;
       `arg_requires_double_dash`) and `"automatic"` (`Argv::stop_flags` once filled)
-- [ ] `double_dash = "preserve"`
+- [x] `double_dash = "preserve"`: a `--` reaching it is a value and stops nothing;
+      `token::separator_word` for combinators
 
 ## 5. Subcommands
 
