@@ -8,6 +8,12 @@ line says otherwise.
 Legend: `[x]` done in phase 1 · `[ ]` not yet · **decision** marks a place
 where the references disagree and we picked a side.
 
+Two downstream users have grammars of their own, tracked apart:
+[CHECKLIST-brush.md](./CHECKLIST-brush.md) (bash builtins in brush: `+` options,
+option zones, `echo`'s all-or-nothing option words) and
+[CHECKLIST-ld.md](./CHECKLIST-ld.md) (GNU `ld`'s command line for mold and wild:
+one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
+
 ## 0. Foundations
 
 - [x] Workspace: `winnow-args` (runtime), `winnow-args-derive` (proc-macro), `bench`
