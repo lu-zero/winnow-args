@@ -135,11 +135,23 @@ impl<'i> Arg<'i> {
     #[inline(always)]
     pub fn check_switch(&self) -> Result<(), Error> {
         match self {
-            Arg::Long(LongFlag { value: Some(v), .. }) => {
-                Err(Error::unexpected_value(self.offset(), self.spelling(), v))
-            }
+            Arg::Long(LongFlag { value: Some(v), .. }) => Err(self.unexpected_value(v)),
             _ => Ok(()),
         }
+    }
+
+    // The errors of the continuations above, built out of line: they are
+    // inlined into every flag's arm, and only this call should be.
+    #[cold]
+    #[inline(never)]
+    fn unexpected_value(&self, value: &BStr) -> Error {
+        Error::unexpected_value(self.offset(), self.spelling(), value)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn missing_value(&self) -> Error {
+        Error::missing_value(self.offset(), self.spelling())
     }
 
     /// Finish an option, committing: a missing value is an error, not a reason
@@ -163,7 +175,7 @@ impl<'i> Arg<'i> {
     ) -> Result<&'i BStr, Error> {
         match self.next_value(input, options) {
             Some(v) => Ok(v),
-            None => Err(Error::missing_value(self.offset(), self.spelling())),
+            None => Err(self.missing_value()),
         }
     }
 

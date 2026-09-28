@@ -39,6 +39,7 @@ pub mod combinator;
 pub mod env;
 pub mod error;
 pub mod help;
+mod store;
 pub mod stream;
 pub mod token;
 pub mod value;
@@ -352,6 +353,7 @@ pub mod __private {
         Ok(())
     }
     pub use crate::env;
+    pub use crate::store::{push, push_from, push_word, set, set_from, set_word};
     pub use crate::token::{Arg, ValueOptions, Word, arg, number, split};
     pub use crate::value::{ChoiceError, FromArg};
     pub use winnow::stream::BStr;
