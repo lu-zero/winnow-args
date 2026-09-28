@@ -282,17 +282,25 @@ fn strip(text: &str) -> String {
     out + rest
 }
 
-fn styled(line: &[&str], env: &[(&str, &str)]) -> String {
+fn styled_as(style: Style, line: &[&str], env: &[(&str, &str)]) -> String {
     let e = parse::<Cli>(line).unwrap_err();
-    with_env(env, || e.render_help_styled("mise", Style::CLAP).unwrap())
+    with_env(env, || e.render_help_styled("mise", style).unwrap())
+}
+
+fn styled(line: &[&str], env: &[(&str, &str)]) -> String {
+    styled_as(Style::CLAP, line, env)
 }
 
 #[test]
 fn color_paints_without_moving_anything() {
     for line in [&["-h"][..], &["--help"], &["use", "-h"]] {
-        for columns in ["100", "50"] {
+        for (columns, style) in [
+            ("100", Style::COLORED),
+            ("50", Style::COLORED),
+            ("50", Style::CLAP),
+        ] {
             let env = [("COLUMNS", columns)];
-            let colored = styled(line, &env);
+            let colored = styled_as(style, line, &env);
             assert_ne!(colored, help_at(line, &env), "{line:?} is painted");
             assert_eq!(
                 strip(&colored),
@@ -301,6 +309,32 @@ fn color_paints_without_moving_anything() {
             );
         }
     }
+}
+
+#[test]
+fn color_defaults_to_usage_palette_with_cyan_values() {
+    let text = styled_as(Style::COLORED, &["-h"], &[]);
+    // The program stays plain; in `[NAME]` only the name is painted.
+    assert!(
+        text.contains("\u{1b}[1;33mUsage:\u{1b}[0m mise [\u{1b}[1;36mOPTIONS\u{1b}[0m] [\u{1b}[1;36mCOMMAND\u{1b}[0m]"),
+        "{text:?}"
+    );
+    assert!(text.contains("\u{1b}[1;33mOptions:\u{1b}[0m\n"), "{text:?}");
+    assert!(
+        text.contains(
+            "  \u{1b}[1;32m-C\u{1b}[0m, \u{1b}[1;32m--cd\u{1b}[0m \u{1b}[1;36m<DIR>\u{1b}[0m"
+        ),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("  \u{1b}[1;32muse\u{1b}[0m, \u{1b}[1;32mu\u{1b}[0m    Installs"),
+        "{text:?}"
+    );
+    let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
+    assert!(
+        text.contains("  [\u{1b}[1;36mTOOL@VERSION\u{1b}[0m]...  Tool(s) to add"),
+        "{text:?}"
+    );
 }
 
 #[test]
@@ -334,7 +368,7 @@ fn color_follows_the_environment() {
     let auto = |env: &[(&str, &str)], terminal| with_env(env, || Style::auto_for(terminal));
     // Under `with_env` a terminal does not count: only the variables decide.
     assert_eq!(auto(&[], true), Style::PLAIN);
-    assert_eq!(auto(&[("CLICOLOR_FORCE", "1")], false), Style::CLAP);
+    assert_eq!(auto(&[("CLICOLOR_FORCE", "1")], false), Style::COLORED);
     assert_eq!(auto(&[("CLICOLOR_FORCE", "0")], false), Style::PLAIN);
     assert_eq!(
         auto(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")], true),
@@ -343,7 +377,7 @@ fn color_follows_the_environment() {
     // An empty `NO_COLOR` refuses nothing.
     assert_eq!(
         auto(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "")], false),
-        Style::CLAP
+        Style::COLORED
     );
 }
 

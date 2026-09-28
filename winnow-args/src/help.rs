@@ -141,9 +141,11 @@ fn terminal_width() -> Option<usize> {
 pub struct Style {
     /// `Usage:`, `Options:` and the other headings.
     pub header: &'static str,
-    /// What is typed as is: the program, flags, subcommand names.
+    /// The program's name in the usage line.
+    pub program: &'static str,
+    /// What is typed as is: flags, subcommand names.
     pub literal: &'static str,
-    /// Value names: `<PATH>`, `[FILE]...`.
+    /// Value names: all of `<PATH>`, the name in `[FILE]`.
     pub placeholder: &'static str,
     /// `error:`.
     pub error: &'static str,
@@ -160,6 +162,7 @@ impl Style {
     /// Nothing painted: for pipes, files and tests.
     pub const PLAIN: Style = Style {
         header: "",
+        program: "",
         literal: "",
         placeholder: "",
         error: "",
@@ -167,11 +170,27 @@ impl Style {
         valid: "",
     };
 
+    /// The default colors: usage's help palette — bold yellow headers, bold
+    /// green flags and subcommands, the program plain — with bold cyan where
+    /// usage has magenta, for value names. Errors take the codes clap and
+    /// usage's diagnostics share: bold red `error:`, yellow for what was typed
+    /// wrong, green for what is missing.
+    pub const COLORED: Style = Style {
+        header: "\u{1b}[1;33m",
+        program: "",
+        literal: "\u{1b}[1;32m",
+        placeholder: "\u{1b}[1;36m",
+        error: "\u{1b}[1m\u{1b}[31m",
+        invalid: "\u{1b}[33m",
+        valid: "\u{1b}[32m",
+    };
+
     /// clap 4's default colors: bold underlined headers, bold literals, plain
     /// placeholders, bold red `error:`, yellow for what was typed wrong and
     /// green for what is missing.
     pub const CLAP: Style = Style {
         header: "\u{1b}[1m\u{1b}[4m",
+        program: "\u{1b}[1m",
         literal: "\u{1b}[1m",
         placeholder: "",
         error: "\u{1b}[1m\u{1b}[31m",
@@ -179,7 +198,7 @@ impl Style {
         valid: "\u{1b}[32m",
     };
 
-    /// [`Style::CLAP`] when standard output is a terminal, else
+    /// [`Style::COLORED`] when standard output is a terminal, else
     /// [`Style::PLAIN`]; see [`Style::auto_for`].
     pub fn auto() -> Style {
         use std::io::IsTerminal as _;
@@ -203,7 +222,7 @@ impl Style {
         }
         let forced = set("CLICOLOR_FORCE").is_some_and(|v| v != "0");
         if forced || (is_terminal && !crate::env::overridden()) {
-            Style::CLAP
+            Style::COLORED
         } else {
             Style::PLAIN
         }
@@ -239,6 +258,18 @@ impl Cell {
     fn push(&mut self, paint: &str, text: &str) {
         push_painted(&mut self.text, paint, text);
         self.width += text.chars().count();
+    }
+
+    /// `<NAME>` painted whole, or `[NAME]` with only the name painted, as usage
+    /// does: square brackets say "optional", they are not part of the value.
+    fn push_placeholder(&mut self, style: Style, required: bool, name: &str) {
+        if required {
+            self.push(style.placeholder, &format!("<{name}>"));
+        } else {
+            self.push("", "[");
+            self.push(style.placeholder, name);
+            self.push("", "]");
+        }
     }
 }
 
@@ -297,7 +328,7 @@ pub fn render_styled(
         .filter(|i| i.positional)
         .map(|i| {
             let mut cell = Cell::default();
-            cell.push(style.placeholder, &placeholder(i));
+            push_item_placeholder(&mut cell, style, i);
             (cell, describe(i, long))
         })
         .collect();
@@ -359,49 +390,49 @@ pub fn render_styled(
     out
 }
 
-/// `prog [OPTIONS] <A> [B]... [COMMAND]`, the program painted as a literal.
+/// `prog [OPTIONS] <A> [B]... [COMMAND]`.
 pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
-    let mut line = Style::paint(style.literal, &path.join(" "));
+    let mut line = Style::paint(style.program, &path.join(" "));
+    let mut cell = Cell::default();
     if command.items.iter().any(|i| !i.positional && !i.hide) || command.help_flag {
-        line.push_str(" [OPTIONS]");
+        cell.push("", " ");
+        cell.push_placeholder(style, false, "OPTIONS");
     }
     for item in command
         .items
         .iter()
         .filter(|i| i.positional && !i.hide && !i.trailing)
     {
-        line.push(' ');
-        push_painted(&mut line, style.placeholder, &placeholder(item));
+        cell.push("", " ");
+        push_item_placeholder(&mut cell, style, item);
     }
     if !command.subcommands.is_empty() {
-        line.push_str(if command.subcommand_required {
-            " <COMMAND>"
-        } else {
-            " [COMMAND]"
-        });
+        cell.push("", " ");
+        cell.push_placeholder(style, command.subcommand_required, "COMMAND");
     }
+    line.push_str(&cell.text);
     for item in command
         .items
         .iter()
         .filter(|i| i.positional && !i.hide && i.trailing)
     {
         // clap paints the brackets and `--` as literals: they are typed.
-        line.push(' ');
-        push_painted(&mut line, style.literal, "[--");
-        line.push(' ');
-        push_painted(&mut line, style.placeholder, &placeholder(item));
-        push_painted(&mut line, style.literal, "]");
+        let mut cell = Cell::default();
+        cell.push("", " ");
+        cell.push(style.literal, "[--");
+        cell.push("", " ");
+        push_item_placeholder(&mut cell, style, item);
+        cell.push(style.literal, "]");
+        line.push_str(&cell.text);
     }
     line
 }
 
-fn placeholder(item: &Item) -> String {
-    let name = item.value_name.unwrap_or("VALUE");
-    let dots = if item.multiple { "..." } else { "" };
-    if item.required {
-        format!("<{name}>{dots}")
-    } else {
-        format!("[{name}]{dots}")
+/// A positional's placeholder: `<NAME>` or `[NAME]`, then `...` if repeated.
+fn push_item_placeholder(cell: &mut Cell, style: Style, item: &Item) {
+    cell.push_placeholder(style, item.required, item.value_name.unwrap_or("VALUE"));
+    if item.multiple {
+        cell.push("", "...");
     }
 }
 
