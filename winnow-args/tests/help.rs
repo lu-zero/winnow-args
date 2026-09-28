@@ -5,6 +5,7 @@
 #![cfg(all(feature = "derive", feature = "help-text"))]
 
 use winnow::stream::BStr;
+use winnow_args::help::Style;
 use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
 
 /// Dev tools, env vars, and tasks in one CLI
@@ -266,5 +267,96 @@ fn long_help_wraps_its_indented_blocks() {
             "          Change to this directory before\n          executing the command\n"
         ),
         "{text}"
+    );
+}
+
+/// `text` without its SGR escapes.
+fn strip(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('\u{1b}') {
+        out.push_str(&rest[..at]);
+        let end = rest[at..].find('m').expect("an SGR sequence ends in `m`");
+        rest = &rest[at + end + 1..];
+    }
+    out + rest
+}
+
+fn styled(line: &[&str], env: &[(&str, &str)]) -> String {
+    let e = parse::<Cli>(line).unwrap_err();
+    with_env(env, || e.render_help_styled("mise", Style::CLAP).unwrap())
+}
+
+#[test]
+fn color_paints_without_moving_anything() {
+    for line in [&["-h"][..], &["--help"], &["use", "-h"]] {
+        for columns in ["100", "50"] {
+            let env = [("COLUMNS", columns)];
+            let colored = styled(line, &env);
+            assert_ne!(colored, help_at(line, &env), "{line:?} is painted");
+            assert_eq!(
+                strip(&colored),
+                help_at(line, &env),
+                "{line:?} at {columns}"
+            );
+        }
+    }
+}
+
+#[test]
+fn color_uses_clap_codes() {
+    // Measured from clap 4's help for the bench CLI.
+    let text = styled(&["-h"], &[]);
+    assert!(
+        text.contains(
+            "\u{1b}[1m\u{1b}[4mUsage:\u{1b}[0m \u{1b}[1mmise\u{1b}[0m [OPTIONS] [COMMAND]"
+        ),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("\u{1b}[1m\u{1b}[4mOptions:\u{1b}[0m\n"),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("  \u{1b}[1m-v\u{1b}[0m, \u{1b}[1m--verbose\u{1b}[0m...  Show extra output"),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("  \u{1b}[1muse\u{1b}[0m, \u{1b}[1mu\u{1b}[0m    Installs"),
+        "{text:?}"
+    );
+    // Placeholders stay plain, as in clap.
+    assert!(text.contains("\u{1b}[1m--cd\u{1b}[0m <DIR>"), "{text:?}");
+}
+
+#[test]
+fn color_follows_the_environment() {
+    let auto = |env: &[(&str, &str)], terminal| with_env(env, || Style::auto_for(terminal));
+    // Under `with_env` a terminal does not count: only the variables decide.
+    assert_eq!(auto(&[], true), Style::PLAIN);
+    assert_eq!(auto(&[("CLICOLOR_FORCE", "1")], false), Style::CLAP);
+    assert_eq!(auto(&[("CLICOLOR_FORCE", "0")], false), Style::PLAIN);
+    assert_eq!(
+        auto(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")], true),
+        Style::PLAIN
+    );
+    // An empty `NO_COLOR` refuses nothing.
+    assert_eq!(
+        auto(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "")], false),
+        Style::CLAP
+    );
+}
+
+#[test]
+fn errors_paint_what_was_typed() {
+    let e = parse::<Cli>(&["--fore"]).unwrap_err();
+    assert_eq!(
+        e.render(Style::CLAP),
+        "\u{1b}[1m\u{1b}[31merror:\u{1b}[0m unknown flag `\u{1b}[33m--fore\u{1b}[0m`\n\n\
+         For more information, try '\u{1b}[1m--help\u{1b}[0m'."
+    );
+    assert_eq!(
+        e.render(Style::PLAIN),
+        format!("error: {e}\n\nFor more information, try '--help'.")
     );
 }

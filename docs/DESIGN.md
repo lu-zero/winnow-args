@@ -138,6 +138,15 @@ code would test the user's crate. So the derive wraps each piece of prose in
 its `help-text` feature: the literal, or `""`. The structure (names, values,
 defaults, choices, the version) stays either way.
 
+Color is a `help::Style`: one SGR sequence per role (header, literal,
+placeholder, error, invalid, valid), clap 4's codes by default. Rendering
+builds each left-hand cell as painted text plus its visible width, so padding
+and wrapping never count escapes, and the painted page with its escapes
+stripped is the plain page. `render` and `render_help` stay plain strings;
+`report`, which knows the stream, picks `Style::auto` (`NO_COLOR`, then
+`CLICOLOR_FORCE`, then whether it is a terminal). No dependency: the escapes are
+constants and `std::io::IsTerminal` answers the rest.
+
 ## Next steps
 
 See `CHECKLIST.md`: binary size (without help prose mise's shadow is still

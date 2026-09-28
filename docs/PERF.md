@@ -759,3 +759,30 @@ by 175 KB (1 163 168 → 988 064) but grows winnow-args' by 23 KB
 winnow-args' mise is 1 375 864 bytes, still 39 % above usage with its prose.
 The per-struct match loops, inlined whole, are what the size work has to
 attack.
+
+## 29. Color
+
+`help::Style` holds one SGR sequence per role; `Style::CLAP` has clap 4's
+codes, measured from clap's own help and errors for the bench CLI (bold
+underlined headers, bold literals — program, each flag spelling, subcommand
+names — plain placeholders, bold red `error:`, yellow for what was typed,
+green for what is missing, bold `--help` in the tip). `Style::auto` follows
+usage and clap: a non-empty `NO_COLOR` refuses, `CLICOLOR_FORCE` other than `0`
+forces, else color when the stream is a terminal; under `with_env` it never is.
+`report` paints help on stdout and errors on stderr accordingly;
+`render_help` stays plain and `render_help_styled`/`Error::render` take a
+style. A test holds the painted page, escapes stripped, equal to the plain one
+at two widths.
+
+`release-lto`, against step 28:
+
+| | before | after |
+|---|------:|------:|
+| `help-n-mise-wa` stripped | 1 710 072 | 1 715 016 |
+| `parse-n-mise-wa` stripped | 1 694 272 | 1 694 272 |
+| render `--help` (plain) | 253 725 | 254 288 |
+| render `bootstrap remote -h` (plain) | 154 526 | 170 843 |
+| parse `use -g node@20` | 3 403 | 3 403 |
+
+Color costs 4.9 KB where help is rendered and nothing elsewhere. Plain
+rendering pays up to 10 % for building each flag's cell piece by piece.

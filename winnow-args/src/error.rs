@@ -10,6 +10,7 @@ use std::fmt;
 
 use winnow::error::{FromExternalError, ModalError, ParserError};
 
+use crate::help::Style;
 use crate::stream::Argv;
 
 /// Boxed cause of an [`ErrorKind::InvalidValue`].
@@ -198,15 +199,10 @@ impl Error {
         self
     }
 
-    /// The help to show for a [`ErrorKind::HelpRequested`], `program` leading the usage line.
+    /// The help to show for a [`ErrorKind::HelpRequested`], `program` leading
+    /// the usage line; plain, see [`Error::render_help_styled`] for color.
     pub fn render_help(&self, program: &str) -> Option<String> {
-        let request = self.detail.as_deref()?.request.as_ref()?;
-        if self.kind != ErrorKind::HelpRequested {
-            return None;
-        }
-        let mut path = vec![program];
-        path.extend(&request.path);
-        Some(crate::help::render(request.command, &path, request.long))
+        self.render_help_styled(program, Style::PLAIN)
     }
 
     /// `program version` for a [`ErrorKind::VersionRequested`].
@@ -296,50 +292,79 @@ impl PartialEq for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message(Style::PLAIN))
+    }
+}
+
+impl Error {
+    /// What went wrong, as [`Display`](fmt::Display) says it, with what was
+    /// typed painted `style.invalid` and what is missing `style.valid`.
+    pub fn message(&self, style: Style) -> String {
+        let bad = |text: &str| Style::paint(style.invalid, text);
+        let good = |text: &str| Style::paint(style.valid, text);
         let token = self.token().unwrap_or_default();
+        let value = self.value().unwrap_or_default();
         match self.kind {
-            ErrorKind::Backtrack => f.write_str("invalid command line"),
-            ErrorKind::UnknownFlag => write!(f, "unknown flag `{token}`"),
-            ErrorKind::UnexpectedArg => write!(f, "unexpected argument `{token}`"),
-            ErrorKind::MissingValue => write!(f, "`{token}` needs a value"),
-            ErrorKind::UnexpectedValue => write!(
-                f,
-                "`{token}` does not take a value, got `{}`",
-                self.value().unwrap_or_default()
+            ErrorKind::Backtrack => "invalid command line".to_owned(),
+            ErrorKind::UnknownFlag => format!("unknown flag `{}`", bad(token)),
+            ErrorKind::UnexpectedArg => format!("unexpected argument `{}`", bad(token)),
+            ErrorKind::MissingValue => format!("`{}` needs a value", good(token)),
+            ErrorKind::UnexpectedValue => format!(
+                "`{}` does not take a value, got `{}`",
+                bad(token),
+                bad(value)
             ),
             ErrorKind::MissingRequired => match self.value() {
-                Some(by) => write!(f, "`{token}` is required by `{by}`"),
-                None => write!(f, "`{token}` is required"),
+                Some(by) => format!("`{}` is required by `{}`", good(token), bad(by)),
+                None => format!("`{}` is required", good(token)),
             },
-            ErrorKind::Conflict => write!(
-                f,
-                "`{token}` cannot be used with `{}`",
-                self.value().unwrap_or_default()
-            ),
-            ErrorKind::HelpRequested => f.write_str("help requested"),
-            ErrorKind::VersionRequested => f.write_str("version requested"),
+            ErrorKind::Conflict => format!("`{}` cannot be used with `{}`", bad(token), bad(value)),
+            ErrorKind::HelpRequested => "help requested".to_owned(),
+            ErrorKind::VersionRequested => "version requested".to_owned(),
             ErrorKind::RequiresDoubleDash => {
-                write!(f, "`{token}` can only be set after a `--` separator")
+                format!("`{}` can only be set after a `--` separator", bad(token))
             }
-            ErrorKind::MissingOneOf => write!(
-                f,
-                "one of {} is required ({token})",
-                self.value().unwrap_or_default()
-            ),
-            ErrorKind::MissingArgument => write!(f, "missing argument `{token}`"),
-            ErrorKind::MissingSubcommand => f.write_str("a subcommand is required"),
+            ErrorKind::MissingOneOf => format!("one of {} is required ({token})", good(value)),
+            ErrorKind::MissingArgument => format!("missing argument `{}`", good(token)),
+            ErrorKind::MissingSubcommand => "a subcommand is required".to_owned(),
             ErrorKind::InvalidValue | ErrorKind::InvalidChoice => {
-                write!(
-                    f,
-                    "invalid value `{}` for `{token}`",
-                    self.value().unwrap_or_default()
-                )?;
+                let mut text = format!("invalid value `{}` for `{token}`", bad(value));
                 if let Some(cause) = self.detail.as_deref().and_then(|d| d.cause.as_ref()) {
-                    write!(f, ": {cause}")?;
+                    text.push_str(": ");
+                    text.push_str(&cause.to_string());
                 }
-                Ok(())
+                text
             }
         }
+    }
+
+    /// The whole report for an error that is not help or version:
+    /// `error: …` and a pointer to `--help`, as clap prints it.
+    pub fn render(&self, style: Style) -> String {
+        format!(
+            "{} {}\n\nFor more information, try '{}'.",
+            Style::paint(style.error, "error:"),
+            self.message(style),
+            Style::paint(style.literal, "--help"),
+        )
+    }
+
+    /// [`Error::render_help`], painted with `style`.
+    pub fn render_help_styled(&self, program: &str, style: Style) -> Option<String> {
+        let request = self.detail.as_deref()?.request.as_ref()?;
+        if self.kind != ErrorKind::HelpRequested {
+            return None;
+        }
+        let mut path = vec![program];
+        path.extend(&request.path);
+        let width = crate::help::width();
+        Some(crate::help::render_styled(
+            request.command,
+            &path,
+            request.long,
+            width,
+            style,
+        ))
     }
 }
 
