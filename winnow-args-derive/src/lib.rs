@@ -60,6 +60,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             Some(ty) => quote!(<#ty as ::winnow_args::Args>::HELP),
             None => {
                 let about = &info.about;
+                let about = text(about);
                 quote!(&::winnow_args::help::Command {
                     name: "",
                     about: #about,
@@ -76,10 +77,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         };
         let about = match (&inner, info.about.is_empty()) {
             (Some(ty), true) => quote!(<#ty as ::winnow_args::Args>::HELP.about),
-            _ => {
-                let about = &info.about;
-                quote!(#about)
-            }
+            _ => text(&info.about),
         };
         let shown = &info.names[1..=info.shown];
         let all = &info.names;
@@ -119,6 +117,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         patterns.push(pattern);
     }
     let (about, long_about) = docs(&input.attrs);
+    let (about, long_about) = (text(&about), text(&long_about));
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -252,6 +251,15 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     })
+}
+
+/// Help prose, left out of binaries built without winnow-args' `help-text`.
+fn text(prose: &str) -> TokenStream2 {
+    if prose.is_empty() {
+        quote!("")
+    } else {
+        quote!(::winnow_args::__text!(#prose))
+    }
 }
 
 /// A variant's spellings and help.
@@ -510,7 +518,7 @@ impl Field {
         } else {
             opt_str(self.value_name.as_deref())
         };
-        let (help, long_help) = (&self.help, &self.long_help);
+        let (help, long_help) = (text(&self.help), text(&self.long_help));
         let heading = opt_str(self.heading.as_deref());
         let hide = self.hide;
         let required =
@@ -862,6 +870,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
     let long_about = long_about.unwrap_or(doc_long_about);
+    let (about, long_about) = (text(&about), text(&long_about));
+    let (after_help, after_long_help) = (text(&after_help), text(&after_long_help));
     let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;

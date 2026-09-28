@@ -664,3 +664,27 @@ Parsing is unchanged (3594 warm instructions on `use -g node@20`). Rendering
 extra lists; `--help` is unchanged at 256 384. Both binaries grow 512 bytes: the
 lists are `static` help data, linked even where help is never rendered, which
 is what the next step is about.
+
+## 26. `help-text`: leave help prose out
+
+A cargo feature of winnow-args, on by default. The derive wraps every piece
+of prose (doc comments, `help`, `about`, `after_help`, …) in
+`winnow_args::__text!`, which expands to the literal with the feature and to
+`""` without; winnow-args picks the definition, since a proc macro cannot see
+its features. Help without prose still has its usage line, commands, flags,
+value names, defaults, env, possible values and version. `bench` has a
+default `help-text` feature, so `cargo build -p bench --no-default-features`
+builds every winnow-args binary without prose.
+
+| stripped bytes | with prose | without |
+|----------------|------:|------:|
+| `parse-n-mise-wa` | 1 832 552 | 1 611 632 |
+| `help-n-mise-wa`  | 1 850 080 | 1 629 160 |
+| `parse-n-wa` (no doc comments) | 380 400 | 380 400 |
+| usage's mise shadow, for reference | 1 174 488 | — |
+
+mise's prose is 221 KB, 12 % of the binary. Without it winnow-args' mise
+is still 37 % larger than usage's (which keeps its prose), so the size item
+stays open. Parsing is unaffected (`use -g node@20`: 3594 warm instructions
+with, 3570 without, within layout noise); rendering `--help` drops from
+256 384 to 85 620 instructions with less text to lay out.

@@ -10,7 +10,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 winnow = { path = "../winnow", version = "1.0.4", default-features = false, features = ["std", "parser"] }
-winnow-args = { path = "winnow-args", version = "0.1.0" }
+winnow-args = { path = "winnow-args", version = "0.1.0", default-features = false, features = ["derive"] }
 winnow-args-derive = { path = "winnow-args-derive", version = "=0.1.0" }
 proc-macro2 = "1"
 quote = "1"

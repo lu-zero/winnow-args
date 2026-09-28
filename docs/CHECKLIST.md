@@ -151,7 +151,8 @@ where the references disagree and we picked a side.
       errors on stderr (2)
 - [x] Wrapping to `COLUMNS` (else 100); the column capped at two fifths of the page
 - [x] `[possible values]` for `ValueEnum` fields: `FromArg::CHOICES`, the visible variants
-- [ ] A cargo feature to leave help data out of binaries that do not need it
+- [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
+      without it help keeps its structure (`__text!` expands to `""`)
 - [ ] Shell completions; emit a usage KDL spec
 
 ## 9. Derive (`winnow-args-derive`)

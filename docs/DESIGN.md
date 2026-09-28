@@ -132,8 +132,14 @@ the column (at most two fifths of the page; a wider item has its description
 on the next line). The wrapping borrows slices of the text, so a line that
 fits costs one scan.
 
+A proc macro cannot see winnow-args' features, and a `#[cfg]` in generated
+code would test the user's crate. So the derive wraps each piece of prose in
+`winnow_args::__text!`, a `macro_rules!` whose definition winnow-args picks by
+its `help-text` feature: the literal, or `""`. The structure (names, values,
+defaults, choices, the version) stays either way.
+
 ## Next steps
 
-See `CHECKLIST.md`: help output extras (`[possible values]` for `ValueEnum`
-fields, a feature to leave help data out), binary size, usage's conformance
-corpus, then consolidating the draft history.
+See `CHECKLIST.md`: binary size (without help prose mise's shadow is still
+37 % larger than usage's), usage's conformance corpus, then consolidating the
+draft history.
