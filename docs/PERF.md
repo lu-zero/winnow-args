@@ -570,3 +570,18 @@ two flags with `overrides_with` each other; bpaf 0.10 takes two `req_flag`s,
 Warm ns (min), load average ~4–8. Warm instructions per parse against step 20:
 wa 1329 → 1338 and 2158 → 2167, the default filled into the new slot and
 unwrapped on every parse; wa-disp 1626 → 1628 and 2688 → 2690.
+
+## 22. `double_dash = "preserve"`
+
+usage's fourth `double_dash` mode: when a `--` arrives while a `preserve`
+positional is next to fill, the `--` is one of its values and flags go on
+being flags (`wrap npm -- -v` gives `ARGS = ["--"]` and `-v`). The derive
+emits the check in its `Separator` arm only for a struct that declares one,
+and rejects `preserve` beside a `double_dash = "required"` positional, whose
+`--` it would keep. Combinators take `token::separator_word`, `--` as a word.
+
+Neither clap nor bpaf 0.10 keeps `--` as a value, mise does not use it, and the
+benchmark CLI's trailing `CMD` needs its `--`, so no line is added. What a CLI
+without `preserve` pays is nothing: warm instructions per parse are identical
+to step 21 (wa 1338 and 2167, wa-disp 1628 and 2690), and `… a -- node app.js
+-v` runs in 252 ns for wa against usage's 573.

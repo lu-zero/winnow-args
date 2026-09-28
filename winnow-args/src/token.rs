@@ -535,6 +535,20 @@ pub fn word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
     })
 }
 
+/// `--` as a word, for a positional declared `double_dash = "preserve"`: the
+/// separator is its value and flags go on being flags.
+pub fn separator_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
+    if kind(input)? != Kind::Separator {
+        return Err(Error::from_input(input));
+    }
+    let offset = input.offset();
+    Ok(Word {
+        after_separator: false,
+        value: input.take_word(),
+        offset,
+    })
+}
+
 /// Succeed at the end of the command line; otherwise report what is left over.
 pub fn finish(input: &mut Argv<'_>) -> Result<(), Error> {
     if input.is_empty() {
