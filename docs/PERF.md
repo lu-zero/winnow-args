@@ -721,5 +721,41 @@ So `terminal-size` costs 1 368 bytes where help is rendered and nothing
 elsewhere; rendering `--help` is unchanged (256 282 instructions, plus one
 `ioctl`). The `help-text` saving of step 26 was really 318 KB (19 %), not
 221 KB. Against usage with one codegen unit, winnow-args' mise is 44 % larger
-with its prose and 16 % larger without. Size comparisons from here on use one
-codegen unit.
+with its prose and 16 % larger without. Size comparisons from here on use the
+`release-lto` profile (step 28).
+
+## 28. A `release-lto` profile: one codegen unit, fat LTO
+
+`[profile.release-lto]` inherits `release` with `codegen-units = 1` and
+`lto = "fat"`; `PROFILE=release-lto tasks/perf.sh` builds and measures with it
+(the header line names the profile). `release` stays the default, so earlier
+entries remain comparable with new default runs.
+
+Example CLI (load average ~3):
+
+| framework | instr | warm ns | `… a b c` instr | warm ns | stripped |
+|-----------|------:|------:|------:|------:|------:|
+| usage     |   2457 |   239 |   4877 |   436 |   341 432 |
+| wa        |   1443 |   122 |   2605 |   182 |   342 544 |
+| wa-disp   |   1494 |   134 |   2691 |   197 |   337 336 |
+| wa-comb   |   2139 |   203 |   3866 |   348 |   344 168 |
+| bpaf 0.10 | 122015 | 14477 | 137535 | 16421 |   710 072 |
+| clap 4    | 111099 | 12223 | 128439 | 14473 |   618 344 |
+
+mise (cold instructions / warm ns min):
+
+| framework | `use -g node@20` | `-C … install …` | `ls --json` | `settings set …` | stripped |
+|-----------|------:|------:|------:|------:|------:|
+| usage     | 6863 / 697 | 8147 / 825 | 5300 / 545 | 6133 / 610 | 988 064 |
+| wa        | 3661 / 308 | 5356 / 422 | 3364 / 268 | 3509 / 276 | 1 694 272 |
+| bpaf 0.10 | 1.13 M / 160 049 | 1.12 M / 158 057 | 1.12 M / 158 512 | 1.15 M / 161 564 | 2 609 008 |
+| clap 4    | 4.43 M / 721 864 | 4.45 M / 741 379 | 4.46 M / 723 829 | 4.70 M / 770 355 | 2 645 320 |
+
+LTO helps the combinators most: `wa-disp` goes from 1886 to 1494 cold
+instructions and `wa-comb` from 2610 to 2139, both now close to the derive,
+since their generic parsers get inlined across crates. It shrinks usage's mise
+by 175 KB (1 163 168 → 988 064) but grows winnow-args' by 23 KB
+(1 671 664 → 1 694 272), so the size gap is 71 %; without help prose
+winnow-args' mise is 1 375 864 bytes, still 39 % above usage with its prose.
+The per-struct match loops, inlined whole, are what the size work has to
+attack.
