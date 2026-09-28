@@ -262,7 +262,7 @@ pub mod __private {
         // Letters are ASCII in practice: decode only from the first byte that is not.
         while let Some((&byte, tail)) = rest.split_first() {
             if !byte.is_ascii() {
-                let Ok(letters) = str::from_utf8(rest) else {
+                let Ok(letters) = core::str::from_utf8(rest) else {
                     return false;
                 };
                 return letters.chars().try_for_each(|letter| match known(letter) {

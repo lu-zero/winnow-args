@@ -69,7 +69,7 @@ fn flags_go_on_after_it() {
 #[test]
 fn before_the_preserving_positional_it_is_a_separator() {
     let w = parse(&["--", "-v", "x"]);
-    assert_eq!(w.verbose, false);
+    assert!(!w.verbose);
     assert_eq!(w.tool.as_deref(), Some("-v"));
     assert_eq!(w.args, strings(&["x"]));
 }
