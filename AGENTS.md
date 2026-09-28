@@ -36,7 +36,9 @@ divergence is recorded as a **decision** in the checklist, not left implicit.
 
 ## Reference checkouts
 
-Sibling checkouts are read for behaviour and API, never copied from:
+Sibling checkouts are read for behaviour and API, never copied from (the one
+exception is usage's generated mise shadows, vendored in `bench/shadows/` with
+usage's license):
 
 - `../winnow` — the winnow version we build on; read it rather than relying on
   memory of older winnow APIs.
@@ -47,9 +49,10 @@ Sibling checkouts are read for behaviour and API, never copied from:
 ## Dependencies
 
 Crates.io deps take a semver requirement (`version = "1"`), never an exact
-pin. Unpublished sibling crates needed only by `bench` (bpaf 0.10,
-usage-argv/usage-derive) are path deps there; nothing published may depend
-on a path-only crate.
+pin. The tree builds from a fresh clone: `bench` takes usage-argv and
+usage-derive from crates.io, bpaf 0.10 (unpublished) as a git dependency
+pinned to a commit in the workspace manifest, and usage's mise shadows from
+`bench/shadows/`. Nothing published may depend on a git or path-only crate.
 
 Local checkouts of published crates (e.g. `../winnow`) go in gitignored
 `.cargo/config.toml` as `[patch.crates-io]`, not as `path =` in a manifest.

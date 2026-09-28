@@ -618,7 +618,7 @@ pub fn run(mut parse: impl FnMut() -> bool) {
     }
 }
 
-/// usage (usage-derive over usage-argv), as `../usage/benches/shadows/mise` uses it.
+/// usage (usage-derive over usage-argv), as usage's mise shadow (`bench/shadows/mise`) uses it.
 pub mod usage {
     use usage_derive::{Args, Cli, Subcommands, ValueEnum};
 

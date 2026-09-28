@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Translate usage's mise shadow into winnow-args' vocabulary.
 
-Reads ../usage/benches/shadows/mise/src/lib.rs (usage-derive) and writes
-bench/shadow-mise/src/lib.rs (winnow-args derive). Every `#[usage(...)]` item is
+Reads bench/shadows/mise/src/lib.rs (usage's shadow, vendored; usage-derive)
+and writes bench/shadows/mise-wa/src/lib.rs (winnow-args derive). Every `#[usage(...)]` item is
 mapped or dropped by name; an unknown one stops the script. Every struct is
 `unknown_flags = "value"`, usage's default. Selectors that name
 no field of their own struct (an ancestor's global flag, which usage resolves at
@@ -15,8 +15,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT.parent / "usage/benches/shadows/mise/src/lib.rs"
-TARGET = ROOT / "bench/shadow-mise/src/lib.rs"
+SOURCE = ROOT / "bench/shadows/mise/src/lib.rs"
+TARGET = ROOT / "bench/shadows/mise-wa/src/lib.rs"
 
 # Metadata winnow-args does not model; none of it changes how a line parses.
 DROP = {"effect", "author", "bin", "mount", "value_enum", "var", "hide_default_value", "hide_env"}
