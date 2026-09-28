@@ -1,5 +1,6 @@
 //! `default_missing`: a flag whose value may be left out (usage's corpus vectors
 //! `*-default-missing-*`), and `restart_token`.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

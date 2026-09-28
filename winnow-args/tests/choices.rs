@@ -1,4 +1,5 @@
 //! Choices: value enums (both styles) and `choices(...)` on string fields (derive).
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

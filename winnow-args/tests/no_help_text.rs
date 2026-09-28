@@ -1,6 +1,6 @@
 //! Without the `help-text` feature, help keeps its structure (commands, flags,
 //! values, defaults, possible values, the version) and loses its prose.
-#![cfg(not(feature = "help-text"))]
+#![cfg(all(feature = "derive", not(feature = "help-text")))]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, ErrorKind, Subcommand, ValueEnum, with_env};

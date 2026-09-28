@@ -1,5 +1,6 @@
 //! Phase-1 checklist behaviour, run against the combinator parser and the
 //! derived one: both must agree on every command line.
+#![cfg(feature = "derive")]
 
 use std::path::PathBuf;
 

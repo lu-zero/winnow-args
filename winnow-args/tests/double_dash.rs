@@ -1,5 +1,6 @@
 //! `double_dash`: positionals that only take words after `--`, or that stop
 //! flag parsing once they have a value.
+#![cfg(feature = "derive")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind};

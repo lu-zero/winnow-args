@@ -9,6 +9,7 @@ cargo fmt --all -- --check
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 tasks/perf.sh [argv...]           # cold-parse comparison, see docs/DESIGN.md
 PROFILE=release-lto tasks/perf.sh # one codegen unit + fat LTO: for sizes
+tasks/check.sh                    # every feature set and profile, warning-free
 ```
 
 **Doctests:** plain `cargo test` runs them; `cargo nextest` does not. The

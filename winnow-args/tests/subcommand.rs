@@ -1,5 +1,6 @@
 //! Subcommands, run against the combinator parser and the derived one: the
 //! combinators build the derived types by hand, so the results compare directly.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::{alt, cond, dispatch, fail};
 use winnow::prelude::*;

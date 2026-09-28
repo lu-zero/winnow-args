@@ -1,5 +1,6 @@
 //! Positional arguments, run against the combinator parser and the derived
 //! one: both must agree on every command line.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

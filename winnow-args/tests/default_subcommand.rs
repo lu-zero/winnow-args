@@ -1,5 +1,6 @@
 //! `default_subcommand` and `arg_required_else_help`. The first follows usage's
 //! corpus, `09-default-subcommand.json`; each test names the vector it mirrors.
+#![cfg(feature = "derive")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, Subcommand};

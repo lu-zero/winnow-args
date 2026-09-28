@@ -1,5 +1,6 @@
 //! Repeatable options, run against the combinators (kind dispatch over an `alt`
 //! of flags, and a full dispatch on flag names) and the derive: all must agree.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::{alt, dispatch, fail};
 use winnow::prelude::*;

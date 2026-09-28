@@ -1,4 +1,5 @@
 //! Relations between arguments: conflicts, overrides, requires, groups, required.
+#![cfg(feature = "derive")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, with_env};

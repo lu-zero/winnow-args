@@ -1,5 +1,6 @@
 //! `unknown_flags = "value"`, usage's default: a flag-like word that names no
 //! flag is offered to the positionals whole, and never selects a subcommand.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

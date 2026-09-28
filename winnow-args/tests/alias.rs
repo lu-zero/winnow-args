@@ -1,4 +1,5 @@
 //! Aliases for long flags and subcommands, run against the combinators and the derive.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::{alt, dispatch, fail};
 use winnow::prelude::*;
