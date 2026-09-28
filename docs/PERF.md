@@ -839,3 +839,26 @@ per field (their identical arms had merged whole; now the inlined
 
 The call per value is the cost; `a b c` pays it for each positional word.
 usage's mise is 988 128 bytes, so the gap is now 58 % (was 71 %).
+
+## 32. Speed first: out-of-line stores reverted, cold errors kept
+
+Size only counts where speed does not pay for it: a leaner binary does not
+beat a faster parse, and LTO can already fold shared code when several CLIs
+link into one binary (a multi-call build), which usage's per-command tables
+cannot. Warm time (`time-sweep`, min ns, `release-lto`, three rounds each)
+judged step 31's changes:
+
+| line | before | out-of-line stores | cold errors only |
+|---|---:|---:|---:|
+| `use -g node@20` | 313–320 | 321–323 | 312–315 |
+| `-C /tmp install …` | 427–430 | 448–451 | 427–435 |
+| `settings set color false` | 267–276 | 287–289 | 266–272 |
+| `-v --path /tmp/x` | 122–124 | 131–133 | 123–124 |
+| `… a b c` | 179–185 | 191–193 | 181–187 |
+
+The out-of-line `store` helpers cost 2.5–8 % and are reverted. The `#[cold]`
+error constructors in `read_value`/`check_switch` are free and stay: mise is
+1 629 104 bytes stripped (−3.8 % against 1 694 272). Also tried and dropped:
+an out-of-line lexer (`token::arg` not inlined) saved 147 KB more but cost
+5–15 % (`use -g` 320 → 343 ns, `a b c` 191 → 219 ns), the store-forwarding
+stall of step 5.

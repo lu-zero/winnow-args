@@ -657,18 +657,6 @@ impl Field {
         });
         let unset = quote!(!#has #not_displaced);
         let assign = |value: TokenStream2, source: &str| match &self.kind {
-            Kind::Optional(_) | Kind::Required(_) | Kind::Many(_) if self.choices.is_none() => {
-                let source = LitStr::new(source, Span::call_site());
-                match (&self.kind, self.delimiter) {
-                    (Kind::Many(_), Some(d)) => quote! {
-                        __wa::push_from(&mut #slot, #value, #source, __input.offset(), ::core::option::Option::Some(#d))?;
-                    },
-                    (Kind::Many(_), None) => quote! {
-                        __wa::push_from(&mut #slot, #value, #source, __input.offset(), ::core::option::Option::None)?;
-                    },
-                    _ => quote!(__wa::set_from(&mut #slot, #value, #source, __input.offset())?;),
-                }
-            }
             Kind::Optional(ty) | Kind::Required(ty) => {
                 let value = self.source_value(ty, value, source);
                 quote!(#slot = ::core::option::Option::Some(#value);)
@@ -749,37 +737,6 @@ impl Field {
             quote!(#slot = ::core::option::Option::Some(#default);)
         };
         quote!(if #slot.is_none() { #value })
-    }
-
-    /// Store the positional `__word` into `slot` (an `Option`), out of line
-    /// unless there are `choices` to check first.
-    fn word_store(&self, ty: &Type, slot: TokenStream2, display: &LitStr) -> TokenStream2 {
-        if self.choices.is_none() {
-            return quote!(__wa::set_word(&mut #slot, &__word, #display)?;);
-        }
-        let value = self.word_value(ty, quote!(__word), display);
-        quote!(#slot = ::core::option::Option::Some(#value);)
-    }
-
-    /// Push the positional `__word` (split on the delimiter, if any) onto `slot`.
-    fn word_push(&self, ty: &Type, slot: TokenStream2, display: &LitStr) -> TokenStream2 {
-        if self.choices.is_none() {
-            let delimiter = match self.delimiter {
-                Some(d) => quote!(::core::option::Option::Some(#d)),
-                None => quote!(::core::option::Option::None),
-            };
-            return quote!(__wa::push_word(&mut #slot, &__word, #display, #delimiter)?;);
-        }
-        match self.delimiter {
-            None => {
-                let value = self.word_value(ty, quote!(__word), display);
-                quote!(#slot.push(#value);)
-            }
-            Some(d) => {
-                let value = self.word_value(ty, quote!(__piece), display);
-                quote!(for __piece in __word.split(#d) { #slot.push(#value); })
-            }
-        }
     }
 
     /// A positional word converted to `ty`, checked against `choices` first.
@@ -954,22 +911,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 __arg.check_switch()?;
                 #ident = #ident.saturating_add(1);
             },
-            Kind::Optional(_) | Kind::Required(_) | Kind::Many(_) if f.choices.is_none() => {
-                let read = f.read();
-                let store = match (&f.kind, f.delimiter) {
-                    (Kind::Many(_), Some(d)) => {
-                        quote!(__wa::push(&mut #ident, &__arg, __value, ::core::option::Option::Some(#d))?;)
-                    }
-                    (Kind::Many(_), None) => {
-                        quote!(__wa::push(&mut #ident, &__arg, __value, ::core::option::Option::None)?;)
-                    }
-                    _ => quote!(__wa::set(&mut #ident, &__arg, __value)?;),
-                };
-                quote! {
-                    let __value = #read;
-                    #store
-                }
-            }
             Kind::Optional(ty) | Kind::Required(ty) => {
                 let value = f.flag_value(ty, quote!(__value));
                 let read = f.read();
@@ -1068,10 +1009,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let stop = (dd(f) == DoubleDash::Automatic).then(|| quote!(__input.stop_flags();));
             match &f.kind {
                 Kind::Optional(ty) | Kind::Required(ty) => {
-                    let store = f.word_store(ty, quote!(#ident), &display);
+                    let value = f.word_value(ty, quote!(__word), &display);
                     quote! {
                         #i => {
-                            #store
+                            #ident = ::core::option::Option::Some(#value);
                             __position += 1;
                             #filled
                             #stop
@@ -1079,7 +1020,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
                 Kind::Many(ty) => {
-                    let push = f.word_push(ty, quote!(#ident), &display);
+                    let push = match f.delimiter {
+                        None => {
+                            let value = f.word_value(ty, quote!(__word), &display);
+                            quote!(#ident.push(#value);)
+                        }
+                        Some(d) => {
+                            let value = f.word_value(ty, quote!(__piece), &display);
+                            quote! {
+                                for __piece in __word.split(#d) {
+                                    #ident.push(#value);
+                                }
+                            }
+                        }
+                    };
                     quote! {
                         #i => {
                             #push
@@ -1106,12 +1060,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let ident = slot(&t.ident);
             let display = LitStr::new(&t.display(), Span::call_site());
             let store = match &t.kind {
-                Kind::Many(ty) => t.word_push(ty, quote!(#ident), &display),
+                Kind::Many(ty) => match t.delimiter {
+                    None => {
+                        let value = t.word_value(ty, quote!(__word), &display);
+                        quote!(#ident.push(#value);)
+                    }
+                    Some(d) => {
+                        let value = t.word_value(ty, quote!(__piece), &display);
+                        quote!(for __piece in __word.split(#d) { #ident.push(#value); })
+                    }
+                },
                 Kind::Optional(ty) | Kind::Required(ty) => {
-                    let store = t.word_store(ty, quote!(#ident), &display);
+                    let value = t.word_value(ty, quote!(__word), &display);
                     quote! {
                         if #ident.is_some() { #unexpected; }
-                        #store
+                        #ident = ::core::option::Option::Some(#value);
                     }
                 }
                 Kind::Switch | Kind::Count(_) => {
