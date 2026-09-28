@@ -626,3 +626,27 @@ leaving single letters to the fallback arm (nothing can be half applied) to
 
 (wa measured before the two fixes, so it is 60–90 instructions slower here
 than the final build.)
+
+## 24. Help wraps to the terminal width
+
+`help::render` wraps to `help::width()`: `COLUMNS` when set, else 100 (clap's
+width when it cannot ask the terminal; probing the terminal would need a
+dependency). Short help keeps descriptions beside their item, the column capped
+at two fifths of the page as usage does, and an item wider than that has its
+description on the next line; long help wraps its indented blocks; the about and
+after text wrap too. `render_width` takes an explicit width.
+
+Help costs nothing while parsing: parse instructions and the parse binaries'
+stripped size are unchanged. A new `help-n-mise-wa` renders what its command
+line asks for, so the help steps have a number. Warm instructions per render:
+
+| line | unwrapped | first cut | final |
+|------|------:|------:|------:|
+| `--help` | 137 692 | 517 568 | 256 384 |
+| `-h`     | 134 794 | 385 518 | 206 491 |
+| `use -h` |  47 132 | 132 635 |  79 592 |
+
+The first cut collected every description into owned lines. The final one
+iterates borrowed slices, one scan per line that fits, and writes straight into
+the output. It is 4.7 KB more binary (1 844 800 → 1 849 568 stripped, for a
+binary that renders help).

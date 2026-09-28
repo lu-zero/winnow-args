@@ -79,7 +79,7 @@ fn a_global_negation_reaches_subcommands() {
 #[test]
 fn help_shows_both_spellings() {
     let e = parse(&["-h"], &[]).unwrap_err();
-    let help = e.render_help("negate").unwrap();
+    let help = with_env(&[], || e.render_help("negate").unwrap());
     assert!(
         help.contains("--color / --no-color        Colorize output [default: true]"),
         "{help}"
