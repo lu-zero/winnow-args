@@ -119,10 +119,18 @@ pub trait Args: Sized {
 
 /// Print what a failed parse means, and give the exit status: help and version
 /// on stdout with 0, a bare `arg_required_else_help` invocation's help on stderr
-/// with 2, anything else as an error on stderr with 2.
+/// with 2, anything else as an error on stderr with 2. Colored per [`help::Style::auto`]
+/// for the stream written to.
 pub fn report(error: &Error, program: &str) -> i32 {
-    if let Some(help) = error.render_help(program) {
-        if error.is_bare_help() {
+    // Help goes to stdout, except a bare invocation's, which is an error.
+    let bare = error.is_bare_help();
+    let style = if bare {
+        help::Style::auto_stderr()
+    } else {
+        help::Style::auto()
+    };
+    if let Some(help) = error.render_help_styled(program, style) {
+        if bare {
             eprintln!("{help}");
             return 2;
         }
@@ -133,7 +141,7 @@ pub fn report(error: &Error, program: &str) -> i32 {
         println!("{version}");
         return 0;
     }
-    eprintln!("error: {error}\n\nFor more information, try '--help'.");
+    eprintln!("{}", error.render(help::Style::auto_stderr()));
     2
 }
 

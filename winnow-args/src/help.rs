@@ -135,15 +135,133 @@ fn terminal_width() -> Option<usize> {
     None
 }
 
-/// Render `command`'s help, wrapped to [`width`]. `path` is the command line
-/// leading to it (program name, then subcommand names); `long` selects
+/// How help and errors are painted: an ANSI SGR sequence for each role, or
+/// `""` for none. The escapes never count toward a column's width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Style {
+    /// `Usage:`, `Options:` and the other headings.
+    pub header: &'static str,
+    /// What is typed as is: the program, flags, subcommand names.
+    pub literal: &'static str,
+    /// Value names: `<PATH>`, `[FILE]...`.
+    pub placeholder: &'static str,
+    /// `error:`.
+    pub error: &'static str,
+    /// The part of the command line an error is about.
+    pub invalid: &'static str,
+    /// What an error says is missing: something to type.
+    pub valid: &'static str,
+}
+
+/// Ends any SGR sequence.
+const RESET: &str = "\u{1b}[0m";
+
+impl Style {
+    /// Nothing painted: for pipes, files and tests.
+    pub const PLAIN: Style = Style {
+        header: "",
+        literal: "",
+        placeholder: "",
+        error: "",
+        invalid: "",
+        valid: "",
+    };
+
+    /// clap 4's default colors: bold underlined headers, bold literals, plain
+    /// placeholders, bold red `error:`, yellow for what was typed wrong and
+    /// green for what is missing.
+    pub const CLAP: Style = Style {
+        header: "\u{1b}[1m\u{1b}[4m",
+        literal: "\u{1b}[1m",
+        placeholder: "",
+        error: "\u{1b}[1m\u{1b}[31m",
+        invalid: "\u{1b}[33m",
+        valid: "\u{1b}[32m",
+    };
+
+    /// [`Style::CLAP`] when standard output is a terminal, else
+    /// [`Style::PLAIN`]; see [`Style::auto_for`].
+    pub fn auto() -> Style {
+        use std::io::IsTerminal as _;
+        Style::auto_for(std::io::stdout().is_terminal())
+    }
+
+    /// [`Style::auto`] for standard error, where errors go.
+    pub fn auto_stderr() -> Style {
+        use std::io::IsTerminal as _;
+        Style::auto_for(std::io::stderr().is_terminal())
+    }
+
+    /// The convention usage and clap follow: a non-empty `NO_COLOR` refuses
+    /// color, a `CLICOLOR_FORCE` other than `0` asks for it anyway, and
+    /// otherwise a terminal gets color. Under [`with_env`](crate::with_env) the
+    /// stream never counts as a terminal: output depends on the environment given.
+    pub fn auto_for(is_terminal: bool) -> Style {
+        let set = |name| crate::env::var(name).filter(|v| !v.is_empty());
+        if set("NO_COLOR").is_some() {
+            return Style::PLAIN;
+        }
+        let forced = set("CLICOLOR_FORCE").is_some_and(|v| v != "0");
+        if forced || (is_terminal && !crate::env::overridden()) {
+            Style::CLAP
+        } else {
+            Style::PLAIN
+        }
+    }
+
+    /// `text` in `paint`, reset after.
+    pub(crate) fn paint(paint: &str, text: &str) -> String {
+        let mut out = String::new();
+        push_painted(&mut out, paint, text);
+        out
+    }
+}
+
+/// Append `text` in `paint` (nothing if `paint` is empty), reset after.
+fn push_painted(out: &mut String, paint: &str, text: &str) {
+    if paint.is_empty() {
+        out.push_str(text);
+    } else {
+        out.push_str(paint);
+        out.push_str(text);
+        out.push_str(RESET);
+    }
+}
+
+/// Painted text and how many columns it takes on screen.
+#[derive(Default)]
+struct Cell {
+    text: String,
+    width: usize,
+}
+
+impl Cell {
+    fn push(&mut self, paint: &str, text: &str) {
+        push_painted(&mut self.text, paint, text);
+        self.width += text.chars().count();
+    }
+}
+
+/// Render `command`'s help, plain, wrapped to [`width`]. `path` is the command
+/// line leading to it (program name, then subcommand names); `long` selects
 /// `--help` over `-h`.
 pub fn render(command: &Command, path: &[&str], long: bool) -> String {
-    render_width(command, path, long, width())
+    render_styled(command, path, long, width(), Style::PLAIN)
 }
 
 /// [`render`], wrapped to `width` columns.
 pub fn render_width(command: &Command, path: &[&str], long: bool, width: usize) -> String {
+    render_styled(command, path, long, width, Style::PLAIN)
+}
+
+/// [`render`], wrapped to `width` columns and painted with `style`.
+pub fn render_styled(
+    command: &Command,
+    path: &[&str],
+    long: bool,
+    width: usize,
+    style: Style,
+) -> String {
     let mut out = String::new();
     let about = if long && !command.long_about.is_empty() {
         command.long_about
@@ -153,31 +271,37 @@ pub fn render_width(command: &Command, path: &[&str], long: bool, width: usize) 
     if !about.is_empty() {
         let _ = writeln!(out, "{}\n", wrap_text(about, width));
     }
-    let _ = writeln!(out, "Usage: {}\n", usage(command, path));
+    push_painted(&mut out, style.header, "Usage:");
+    let _ = writeln!(out, " {}\n", usage(command, path, style));
 
     let visible_subs: Vec<&Sub> = command.subcommands.iter().filter(|s| !s.hide).collect();
     if !visible_subs.is_empty() {
-        let rows: Vec<(String, String)> = visible_subs
+        let rows: Vec<(Cell, String)> = visible_subs
             .iter()
             .map(|s| {
-                let name = if s.aliases.is_empty() {
-                    s.name.to_owned()
-                } else {
-                    format!("{}, {}", s.name, s.aliases.join(", "))
-                };
+                let mut name = Cell::default();
+                name.push(style.literal, s.name);
+                for alias in s.aliases {
+                    name.push("", ", ");
+                    name.push(style.literal, alias);
+                }
                 (name, s.about.to_owned())
             })
             .collect();
-        section(&mut out, "Commands", &rows, false, width);
+        section(&mut out, "Commands", &rows, false, width, style);
     }
 
     let visible: Vec<&Item> = command.items.iter().filter(|i| !i.hide).collect();
-    let arguments: Vec<(String, String)> = visible
+    let arguments: Vec<(Cell, String)> = visible
         .iter()
         .filter(|i| i.positional)
-        .map(|i| (placeholder(i), describe(i, long)))
+        .map(|i| {
+            let mut cell = Cell::default();
+            cell.push(style.placeholder, &placeholder(i));
+            (cell, describe(i, long))
+        })
         .collect();
-    section(&mut out, "Arguments", &arguments, long, width);
+    section(&mut out, "Arguments", &arguments, long, width, style);
 
     let mut headings: Vec<Option<&str>> = vec![None];
     for item in visible.iter().filter(|i| !i.positional) {
@@ -185,11 +309,18 @@ pub fn render_width(command: &Command, path: &[&str], long: bool, width: usize) 
             headings.push(item.heading);
         }
     }
+    let builtin = |short: &str, long_name: &str| {
+        let mut cell = Cell::default();
+        cell.push(style.literal, short);
+        cell.push("", ", ");
+        cell.push(style.literal, long_name);
+        cell
+    };
     for heading in headings {
-        let mut rows: Vec<(String, String)> = visible
+        let mut rows: Vec<(Cell, String)> = visible
             .iter()
             .filter(|i| !i.positional && i.heading == heading)
-            .map(|i| (flag_spec(i), describe(i, long)))
+            .map(|i| (flag_spec(i, style), describe(i, long)))
             .collect();
         if heading.is_none() {
             if command.help_flag {
@@ -198,13 +329,20 @@ pub fn render_width(command: &Command, path: &[&str], long: bool, width: usize) 
                 } else {
                     "Print help (see more with '--help')"
                 };
-                rows.push(("-h, --help".into(), what.into()));
+                rows.push((builtin("-h", "--help"), what.into()));
             }
             if command.version.is_some() {
-                rows.push(("-V, --version".into(), "Print version".into()));
+                rows.push((builtin("-V", "--version"), "Print version".into()));
             }
         }
-        section(&mut out, heading.unwrap_or("Options"), &rows, long, width);
+        section(
+            &mut out,
+            heading.unwrap_or("Options"),
+            &rows,
+            long,
+            width,
+            style,
+        );
     }
 
     let after = if long && !command.after_long_help.is_empty() {
@@ -221,9 +359,9 @@ pub fn render_width(command: &Command, path: &[&str], long: bool, width: usize) 
     out
 }
 
-/// `Usage: prog [OPTIONS] <A> [B]... [COMMAND]`.
-fn usage(command: &Command, path: &[&str]) -> String {
-    let mut line = path.join(" ");
+/// `prog [OPTIONS] <A> [B]... [COMMAND]`, the program painted as a literal.
+pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
+    let mut line = Style::paint(style.literal, &path.join(" "));
     if command.items.iter().any(|i| !i.positional && !i.hide) || command.help_flag {
         line.push_str(" [OPTIONS]");
     }
@@ -232,7 +370,8 @@ fn usage(command: &Command, path: &[&str]) -> String {
         .iter()
         .filter(|i| i.positional && !i.hide && !i.trailing)
     {
-        let _ = write!(line, " {}", placeholder(item));
+        line.push(' ');
+        push_painted(&mut line, style.placeholder, &placeholder(item));
     }
     if !command.subcommands.is_empty() {
         line.push_str(if command.subcommand_required {
@@ -246,7 +385,12 @@ fn usage(command: &Command, path: &[&str]) -> String {
         .iter()
         .filter(|i| i.positional && !i.hide && i.trailing)
     {
-        let _ = write!(line, " [-- {}]", placeholder(item));
+        // clap paints the brackets and `--` as literals: they are typed.
+        line.push(' ');
+        push_painted(&mut line, style.literal, "[--");
+        line.push(' ');
+        push_painted(&mut line, style.placeholder, &placeholder(item));
+        push_painted(&mut line, style.literal, "]");
     }
     line
 }
@@ -261,21 +405,32 @@ fn placeholder(item: &Item) -> String {
     }
 }
 
-fn flag_spec(item: &Item) -> String {
-    let mut spec = match (item.short, item.long) {
-        (Some(s), Some(l)) => format!("-{s}, --{l}"),
-        (Some(s), None) => format!("-{s}"),
-        (None, Some(l)) => format!("    --{l}"),
-        (None, None) => String::new(),
-    };
+fn flag_spec(item: &Item, style: Style) -> Cell {
+    let mut spec = Cell::default();
+    match (item.short, item.long) {
+        (Some(s), long) => {
+            spec.push(style.literal, &format!("-{s}"));
+            if let Some(l) = long {
+                spec.push("", ", ");
+                spec.push(style.literal, &format!("--{l}"));
+            }
+        }
+        (None, Some(l)) => {
+            spec.push("", "    ");
+            spec.push(style.literal, &format!("--{l}"));
+        }
+        (None, None) => {}
+    }
     if let Some(no) = item.negate {
-        let _ = write!(spec, " / --{no}");
+        spec.push("", " / ");
+        spec.push(style.literal, &format!("--{no}"));
     }
     if let Some(value) = item.value_name {
-        let _ = write!(spec, " <{value}>");
+        spec.push("", " ");
+        spec.push(style.placeholder, &format!("<{value}>"));
     }
     if item.multiple {
-        spec.push_str("...");
+        spec.push("", "...");
     }
     spec
 }
@@ -309,16 +464,20 @@ fn describe(item: &Item, long: bool) -> String {
 /// Descriptions wrap to `width`. The column is at most two fifths of the
 /// page (usage's rule), so one long spelling does not squeeze every
 /// description; an item wider than that has its description on the next line.
-fn section(out: &mut String, title: &str, rows: &[(String, String)], long: bool, width: usize) {
+fn section(
+    out: &mut String,
+    title: &str,
+    rows: &[(Cell, String)],
+    long: bool,
+    width: usize,
+    style: Style,
+) {
     if rows.is_empty() {
         return;
     }
-    let _ = writeln!(out, "{title}:");
-    let longest = rows
-        .iter()
-        .map(|(left, _)| left.chars().count())
-        .max()
-        .unwrap_or(0);
+    push_painted(out, style.header, &format!("{title}:"));
+    out.push('\n');
+    let longest = rows.iter().map(|(left, _)| left.width).max().unwrap_or(0);
     let available = width.saturating_sub(4);
     let column = longest.min(available * 2 / 5);
     // Where descriptions start, and how much room they get (never too little to read).
@@ -328,11 +487,14 @@ fn section(out: &mut String, title: &str, rows: &[(String, String)], long: bool,
         (column + 4, width.saturating_sub(column + 4).max(20))
     };
     for (left, right) in rows {
-        let beside = !long && !right.is_empty() && left.chars().count() <= column;
+        let beside = !long && !right.is_empty() && left.width <= column;
+        out.push_str("  ");
+        out.push_str(&left.text);
         if beside {
-            let _ = write!(out, "  {left:column$}  ");
+            // Padded by what shows, not by the escapes' bytes.
+            let _ = write!(out, "{:pad$}  ", "", pad = column - left.width);
         } else {
-            let _ = writeln!(out, "  {left}");
+            out.push('\n');
         }
         let mut first = beside;
         for line in right.lines() {
