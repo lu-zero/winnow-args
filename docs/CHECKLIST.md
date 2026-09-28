@@ -149,7 +149,8 @@ where the references disagree and we picked a side.
 - [x] `help <cmd…>` (usage, clap and bpaf all supply it); `disable_help_subcommand`
 - [x] `report`: help/version on stdout (0), bare `arg_required_else_help` help and
       errors on stderr (2)
-- [ ] Wrapping to the terminal width; `[possible values]` for `ValueEnum` fields
+- [x] Wrapping to `COLUMNS` (else 100); the column capped at two fifths of the page
+- [ ] `[possible values]` for `ValueEnum` fields
 - [ ] A cargo feature to leave help data out of binaries that do not need it
 - [ ] Shell completions; emit a usage KDL spec
 

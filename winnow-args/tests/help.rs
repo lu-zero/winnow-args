@@ -2,7 +2,7 @@
 //! `-h`, `--help`, `help <command>`, `-V`, or a bare `arg_required_else_help` call.
 
 use winnow::stream::BStr;
-use winnow_args::{Args, Error, ErrorKind, Subcommand, report};
+use winnow_args::{Args, Error, ErrorKind, Subcommand, report, with_env};
 
 /// Dev tools, env vars, and tasks in one CLI
 ///
@@ -79,10 +79,15 @@ fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
     T::parse_from(&words)
 }
 
+/// Help at the default width: `COLUMNS` unset whatever the test runner has.
 fn help(line: &[&str]) -> String {
+    help_at(line, &[])
+}
+
+fn help_at(line: &[&str], env: &[(&str, &str)]) -> String {
     let e = parse::<Cli>(line).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::HelpRequested, "{line:?}");
-    e.render_help("mise").unwrap()
+    with_env(env, || e.render_help("mise").unwrap())
 }
 
 #[test]
@@ -179,5 +184,64 @@ fn a_declared_or_disabled_help_flag_is_not_supplied() {
     assert_eq!(
         parse::<NoHelp>(&["--help"]).unwrap_err().kind(),
         ErrorKind::UnknownFlag
+    );
+}
+
+#[test]
+fn descriptions_wrap_under_their_column() {
+    assert_eq!(
+        help_at(&["-h"], &[("COLUMNS", "60")]),
+        "\
+Dev tools, env vars, and tasks in one CLI
+
+Usage: mise [OPTIONS] [COMMAND]
+
+Commands:
+  use, u    Installs a tool and adds the version to
+            mise.toml
+  ls, list  List installed tools
+
+Options:
+  -v, --verbose...  Show extra output (repeat for more)
+  -C, --cd <DIR>    Change to this directory before
+                    executing the command [env: MISE_CD]
+  -h, --help        Print help (see more with '--help')
+  -V, --version     Print version
+
+Performance:
+  -j, --jobs <JOBS>  Number of jobs to run in parallel
+                     [default: 4]
+
+Examples:
+    $ mise use -g node@20
+"
+    );
+}
+
+#[test]
+fn a_narrow_page_puts_descriptions_under_wide_items() {
+    // At 40 columns the column is at most 14 wide: `-C, --cd <DIR>` fits,
+    // `-v, --verbose...` goes to its own line.
+    let text = help_at(&["-h"], &[("COLUMNS", "40")]);
+    assert!(
+        text.contains("  -v, --verbose...\n                  Show extra output\n"),
+        "{text}"
+    );
+    for line in text.lines() {
+        assert!(
+            line.chars().count() <= 40 || !line.contains(' '),
+            "{line:?}"
+        );
+    }
+}
+
+#[test]
+fn long_help_wraps_its_indented_blocks() {
+    let text = help_at(&["--help"], &[("COLUMNS", "50")]);
+    assert!(
+        text.contains(
+            "          Change to this directory before\n          executing the command\n"
+        ),
+        "{text}"
     );
 }

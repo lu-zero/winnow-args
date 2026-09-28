@@ -118,13 +118,22 @@ At mise's full scale (211 commands, `docs/PERF.md` step 17) the derive runs
 7 549 and ~783 ns; clap needs 4.9 M instructions. Its binary is 37 % larger
 than usage's.
 
-Caveat: these are toy CLIs. usage's static tables are built for mise scale
-(211 commands), and it also does work we skip (help/version flags, spec
-metadata). The real comparison is a `mise-winnow-args` shadow once we have
-subcommands and positionals.
+The mise shadow is generated from usage's (`tasks/gen-mise-shadow.py`), so
+both parse the same 211-command CLI, and `bench/tests/mise.rs` holds them to
+accepting the same lines.
+
+## Help
+
+Help is `static` data (`help::Command`) the derive emits beside the parser.
+Nothing reads it during a successful parse: `-h`/`--help` return it inside an
+error and `help::render` lays it out only then. Rendering wraps to
+`help::width()` (`COLUMNS`, else 100, clap's fallback) with usage's rule for
+the column (at most two fifths of the page; a wider item has its description
+on the next line). The wrapping borrows slices of the text, so a line that
+fits costs one scan.
 
 ## Next steps
 
-See `CHECKLIST.md`. In order: positionals, `Vec`/count occurrences,
-subcommands (`enum` derive, and a combinator the parent loop delegates to),
-help/version, then the shadow generator and usage's corpus.
+See `CHECKLIST.md`: help output extras (`[possible values]` for `ValueEnum`
+fields, a feature to leave help data out), binary size, usage's conformance
+corpus, then consolidating the draft history.
