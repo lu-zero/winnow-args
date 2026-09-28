@@ -862,3 +862,17 @@ error constructors in `read_value`/`check_switch` are free and stay: mise is
 an out-of-line lexer (`token::arg` not inlined) saved 147 KB more but cost
 5–15 % (`use -g` 320 → 343 ns, `a b c` 191 → 219 ns), the store-forwarding
 stall of step 5.
+
+## 33. Color depth and themes
+
+`color::Depth::detect` tells 16, 256 and 24-bit terminals apart from the
+environment (`COLORTERM`, `TERM`, `TERM_PROGRAM`, `WT_SESSION`, with
+`NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and `FORCE_COLOR` levels), as
+`supports-color` and `anstyle-query` do; under `with_env` a stream is never a
+terminal. `color::Theme` holds a palette per depth; `report_with` paints with
+one, `report` with `Theme::DEFAULT` (the 16-color default palette, suited to
+any background). Colors deeper than the terminal map to the nearest one it has.
+No dependency: the escapes are written by hand.
+
+Help rendering is not on the hot path; parse binaries are unchanged
+(`parse-n-mise-wa` 1 629 104 bytes stripped, `release-lto`).

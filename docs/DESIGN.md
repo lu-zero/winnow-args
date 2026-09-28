@@ -143,7 +143,18 @@ literal, placeholder, error, invalid, valid). The default, `Style::COLORED`, is
 usage's help palette (bold yellow headings, bold green flags and subcommands,
 the program plain) with bold cyan instead of magenta for value names, and
 usage's rule that `[NAME]` paints only the name; errors use the codes clap and
-usage's diagnostics share. `Style::CLAP` has clap 4's help codes. Rendering
+usage's diagnostics share. `Style::CLAP` has clap 4's help codes.
+
+Terminals differ in how many colors they show, so a `help::Style` is a
+`color::Palette` plus a `color::Depth` (none, 16, 256, 24-bit). `Depth::detect`
+reads the environment the way `supports-color` and `anstyle-query` do. A
+`color::Theme` holds a palette for each depth, and the richest one the terminal
+can show is used. A color deeper than the terminal is mapped to the nearest one
+it has (the 256-color cube or gray ramp, then the basic 16 by weighted
+distance). The default theme uses only the 16 basic colors, whose look is the
+terminal theme's, so it suits light and dark backgrounds. Each paint is written
+as one SGR sequence (`1;33`), so clap's `1` then `4` becomes `1;4`: the same on
+screen. Rendering
 builds each left-hand cell as painted text plus its visible width, so padding
 and wrapping never count escapes, and the painted page with its escapes
 stripped is the plain page. `render` and `render_help` stay plain strings;

@@ -298,10 +298,10 @@ impl fmt::Display for Error {
 
 impl Error {
     /// What went wrong, as [`Display`](fmt::Display) says it, with what was
-    /// typed painted `style.invalid` and what is missing `style.valid`.
+    /// typed painted in the palette's `invalid` and what is missing in `valid`.
     pub fn message(&self, style: Style) -> String {
-        let bad = |text: &str| Style::paint(style.invalid, text);
-        let good = |text: &str| Style::paint(style.valid, text);
+        let bad = |text: &str| Style::paint(style.invalid(), text);
+        let good = |text: &str| Style::paint(style.valid(), text);
         let token = self.token().unwrap_or_default();
         let value = self.value().unwrap_or_default();
         match self.kind {
@@ -343,9 +343,9 @@ impl Error {
     pub fn render(&self, style: Style) -> String {
         format!(
             "{} {}\n\nFor more information, try '{}'.",
-            Style::paint(style.error, "error:"),
+            Style::paint(style.error(), "error:"),
             self.message(style),
-            Style::paint(style.literal, "--help"),
+            Style::paint(style.literal(), "--help"),
         )
     }
 

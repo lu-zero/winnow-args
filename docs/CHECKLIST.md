@@ -162,6 +162,13 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       `tool use -h` in `examples/help.rs` omits `-v`)
 - [x] Color: `help::Style` (`PLAIN`, `COLORED` — usage's palette, cyan values — and
       `CLAP`), chosen by `NO_COLOR`, `CLICOLOR_FORCE` and whether the stream is a terminal
+- [x] Color depth: `color::Depth::detect` (16, 256, 24-bit from `COLORTERM`, `TERM`,
+      `TERM_PROGRAM`, `WT_SESSION`, `FORCE_COLOR`, `CLICOLOR`); a `Theme` has a
+      palette per depth, and deeper colors map to the nearest one; `report_with`
+- [ ] Windows consoles without VT processing (anstyle-wincon's job): today they
+      get the escapes only where `TERM` or `WT_SESSION` says they understand them
+- [ ] A user override of the palette from the environment (as `GCC_COLORS`,
+      `LS_COLORS`), under a variable the application names
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)
 - [ ] Shell completions; emit a usage KDL spec
