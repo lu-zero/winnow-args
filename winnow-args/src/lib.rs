@@ -13,7 +13,9 @@
 //! - [`Args`] and its derive: a struct parsed by one generated loop that
 //!   `match`es each lexed item against the struct's flags.
 //!
-//! ```
+// The example needs the `derive` feature.
+#![cfg_attr(feature = "derive", doc = "```")]
+#![cfg_attr(not(feature = "derive"), doc = "```ignore")]
 //! use std::path::PathBuf;
 //! use winnow_args::Args;
 //!

@@ -1,4 +1,5 @@
 //! Counting switches, run against the combinator parser and the derived one.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

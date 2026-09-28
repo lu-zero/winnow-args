@@ -19,5 +19,6 @@ defaults, and mise's shadow is 19 % smaller), both on by default; and
 ```
 cargo test
 cargo run --example example -- -vp /tmp
+cargo run --example help -- --help     # what derived help looks like
 tasks/perf.sh -v --path /tmp/x
 ```

@@ -152,6 +152,8 @@ where the references disagree and we picked a side.
 - [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size` feature), else 100;
       the column capped at two fifths of the page
 - [x] `[possible values]` for `ValueEnum` fields: `FromArg::CHOICES`, the visible variants
+- [ ] A subcommand's help lists the global flags it inherits (clap does;
+      `tool use -h` in `examples/help.rs` omits `-v`)
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)
 - [ ] Shell completions; emit a usage KDL spec

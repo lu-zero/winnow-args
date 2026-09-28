@@ -1,5 +1,6 @@
 //! `allow_negative_numbers`, following usage's corpus vectors: a negative number
 //! is a value only where a flag or positional opts in.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

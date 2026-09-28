@@ -1,4 +1,5 @@
 //! Global flags: declared on a parent, accepted after its subcommand word at any depth.
+#![cfg(feature = "derive")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, Subcommand};

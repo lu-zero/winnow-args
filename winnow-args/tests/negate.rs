@@ -1,6 +1,7 @@
 //! `negate`: a second long spelling that sets a `bool` false, as usage's
 //! `negate = "--no-color"`. The last spelling given wins; a default or the
 //! environment fills only what neither spelling set.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

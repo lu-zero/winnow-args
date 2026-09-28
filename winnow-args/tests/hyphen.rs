@@ -1,5 +1,6 @@
 //! `allow_hyphen_values`, following usage's corpus: the flag takes the next word
 //! whatever it looks like.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

@@ -20,3 +20,11 @@ terminal-size = ["dep:terminal_size"]
 winnow.workspace = true
 winnow-args-derive = { workspace = true, optional = true }
 terminal_size = { version = "0.4", optional = true }
+
+[[example]]
+name = "example"
+required-features = ["derive"]
+
+[[example]]
+name = "help"
+required-features = ["derive"]

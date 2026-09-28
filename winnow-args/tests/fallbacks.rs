@@ -1,4 +1,5 @@
 //! `env` and `default`: the command line wins, then the environment, then the default.
+#![cfg(feature = "derive")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, ValueEnum, with_env};

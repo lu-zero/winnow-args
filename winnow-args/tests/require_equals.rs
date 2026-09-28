@@ -1,4 +1,5 @@
 //! `require_equals`, following usage's corpus: only an attached value binds.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::alt;
 use winnow::prelude::*;

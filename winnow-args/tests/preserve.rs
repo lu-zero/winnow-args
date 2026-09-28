@@ -1,5 +1,6 @@
 //! `double_dash = "preserve"`: a `--` reaching the positional is one of its
 //! values and stops nothing (usage's `double_dash_preserve_keeps_the_separator`).
+#![cfg(feature = "derive")]
 
 use std::cell::RefCell;
 use winnow::combinator::alt;

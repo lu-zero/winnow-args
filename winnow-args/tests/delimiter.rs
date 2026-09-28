@@ -1,4 +1,5 @@
 //! Value delimiters: one word, several values. Combinators and derive must agree.
+#![cfg(feature = "derive")]
 
 use winnow::combinator::{dispatch, fail};
 use winnow::prelude::*;

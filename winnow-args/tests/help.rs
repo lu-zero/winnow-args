@@ -2,7 +2,7 @@
 //! `-h`, `--help`, `help <command>`, `-V`, or a bare `arg_required_else_help` call.
 //! The text is prose, so these need the `help-text` feature (see
 //! `no_help_text.rs` for help without it).
-#![cfg(feature = "help-text")]
+#![cfg(all(feature = "derive", feature = "help-text"))]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
