@@ -797,3 +797,45 @@ clap and usage's diagnostics share. `Style::CLAP` stays, with a `program` role
 for clap's bold program name. A test pins the codes; the strip-equals-plain
 test runs under both styles. Nothing changes where help is not rendered, and
 the plain page is byte for byte the same.
+
+## 31. Size: stores out of line, cold error paths
+
+`cargo bloated` (`release` with one codegen unit: it links std dynamically,
+which fat LTO refuses) shows both mise binaries are almost all generated code:
+824 KiB for winnow-args' shadow, 458 KiB for usage's, 8 KiB for our runtime.
+A throwaway crate with 20 identical fields per kind gave the cost per field:
+
+| field kind | bytes/field before | after |
+|---|---:|---:|
+| `bool` | 16 | 14 |
+| `Option<u32>`, `Option<ValueEnum>` | 21 | 86 |
+| `Option<String>` | 320 | 207 |
+| `Vec<String>` | 455 | 328 |
+| `Option<String>` + `default` | 570 | 276 |
+| `Option<String>` + `env` | 715 | 335 |
+
+Converting an owned value and dropping the one it replaces was inlined into
+every arm and every fallback. `winnow_args::store` now has `#[inline(never)]`
+generic `set`/`push` (flags), `set_word`/`push_word` (positionals) and
+`set_from`/`push_from` (defaults, env): one copy per value type. Fields with
+`choices` keep the inline path, since the check comes before conversion.
+`read_value`/`check_switch` build their errors in `#[cold]` out-of-line
+functions, which were otherwise inlined into every arm. Cheap types got worse
+per field (their identical arms had merged whole; now the inlined
+`read_value` fast path stays per arm), but mise is mostly strings.
+
+`release-lto`:
+
+| | before | after |
+|---|------:|------:|
+| `parse-n-mise-wa` stripped | 1 694 272 | 1 565 472 (−7.6 %) |
+| `parse-n-wa` stripped | 342 544 | 339 496 |
+| warm `use -g node@20` | 3403 | 3449 (+1.4 %) |
+| warm `-C /tmp install …` | 4648 | 4776 (+2.8 %) |
+| warm `ls --json` | 3022 | 3030 (+0.3 %) |
+| warm `settings set color false` | 2934 | 3010 (+2.6 %) |
+| warm `-v --path /tmp/x` | 1156 | 1187 (+2.7 %) |
+| warm `… a b c` | 1833 | 1928 (+5.2 %) |
+
+The call per value is the cost; `a b c` pays it for each positional word.
+usage's mise is 988 128 bytes, so the gap is now 58 % (was 71 %).
