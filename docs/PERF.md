@@ -866,7 +866,7 @@ stall of step 5.
 ## 33. Color depth and themes
 
 `color::Depth::detect` tells 16, 256 and 24-bit terminals apart from the
-environment (`COLORTERM`, `TERM`, `TERM_PROGRAM`, `WT_SESSION`, with
+environment (`COLORTERM`, `TERM`, `TERM_PROGRAM`, with
 `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and `FORCE_COLOR` levels), as
 `supports-color` and `anstyle-query` do; under `with_env` a stream is never a
 terminal. `color::Theme` holds a palette per depth; `report_with` paints with

@@ -154,7 +154,8 @@ it has (the 256-color cube or gray ramp, then the basic 16 by weighted
 distance). The default theme uses only the 16 basic colors, whose look is the
 terminal theme's, so it suits light and dark backgrounds. Each paint is written
 as one SGR sequence (`1;33`), so clap's `1` then `4` becomes `1;4`: the same on
-screen. Rendering
+screen. Windows is out of scope for now: no console API, no Windows-only
+detection rules. Rendering
 builds each left-hand cell as painted text plus its visible width, so padding
 and wrapping never count escapes, and the painted page with its escapes
 stripped is the plain page. `render` and `render_help` stay plain strings;
