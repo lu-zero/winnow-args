@@ -212,7 +212,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
-    let mut choices = Vec::new();
+    let (mut choices, mut visible) = (Vec::new(), Vec::new());
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -220,8 +220,16 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 "a `ValueEnum` variant holds no data",
             ));
         }
-        let spellings = variant_names(variant, &mut names)?.names;
-        choices.push(LitStr::new(&spellings[0], Span::call_site()));
+        let Variant {
+            names: spellings,
+            hide,
+            ..
+        } = variant_names(variant, &mut names)?;
+        let name = LitStr::new(&spellings[0], Span::call_site());
+        if !hide {
+            visible.push(name.clone());
+        }
+        choices.push(name);
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
         arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
@@ -230,6 +238,8 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
+            const CHOICES: &'static [&'static str] = &[#(#visible),*];
+
             fn from_arg(
                 __value: &::winnow_args::__private::BStr,
             ) -> ::core::result::Result<Self, ::winnow_args::__private::BoxError> {
@@ -509,7 +519,14 @@ impl Field {
         let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
         let default = opt_str(self.default.as_deref());
         let env = opt_str(self.env.as_deref());
-        let choices = self.choices.iter().flatten();
+        // Declared `choices`, else whatever fixed set the value type has.
+        let choices = match (&self.choices, &self.kind, &self.role) {
+            (Some(choices), _, _) => quote!(&[#(#choices),*]),
+            (None, _, Role::Subcommand) | (None, Kind::Switch | Kind::Count(_), _) => quote!(&[]),
+            (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), _) => {
+                quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
+            }
+        };
         quote! {
             ::winnow_args::help::Item {
                 short: #short,
@@ -526,7 +543,7 @@ impl Field {
                 trailing: #trailing,
                 default: #default,
                 env: #env,
-                choices: &[#(#choices),*],
+                choices: #choices,
             }
         }
     }
