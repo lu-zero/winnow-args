@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, lint, document and test every feature configuration, and report the
-# warnings in this workspace. Warnings from sibling checkouts (bench's path
-# dependencies on ../usage and ../bpaf) are counted apart: they are not ours to fix.
+# warnings in this workspace. Warnings from sibling checkouts (a local
+# `[patch]` in .cargo/config.toml) are counted apart: they are not ours to fix.
 #
 #   tasks/check.sh
 set -uo pipefail
