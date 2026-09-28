@@ -161,6 +161,14 @@ pub trait Subcommand: Sized {
 pub trait Globals {
     /// Bind `arg`, read from `input`, if it is a global flag; `Ok(false)` if not.
     fn bind<'i>(&mut self, arg: &Arg<'i>, input: &mut Argv<'i>) -> Result<bool, Error>;
+
+    /// Whether `-letter` is one of these flags, and if so whether it takes a
+    /// value. A command with `unknown_flags = "value"` asks about every letter
+    /// of a bundle before binding any.
+    fn short(&self, letter: char) -> Option<bool> {
+        let _ = letter;
+        None
+    }
 }
 
 /// No global flags: what a command line's root is given.
@@ -189,11 +197,49 @@ where
     FromFn(bind)
 }
 
+/// [`Globals`] that are `shorts` (letter, takes a value) and `bind`, then
+/// `parent`'s: what the derive hands a subcommand of a struct with global flags.
+pub fn inherit<'a, F>(
+    shorts: &'static [(char, bool)],
+    parent: &'a mut dyn Globals,
+    bind: F,
+) -> impl Globals + 'a
+where
+    F: for<'i> FnMut(&Arg<'i>, &mut Argv<'i>, &mut dyn Globals) -> Result<bool, Error> + 'a,
+{
+    struct Inherit<'a, F> {
+        shorts: &'static [(char, bool)],
+        parent: &'a mut dyn Globals,
+        bind: F,
+    }
+    impl<F> Globals for Inherit<'_, F>
+    where
+        F: for<'i> FnMut(&Arg<'i>, &mut Argv<'i>, &mut dyn Globals) -> Result<bool, Error>,
+    {
+        #[inline]
+        fn bind<'i>(&mut self, arg: &Arg<'i>, input: &mut Argv<'i>) -> Result<bool, Error> {
+            (self.bind)(arg, input, &mut *self.parent)
+        }
+
+        fn short(&self, letter: char) -> Option<bool> {
+            match self.shorts.iter().find(|(c, _)| *c == letter) {
+                Some(&(_, takes_value)) => Some(takes_value),
+                None => self.parent.short(letter),
+            }
+        }
+    }
+    Inherit {
+        shorts,
+        parent,
+        bind,
+    }
+}
+
 #[doc(hidden)]
 pub mod __private {
     pub use crate::error::Error;
     pub use crate::stream::Argv;
-    pub use crate::{Globals, Subcommand, globals};
+    pub use crate::{Globals, Subcommand, globals, inherit};
 
     /// `help a b …`: the long help of the command the words name, below `root`.
     pub fn help_word(root: &'static crate::help::Command, input: &mut Argv<'_>) -> Error {
@@ -205,6 +251,58 @@ pub mod __private {
         path.into_iter()
             .rev()
             .fold(Error::help(command, true), Error::within)
+    }
+
+    /// Whether every letter of the short bundle `token` (`-abc`) is `known`,
+    /// up to the first that takes a value: the rest is that value.
+    pub fn bundle_known(token: &[u8], known: impl Fn(char) -> Option<bool>) -> bool {
+        let Some(mut rest) = token.strip_prefix(b"-") else {
+            return false;
+        };
+        // Letters are ASCII in practice: decode only from the first byte that is not.
+        while let Some((&byte, tail)) = rest.split_first() {
+            if !byte.is_ascii() {
+                let Ok(letters) = str::from_utf8(rest) else {
+                    return false;
+                };
+                return letters.chars().try_for_each(|letter| match known(letter) {
+                    None => Err(false),
+                    Some(true) => Err(true),
+                    Some(false) => Ok(()),
+                }) != Err(false);
+            }
+            match known(byte as char) {
+                None => return false,
+                Some(true) => return true,
+                Some(false) => rest = tail,
+            }
+        }
+        true
+    }
+
+    /// A short bundle of two or more letters naming one no flag answers to,
+    /// taken whole as a word: `unknown_flags = "value"`. `None`, consuming
+    /// nothing, for anything else; a single unknown letter binds nothing before
+    /// it, so the derive's fallback arm handles it without this check.
+    #[inline]
+    pub fn unknown_bundle<'i>(
+        input: &mut Argv<'i>,
+        known: impl Fn(char) -> Option<bool>,
+    ) -> Option<crate::token::Word<'i>> {
+        let front = input.front();
+        let short = input.mode() == crate::stream::Mode::Word
+            && front.len() > 2
+            && front[0] == b'-'
+            && front[1] != b'-';
+        if !short || bundle_known(front, known) {
+            return None;
+        }
+        let offset = input.offset();
+        Some(crate::token::Word {
+            value: input.take_word(),
+            offset,
+            after_separator: false,
+        })
     }
 
     fn is_flag_like(word: &[u8]) -> bool {

@@ -585,3 +585,44 @@ benchmark CLI's trailing `CMD` needs its `--`, so no line is added. What a CLI
 without `preserve` pays is nothing: warm instructions per parse are identical
 to step 21 (wa 1338 and 2167, wa-disp 1628 and 2690), and `… a -- node app.js
 -v` runs in 252 ns for wa against usage's 573.
+
+## 23. `unknown_flags = "value"`: lenient unknown flags
+
+usage's default: a flag-like word that names no flag is offered to the
+positionals whole (`wrap --wat keep`), is never a subcommand word, and with no
+positional left to take it is an unexpected argument. winnow-args stays strict
+by default and takes `#[arg(unknown_flags = "value")]` per struct (not
+inherited). A long word or a single letter falls through the flag `match`
+and any globals, then goes to the positionals as the word saved before lexing.
+A bundle of two or more letters is checked whole before any letter binds, as
+usage does; inherited letters are known through a new `Globals::short`, which
+the derive answers with `__wa::inherit` (its globals, then its parent's).
+Combinators take `token::flag_word` as the last `alt` branch (whole words
+only).
+
+The mise shadow is now lenient in all 211 structs, as usage's is, and the
+agreement test gains six lines with unknown flags (four accepted by both, two
+rejected by both). Warm instructions per parse:
+
+| line | step 22 | `inherit` (strict) | lenient |
+|------|------:|------:|------:|
+| `use -g node@20` | 3556 | 3571 | 3594 |
+| `-C /tmp install node@20 python@3.12` | 4859 | 4874 | 4905 |
+| `ls --json` | 3131 | 3146 | 3168 |
+| `settings set color false` | 3097 | 3117 | 3146 |
+| example `-v --path /tmp/x` | 1338 | 1337 | 1337 |
+
+The first cut checked every short word, single letters too, with
+`str::from_utf8`: +118 on `use -g`. An ASCII fast path took it to +86, and
+leaving single letters to the fallback arm (nothing can be half applied) to
++23. mise timings, warm ns (min), load average ~4:
+
+| framework | `use -g node@20` | `-C … install …` | `ls --json` | `settings set …` |
+|-----------|------:|------:|------:|------:|
+| usage     | 774    | 924    | 598    | 710    |
+| wa        | 331    | 450    | 279    | 291    |
+| bpaf 0.10 | 164930 | 163889 | 163684 | 167548 |
+| clap 4    | 762532 | 764966 | 774887 | 797042 |
+
+(wa measured before the two fixes, so it is 60–90 instructions slower here
+than the final build.)

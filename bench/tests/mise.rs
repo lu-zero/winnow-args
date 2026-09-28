@@ -52,7 +52,7 @@ fn the_benchmark_line_binds_the_same_fields() {
 }
 
 /// Lines across the CLI: routing, globals on either side, aliases, `--`,
-/// `:::`, `help`, values, and some that must fail.
+/// `:::`, `help`, values, unknown flags, and some that must fail.
 const LINES: &[&str] = &[
     "use -g node@20",
     "u -g node@20",
@@ -73,6 +73,13 @@ const LINES: &[&str] = &[
     "use --jobs",
     "settings set",
     "tool-alias nope",
+    // Unknown flags: usage's default makes them positional values.
+    "use --wat node@20",
+    "use -gx node@20",
+    "run build --wat",
+    "x node@20 -z",
+    "ls --wat",
+    "settings set color --wat",
 ];
 
 #[test]

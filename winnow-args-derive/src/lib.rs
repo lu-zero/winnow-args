@@ -762,6 +762,11 @@ impl Field {
         (!longs.is_empty()).then(|| quote!(#(#literals)|*))
     }
 
+    /// Whether a flag reads a value (rather than being a switch or a count).
+    fn takes_value(&self) -> bool {
+        !matches!(self.kind, Kind::Switch | Kind::Count(_))
+    }
+
     fn is_positional(&self) -> bool {
         matches!(self.role, Role::Positional { .. })
     }
@@ -835,6 +840,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         disable_help_flag,
         disable_version_flag,
         disable_help_subcommand,
+        unknown_flags_value,
     } = struct_options(input)?;
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
@@ -1082,8 +1088,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
         // The subcommand sees this struct's globals first, then its ancestors'.
         let (inherit, handler) = if fields.iter().any(|f| is_global(&f)) {
+            let shorts = fields.iter().filter(is_global).filter_map(|f| {
+                let c = LitChar::new(f.short()?, Span::call_site());
+                let takes_value = f.takes_value();
+                Some(quote!((#c, #takes_value)))
+            });
             let setup = quote! {
-                let mut __inherit = __wa::globals(|__arg, __input| {
+                let mut __inherit = __wa::inherit(&[#(#shorts),*], __globals, |__arg, __input, __parent| {
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#global_longs)*
@@ -1095,7 +1106,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         },
                         _ => {}
                     }
-                    __globals.bind(__arg, __input)
+                    __parent.bind(__arg, __input)
                 });
             };
             (setup, quote!(&mut __inherit))
@@ -1255,6 +1266,57 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let version_short = (with_version && !declares_short('V'))
         .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
     let help_flag = help_long.is_some() || help_short.is_some();
+
+    // `unknown_flags = "value"`: a flag-like word naming no flag goes to the
+    // positionals whole, never to a subcommand. A bundle of several letters is
+    // checked before any binds; a long word or a single letter once no arm or
+    // global took it.
+    let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value {
+        // With nothing to take a word, `positional_match` always returns.
+        let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
+        let own = fields.iter().filter_map(|f| {
+            let c = LitChar::new(f.short()?, Span::call_site());
+            let takes_value = f.takes_value();
+            Some(quote!(#c => ::core::option::Option::Some(#takes_value),))
+        });
+        let builtin = help_short
+            .is_some()
+            .then(|| quote!('h' => ::core::option::Option::Some(false),))
+            .into_iter()
+            .chain(
+                version_short
+                    .is_some()
+                    .then(|| quote!('V' => ::core::option::Option::Some(false),)),
+            );
+        (
+            quote! {
+                if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
+                    #(#own)*
+                    #(#builtin)*
+                    _ => __globals.short(__c),
+                }) {
+                    let __arg = __wa::Arg::Word(__word);
+                    #positional_match
+                    #next
+                }
+            },
+            quote!(let __token = __input.front();),
+            quote! {
+                let __word = __wa::Word {
+                    value: __wa::BStr::new(__token),
+                    offset: __flag.offset,
+                    after_separator: false,
+                };
+                let __arg = __wa::Arg::Word(__word);
+                #positional_match
+            },
+        )
+    } else {
+        (quote!(), quote!(), quote!(#unexpected;))
+    };
+    // Only the first letter of a word can be unknown here: the bundle check
+    // vouched for the letters of a longer one.
+    let unknown_short = unknown_flag.clone();
     let help_version = match &version {
         Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
         _ => quote!(::core::option::Option::None),
@@ -1344,19 +1406,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #help_on_empty
                 while !__input.is_empty() {
                     #start
+                    #lenient_bundle
+                    #save_token
                     let __arg = #lex;
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#long_arms)*
                             #help_long
                             #version_long
-                            _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
+                            _ => if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             #help_short
                             #version_short
-                            _ => if !__globals.bind(&__arg, __input)? { #unexpected; },
+                            _ => if !__globals.bind(&__arg, __input)? { #unknown_short },
                         },
                         #separator_arm
                         #word_arm
@@ -1403,6 +1467,8 @@ struct StructOptions {
     disable_help_flag: bool,
     disable_version_flag: bool,
     disable_help_subcommand: bool,
+    /// An unknown flag-like word is a positional value, as usage's default.
+    unknown_flags_value: bool,
 }
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
@@ -1426,6 +1492,20 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("arg_required_else_help") {
                 *help = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("unknown_flags") {
+                let mode = meta.value()?.parse::<LitStr>()?;
+                texts.unknown_flags_value = match mode.value().as_str() {
+                    "value" => true,
+                    "error" => false,
+                    _ => {
+                        return Err(syn::Error::new(
+                            mode.span(),
+                            "expected \"value\" or \"error\"",
+                        ));
+                    }
+                };
                 return Ok(());
             }
             let text = |meta: &syn::meta::ParseNestedMeta<'_>| -> syn::Result<String> {
@@ -1478,8 +1558,8 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `arg_required_else_help`, `name`, `version`, `about`, `long_about`, \
-                     `after_help`, `after_long_help` or a `disable_*` option",
+                     `arg_required_else_help`, `unknown_flags`, `name`, `version`, `about`, \
+                     `long_about`, `after_help`, `after_long_help` or a `disable_*` option",
                 ));
             }
             let content;
@@ -1517,6 +1597,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     options.disable_help_flag = texts.disable_help_flag;
     options.disable_version_flag = texts.disable_version_flag;
     options.disable_help_subcommand = texts.disable_help_subcommand;
+    options.unknown_flags_value = texts.unknown_flags_value;
     Ok(options)
 }
 

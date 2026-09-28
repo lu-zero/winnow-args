@@ -29,6 +29,7 @@ use winnow_args::{Args, Subcommand, ValueEnum};
 ///
 /// Customize status output with `status` settings.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1meval \"$(mise activate bash)\"\u{1b}[22m\n    $ \u{1b}[1meval \"$(mise activate zsh)\"\u{1b}[22m\n    $ \u{1b}[1mmise activate fish | source\u{1b}[22m\n    $ \u{1b}[1mexecx($(mise activate xonsh))\u{1b}[22m\n    $ \u{1b}[1m(&mise activate pwsh) | Out-String | Invoke-Expression\u{1b}[22m\n"
 )]
@@ -72,6 +73,7 @@ pub struct ActivateArgs {
 ///
 /// This is the contents of a tool_alias.<TOOL> entry in ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tool-alias get node lts-hydrogen\u{1b}[22m\n    20.0.0\n"
 )]
@@ -85,6 +87,7 @@ pub struct ToolAliasGetArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tool-alias ls\u{1b}[22m\n    node  lts-jod      22\n"
 )]
@@ -101,6 +104,7 @@ pub struct ToolAliasLsArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tool-alias set maven asdf:mise-plugins/mise-maven\u{1b}[22m\n    $ \u{1b}[1mmise tool-alias set node lts-jod 22.0.0\u{1b}[22m\n"
 )]
@@ -120,6 +124,7 @@ pub struct ToolAliasSetArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tool-alias unset maven\u{1b}[22m\n    $ \u{1b}[1mmise tool-alias unset node lts-jod\u{1b}[22m\n"
 )]
@@ -134,6 +139,7 @@ pub struct ToolAliasUnsetArgs {
 
 /// Manage tool version aliases.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct ToolAliasArgs {
     /// Filter aliases by tool
     #[arg(long = "tool", alias = "plugin", short = 'p', value_name = "TOOL")]
@@ -167,6 +173,7 @@ pub enum ToolAliasCommands {
 
 /// [internal] simulates asdf for plugins that call "asdf" internally
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct AsdfArgs {
     /// all arguments
     #[arg(positional, value_name = "ARGS", double_dash = "automatic")]
@@ -175,6 +182,7 @@ pub struct AsdfArgs {
 
 /// List built-in backends
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise backends ls\u{1b}[22m\n    aqua\n    asdf\n    cargo\n    core\n    dotnet\n    gem\n    go\n    npm\n    pipx\n    spm\n    ubi\n    vfox\n"
 )]
@@ -182,6 +190,7 @@ pub struct BackendsLsArgs {}
 
 /// Manage backends
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mDeprecation:\u{1b}[22m\u{1b}[24m\n\nThe `mise b` alias is deprecated and will be removed in mise 2027.4.0.\nUse `mise backends` instead.\n"
 )]
@@ -199,6 +208,7 @@ pub enum BackendsCommands {
 
 /// List all the active runtime bin paths
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BinPathsArgs {
     /// Output executable names instead of bin directories
     #[arg(long = "bin-names")]
@@ -215,25 +225,32 @@ pub struct BinPathsArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapApplyAccountPlanArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapApplyServicePlanArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapApplyFirewallPlanArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapApplySystemPlanArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapInspectSystemFilesArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapInspectFirewallPlanArgs {}
 
 /// Apply configured Linux users and groups
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapAccountsApplyArgs {
     /// Print what would change without changing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -245,6 +262,7 @@ pub struct BootstrapAccountsApplyArgs {
 
 /// Show configured Linux user and group state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapAccountsStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -256,6 +274,7 @@ pub struct BootstrapAccountsStatusArgs {
 
 /// Manage Linux users and groups from `[bootstrap.users]` and `[bootstrap.groups]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapAccountsArgs {
     #[arg(subcommand)]
     pub command: BootstrapAccountsCommands,
@@ -273,6 +292,7 @@ pub enum BootstrapAccountsCommands {
 
 /// Apply configured Docker Compose project state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapComposeApplyArgs {
     /// Print what would change without changing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -284,6 +304,7 @@ pub struct BootstrapComposeApplyArgs {
 
 /// Show configured Docker Compose project state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapComposeStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -295,6 +316,7 @@ pub struct BootstrapComposeStatusArgs {
 
 /// Manage Docker Compose projects from `[bootstrap.compose]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapComposeArgs {
     #[arg(subcommand)]
     pub command: BootstrapComposeCommands,
@@ -314,6 +336,7 @@ pub enum BootstrapComposeCommands {
 ///
 /// If the target is already managed, this updates its source from the live target. Otherwise it creates a `[dotfiles]` entry and seeds the source under `dotfiles.root` unless `--source` is provided.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles add ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles add --mode copy ~/.config/starship.toml\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles add --source dotfiles/gitconfig ~/.gitconfig\u{1b}[22m\n"
 )]
@@ -359,6 +382,7 @@ pub struct BootstrapDotfilesAddArgs {
 ///
 /// Applies configured whole-file entries and edits that aren't in their desired state. Whole-file entries may symlink, copy, or render templates. Edit entries manage a marker-delimited block or a single line in a file mise doesn't otherwise own.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles apply\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles apply --force --yes\u{1b}[22m\n"
 )]
@@ -379,6 +403,7 @@ pub struct BootstrapDotfilesApplyArgs {
 
 /// Edit a managed dotfile source
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles edit ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles edit --apply ~/.config/starship.toml\u{1b}[22m\n"
 )]
@@ -402,6 +427,7 @@ pub struct BootstrapDotfilesEditArgs {
 
 /// Show the status of dotfiles from `[dotfiles]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status --json\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status --missing\u{1b}[22m # exit 1 if anything is out of sync\n"
 )]
@@ -423,6 +449,7 @@ pub struct BootstrapDotfilesStatusArgs {
 ///
 /// Removes configured whole-file entries and edits while preserving files mise cannot identify as managed. Modified copies, templates, and plain-line edits require `--force`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles unapply\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply --force --yes\u{1b}[22m\n"
 )]
@@ -443,6 +470,7 @@ pub struct BootstrapDotfilesUnapplyArgs {
 
 /// Manage dotfiles from `[dotfiles]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapDotfilesArgs {
     #[arg(subcommand)]
     pub command: BootstrapDotfilesCommands,
@@ -469,6 +497,7 @@ pub enum BootstrapDotfilesCommands {
 
 /// Apply configured privileged files and directories
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFilesApplyArgs {
     /// Print what would change without changing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -483,6 +512,7 @@ pub struct BootstrapFilesApplyArgs {
 
 /// Show configured privileged file and directory state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFilesStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -497,6 +527,7 @@ pub struct BootstrapFilesStatusArgs {
 
 /// Manage privileged files and directories from `[bootstrap.files]` and `[bootstrap.directories]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFilesArgs {
     #[arg(subcommand)]
     pub command: BootstrapFilesCommands,
@@ -514,6 +545,7 @@ pub enum BootstrapFilesCommands {
 
 /// Apply the configured Linux host firewall
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFirewallApplyArgs {
     /// Print what would change without changing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -525,6 +557,7 @@ pub struct BootstrapFirewallApplyArgs {
 
 /// Show configured Linux host firewall state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFirewallStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -536,6 +569,7 @@ pub struct BootstrapFirewallStatusArgs {
 
 /// Manage the Linux host firewall from `[bootstrap.linux.firewall]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapFirewallArgs {
     #[arg(subcommand)]
     pub command: BootstrapFirewallCommands,
@@ -552,6 +586,7 @@ pub enum BootstrapFirewallCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLaunchdApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -562,6 +597,7 @@ pub struct BootstrapLaunchdApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLaunchdStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -573,6 +609,7 @@ pub struct BootstrapLaunchdStatusArgs {
 
 /// Manage macOS LaunchAgents from `[bootstrap.macos.launchd.agents]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLaunchdArgs {
     #[arg(subcommand)]
     pub command: BootstrapLaunchdCommands,
@@ -587,6 +624,7 @@ pub enum BootstrapLaunchdCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLinuxSystemdUnitsApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -597,6 +635,7 @@ pub struct BootstrapLinuxSystemdUnitsApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLinuxSystemdUnitsStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -608,6 +647,7 @@ pub struct BootstrapLinuxSystemdUnitsStatusArgs {
 
 /// Manage systemd user services from `[bootstrap.linux.systemd.units]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLinuxSystemdUnitsArgs {
     #[arg(subcommand)]
     pub command: BootstrapLinuxSystemdUnitsCommands,
@@ -623,6 +663,7 @@ pub enum BootstrapLinuxSystemdUnitsCommands {
 
 /// Manage Linux bootstrap config from `[bootstrap.linux]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapLinuxArgs {
     #[arg(subcommand)]
     pub command: BootstrapLinuxCommands,
@@ -636,6 +677,7 @@ pub enum BootstrapLinuxCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -646,6 +688,7 @@ pub struct BootstrapMacosDefaultsApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -657,6 +700,7 @@ pub struct BootstrapMacosDefaultsStatusArgs {
 
 /// Manage macOS defaults from `[bootstrap.macos.defaults]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsArgs2 {
     #[arg(subcommand)]
     pub command: BootstrapMacosDefaultsCommands2,
@@ -671,6 +715,7 @@ pub enum BootstrapMacosDefaultsCommands2 {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosLaunchdAgentsApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -681,6 +726,7 @@ pub struct BootstrapMacosLaunchdAgentsApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosLaunchdAgentsStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -692,6 +738,7 @@ pub struct BootstrapMacosLaunchdAgentsStatusArgs {
 
 /// Manage macOS LaunchAgents from `[bootstrap.macos.launchd.agents]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosLaunchdAgentsArgs {
     #[arg(subcommand)]
     pub command: BootstrapMacosLaunchdAgentsCommands,
@@ -707,6 +754,7 @@ pub enum BootstrapMacosLaunchdAgentsCommands {
 
 /// Manage macOS bootstrap config from `[bootstrap.macos]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosArgs {
     #[arg(subcommand)]
     pub command: BootstrapMacosCommands,
@@ -723,6 +771,7 @@ pub enum BootstrapMacosCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsApplyArgs2 {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -733,6 +782,7 @@ pub struct BootstrapMacosDefaultsApplyArgs2 {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsStatusArgs2 {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -744,6 +794,7 @@ pub struct BootstrapMacosDefaultsStatusArgs2 {
 
 /// Manage macOS defaults from `[bootstrap.macos.defaults]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMacosDefaultsArgs {
     #[arg(subcommand)]
     pub command: BootstrapMacosDefaultsCommands,
@@ -758,6 +809,7 @@ pub enum BootstrapMacosDefaultsCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMiseShellActivateApplyArgs {
     /// Print the actions that would run without writing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -768,6 +820,7 @@ pub struct BootstrapMiseShellActivateApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMiseShellActivateStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -779,6 +832,7 @@ pub struct BootstrapMiseShellActivateStatusArgs {
 
 /// Manage mise shell activation from `[bootstrap.mise_shell_activate]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapMiseShellActivateArgs {
     #[arg(subcommand)]
     pub command: BootstrapMiseShellActivateCommands,
@@ -798,6 +852,7 @@ pub enum BootstrapMiseShellActivateCommands {
 ///
 /// Packages can also be given explicitly in `manager:package` form (e.g. `apk:zlib-dev`, `apt:curl`, `brew:jq`); they are installed whether or not they appear in the config. Explicit packages and `--manager` scope the run to packages only. `install` is accepted as an alias for this command.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages apply\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages apply apk:zlib-dev apt:curl brew:jq brew-cask:firefox flatpak:org.mozilla.firefox flatpak-user:org.gnome.Builder mas:497799835\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages apply --manager apt --yes\u{1b}[22m\n"
 )]
@@ -825,6 +880,7 @@ pub struct BootstrapPackagesApplyArgs {
 
 /// Add a Homebrew tap URL to [bootstrap.brew.taps]
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages brew tap railwaycat/emacsmacport\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages brew tap acme/tools https://github.com/acme/homebrew-tools.git\u{1b}[22m\n"
 )]
@@ -854,6 +910,7 @@ pub struct BootstrapPackagesBrewTapArgs {
 
 /// Remove Homebrew tap URLs from [bootstrap.brew.taps]
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages brew untap railwaycat/emacsmacport\u{1b}[22m\n"
 )]
@@ -882,6 +939,7 @@ pub struct BootstrapPackagesBrewUntapArgs {
 ///
 /// These commands edit `[bootstrap.brew.taps]` so tapped formulae and casks can be fetched directly by mise without a Homebrew installation.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPackagesBrewArgs {
     #[arg(subcommand)]
     pub command: BootstrapPackagesBrewCommands,
@@ -901,6 +959,7 @@ pub enum BootstrapPackagesBrewCommands {
 ///
 /// Currently supports Homebrew formulae only. By default, imports linked formulae whose active keg receipt says they were installed on request. Pass `--all` to import every linked formula, including dependencies.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages import --manager brew\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages import --manager brew --all\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages import --manager brew --global\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages import --manager brew --dry-run\u{1b}[22m\n"
 )]
@@ -946,6 +1005,7 @@ pub struct BootstrapPackagesImportArgs {
 ///
 /// Supports Homebrew formulae and conservatively removable, mise-owned casks. Pruning keeps packages needed by the current config or by trusted, loadable tracked configs.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages prune --manager brew\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages prune --manager brew --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages prune --manager brew --yes\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages prune --manager brew-cask --dry-run\u{1b}[22m\n"
 )]
@@ -969,6 +1029,7 @@ pub struct BootstrapPackagesPruneArgs {
 
 /// Show the status of system packages from `[bootstrap.packages]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages status --json\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages status --missing\u{1b}[22m # exit 1 if anything is out of sync\n"
 )]
@@ -987,6 +1048,7 @@ pub struct BootstrapPackagesStatusArgs {
 ///
 /// Packages can also be given explicitly in `manager:package` form.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages upgrade\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages upgrade brew:postgresql@17\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages upgrade --manager brew-cask\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages upgrade --manager mas\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages upgrade --manager apt --yes\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages upgrade --dry-run\u{1b}[22m\n"
 )]
@@ -1015,6 +1077,7 @@ pub struct BootstrapPackagesUpgradeArgs {
 ///
 /// Versions are pinned with `@`: `mise bootstrap packages use apt:curl@8.5.0-2`. Without `@` (or with `@latest`) no pin is written. brew formulae and casks version through their names instead (for example `brew:postgresql@17`, `brew-cask:temurin@17`), where `@` is part of the Homebrew name rather than a mise version selector. mas uses numeric ADAM IDs and does not support pins.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap packages use apk:zlib-dev apt:curl brew:jq brew-cask:firefox flatpak:org.mozilla.firefox flatpak-user:org.gnome.Builder mas:497799835\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages use -g brew:postgresql@17\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages use apt:curl@8.5.0-2\u{1b}[22m\n"
 )]
@@ -1056,6 +1119,7 @@ pub struct BootstrapPackagesUseArgs {
 
 /// Manage bootstrap system packages from `[bootstrap.packages]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPackagesArgs {
     #[arg(subcommand)]
     pub command: BootstrapPackagesCommands,
@@ -1088,6 +1152,7 @@ pub enum BootstrapPackagesCommands {
 
 /// Show the changes declarative bootstrap resources would make
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPlanArgs {
     /// Output a stable machine-readable plan in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1101,6 +1166,7 @@ pub struct BootstrapPlanArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPluginsApplyArgs {
     /// Print what would happen without installing plugins
     #[arg(long = "dry-run", short = 'n')]
@@ -1108,6 +1174,7 @@ pub struct BootstrapPluginsApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPluginsStatusArgs {
     /// Exit with code 1 if a declared plugin is missing
     #[arg(long = "missing")]
@@ -1116,6 +1183,7 @@ pub struct BootstrapPluginsStatusArgs {
 
 /// Manage package manager plugins declared in `[bootstrap.plugins]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapPluginsArgs {
     #[arg(subcommand)]
     pub command: BootstrapPluginsCommands,
@@ -1131,6 +1199,7 @@ pub enum BootstrapPluginsCommands {
 
 /// Bootstrap one or more machines over OpenSSH
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapRemoteArgs {
     /// Select every configured inventory host
     #[arg(long = "all")]
@@ -1307,6 +1376,7 @@ pub enum BootstrapRemoteSkipValue {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapReposApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -1317,6 +1387,7 @@ pub struct BootstrapReposApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapReposExecArgs {
     /// Continue running in other repos after a command fails
     #[arg(long = "continue-on-error", short = 'c')]
@@ -1333,6 +1404,7 @@ pub struct BootstrapReposExecArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapReposStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1343,6 +1415,7 @@ pub struct BootstrapReposStatusArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapReposUpdateArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -1357,6 +1430,7 @@ pub struct BootstrapReposUpdateArgs {
 
 /// Manage git repo checkouts from `[bootstrap.repos]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapReposArgs {
     #[arg(subcommand)]
     pub command: BootstrapReposCommands,
@@ -1376,6 +1450,7 @@ pub enum BootstrapReposCommands {
 
 /// Show whether declared bootstrap secret inputs are available
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapSecretsStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1387,6 +1462,7 @@ pub struct BootstrapSecretsStatusArgs {
 
 /// Inspect bootstrap secret inputs without revealing their values
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapSecretsArgs {
     #[arg(subcommand)]
     pub command: BootstrapSecretsCommands,
@@ -1401,6 +1477,7 @@ pub enum BootstrapSecretsCommands {
 
 /// Apply configured Linux system service state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapServicesApplyArgs {
     /// Print what would change without changing anything
     #[arg(long = "dry-run", short = 'n')]
@@ -1412,6 +1489,7 @@ pub struct BootstrapServicesApplyArgs {
 
 /// Show configured Linux system service state
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapServicesStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1423,6 +1501,7 @@ pub struct BootstrapServicesStatusArgs {
 
 /// Manage Linux system services from `[bootstrap.services]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapServicesArgs {
     #[arg(subcommand)]
     pub command: BootstrapServicesCommands,
@@ -1440,6 +1519,7 @@ pub enum BootstrapServicesCommands {
 
 /// Show the aggregate bootstrap status
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1453,6 +1533,7 @@ pub struct BootstrapStatusArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapSystemdApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -1463,6 +1544,7 @@ pub struct BootstrapSystemdApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapSystemdStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1474,6 +1556,7 @@ pub struct BootstrapSystemdStatusArgs {
 
 /// Manage systemd user services from `[bootstrap.linux.systemd.units]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapSystemdArgs {
     #[arg(subcommand)]
     pub command: BootstrapSystemdCommands,
@@ -1488,6 +1571,7 @@ pub enum BootstrapSystemdCommands {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapUserApplyArgs {
     /// Print the commands that would run without running them
     #[arg(long = "dry-run", short = 'n')]
@@ -1498,6 +1582,7 @@ pub struct BootstrapUserApplyArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapUserStatusArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1509,6 +1594,7 @@ pub struct BootstrapUserStatusArgs {
 
 /// Manage current-user bootstrap settings from `[bootstrap.user]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct BootstrapUserArgs {
     #[arg(subcommand)]
     pub command: BootstrapUserCommands,
@@ -1564,6 +1650,7 @@ pub enum BootstrapUserCommands {
 ///
 /// Use `--skip <part>` to skip named parts, or `--only <part>` to run just named parts. Both flags can be repeated or comma-separated, but they cannot be used together.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap\u{1b}[22m                    # packages + repos + dotfiles + tools + bootstrap task\n    $ \u{1b}[1mmise bootstrap --force-dotfiles\u{1b}[22m   # replace conflicting dotfile targets\n    $ \u{1b}[1mmise bootstrap --skip tools,task\u{1b}[22m  # skip tool installation and the bootstrap task\n    $ \u{1b}[1mmise bootstrap --only tools\u{1b}[22m       # run just tool installation\n    $ \u{1b}[1mmise bootstrap status --missing\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap packages apply --yes\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap repos status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap repos apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap mise-shell-activate apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap macos defaults status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap macos launchd-agents apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap linux systemd-units apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap user apply --dry-run\u{1b}[22m\n"
 )]
@@ -1756,6 +1843,7 @@ pub enum BootstrapCommands {
 
 /// Deletes all cache files in mise
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct CacheClearArgs {
     /// Mark all cache files as old
     #[arg(long = "outdate", hide)]
@@ -1774,12 +1862,14 @@ pub struct CacheClearArgs {
 
 /// Show the cache directory path
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct CachePathArgs {}
 
 /// Removes stale mise cache files
 ///
 /// By default, this command will remove files that have not been accessed in 30 days. Change this with the MISE_CACHE_PRUNE_AGE environment variable.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct CachePruneArgs {
     /// Show pruned files
     #[arg(long = "verbose", short = 'v', count)]
@@ -1798,6 +1888,7 @@ pub struct CachePruneArgs {
 
 /// Inspect output cache entries for a task
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct CacheTaskArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1811,6 +1902,7 @@ pub struct CacheTaskArgs {
 ///
 /// Run `mise cache` with no args to view the current cache directory.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct CacheArgs {
     #[arg(subcommand)]
     pub command: ::std::option::Option<CacheCommands>,
@@ -1834,6 +1926,7 @@ pub enum CacheCommands {
 
 /// Generate shell completions
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise completion bash --include-bash-completion-lib > ~/.local/share/bash-completion/completions/mise\u{1b}[22m\n    $ \u{1b}[1mmise completion zsh  > /usr/local/share/zsh/site-functions/_mise\u{1b}[22m\n    $ \u{1b}[1mmise completion fish > ~/.config/fish/completions/mise.fish\u{1b}[22m\n    $ \u{1b}[1mmise completion powershell >> $PROFILE\u{1b}[22m\n"
 )]
@@ -1860,6 +1953,7 @@ pub struct CompletionArgs {
 
 /// Display the value of a setting in a mise.toml file
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise toml get tools.python\u{1b}[22m\n    3.12\n"
 )]
@@ -1878,6 +1972,7 @@ pub struct ConfigGetArgs {
 
 /// List config files currently in use
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise config ls\u{1b}[22m\n    Path                        Tools\n    ~/.config/mise/config.toml  pitchfork\n    ~/src/mise/mise.toml        actionlint, bun, cargo-binstall, cargo:cargo-insta\n"
 )]
@@ -1895,6 +1990,7 @@ pub struct ConfigLsArgs {
 
 /// Set the value of a setting in a mise.toml file
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise config set tools.python 3.12\u{1b}[22m\n    $ \u{1b}[1mmise config set settings.always_keep_download true\u{1b}[22m\n    $ \u{1b}[1mmise config set env.TEST_ENV_VAR ABC\u{1b}[22m\n    $ \u{1b}[1mmise config set settings.disable_tools node,rust\u{1b}[22m\n\n    # Type for `settings` is inferred\n    $ \u{1b}[1mmise config set settings.jobs 4\u{1b}[22m\n"
 )]
@@ -1936,6 +2032,7 @@ pub enum ConfigSetTypeValue {
 
 /// Manage config files
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct ConfigArgs {
     /// Output in JSON format
     #[arg(long = "json", short = 'J')]
@@ -1967,6 +2064,7 @@ pub enum ConfigCommands {
 ///
 /// This is similar to `mise ls --current`, but this only shows the runtime and/or version. It's designed to fit into scripts more easily.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # outputs `.tool-versions` compatible format\n    $ \u{1b}[1mmise current\u{1b}[22m\n    python 3.11.0 3.10.0\n    shfmt 3.6.0\n    shellcheck 0.9.0\n    node 20.0.0\n\n    $ \u{1b}[1mmise current node\u{1b}[22m\n    20.0.0\n\n    # can output multiple versions\n    $ \u{1b}[1mmise current python\u{1b}[22m\n    3.11.0 3.10.0\n"
 )]
@@ -1984,6 +2082,7 @@ pub struct CurrentArgs {
 ///
 /// This can be used to temporarily disable mise in a shell session.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise deactivate\u{1b}[22m\n"
 )]
@@ -1995,15 +2094,18 @@ pub struct DeactivateArgs {}
 ///
 /// Because this generates the idiomatic files based on currently installed plugins, you should run this command after installing new plugins. Otherwise direnv may not know to update environment variables when idiomatic file versions change.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise direnv activate > ~/.config/direnv/lib/use_mise.sh\u{1b}[22m\n    $ \u{1b}[1mecho 'use mise' > .envrc\u{1b}[22m\n    $ \u{1b}[1mdirenv allow\u{1b}[22m\n"
 )]
 pub struct DirenvActivateArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DirenvEnvrcArgs {}
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DirenvExecArgs {}
 
 /// Output direnv function to use mise inside direnv
@@ -2012,6 +2114,7 @@ pub struct DirenvExecArgs {}
 ///
 /// Because this generates the idiomatic files based on currently installed plugins, you should run this command after installing new plugins. Otherwise direnv may not know to update environment variables when idiomatic file versions change.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DirenvArgs {
     #[arg(subcommand)]
     pub command: ::std::option::Option<DirenvCommands>,
@@ -2040,6 +2143,7 @@ pub enum DirenvCommands {
 ///
 /// If the target is already managed, this updates its source from the live target. Otherwise it creates a `[dotfiles]` entry and seeds the source under `dotfiles.root` unless `--source` is provided.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles add ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles add --mode copy ~/.config/starship.toml\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles add --source dotfiles/gitconfig ~/.gitconfig\u{1b}[22m\n"
 )]
@@ -2085,6 +2189,7 @@ pub struct DotfilesAddArgs {
 ///
 /// Applies configured whole-file entries and edits that aren't in their desired state. Whole-file entries may symlink, copy, or render templates. Edit entries manage a marker-delimited block or a single line in a file mise doesn't otherwise own.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles apply\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles apply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles apply --force --yes\u{1b}[22m\n"
 )]
@@ -2105,6 +2210,7 @@ pub struct DotfilesApplyArgs {
 
 /// Edit a managed dotfile source
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles edit ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles edit --apply ~/.config/starship.toml\u{1b}[22m\n"
 )]
@@ -2128,6 +2234,7 @@ pub struct DotfilesEditArgs {
 
 /// Show the status of dotfiles from `[dotfiles]`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles status\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status --json\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles status --missing\u{1b}[22m # exit 1 if anything is out of sync\n"
 )]
@@ -2149,6 +2256,7 @@ pub struct DotfilesStatusArgs {
 ///
 /// Removes configured whole-file entries and edits while preserving files mise cannot identify as managed. Modified copies, templates, and plain-line edits require `--force`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise bootstrap dotfiles unapply\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply ~/.zshrc\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply --dry-run\u{1b}[22m\n    $ \u{1b}[1mmise bootstrap dotfiles unapply --force --yes\u{1b}[22m\n"
 )]
@@ -2171,6 +2279,7 @@ pub struct DotfilesUnapplyArgs {
 ///
 /// Use `mise bootstrap dotfiles` instead.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DotfilesArgs {
     #[arg(subcommand)]
     pub command: DotfilesCommands,
@@ -2197,6 +2306,7 @@ pub enum DotfilesCommands {
 
 /// Print the current PATH entries mise is providing
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    Get the current PATH entries mise is providing\n    $ mise doctor path\n    /home/user/.local/share/mise/installs/node/24.0.0/bin\n    /home/user/.local/share/mise/installs/rust/1.90.0/bin\n    /home/user/.local/share/mise/installs/python/3.10.0/bin\n"
 )]
@@ -2208,6 +2318,7 @@ pub struct DoctorPathArgs {
 
 /// Check mise installation for possible problems
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise doctor\u{1b}[22m\n    [WARN] plugin node is not installed\n"
 )]
@@ -2229,6 +2340,7 @@ pub enum DoctorCommands {
 ///
 /// This is an alternative to `mise activate` that allows you to explicitly start a mise session. It will have the tools and environment variables in the configs loaded. Note that changing directories will not update the mise environment.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise en .\u{1b}[22m\n    $ \u{1b}[1mnode -v\u{1b}[22m\n    v20.0.0\n\n    Skip loading bashrc:\n    $ \u{1b}[1mmise en -s \"bash --norc\"\u{1b}[22m\n\n    Skip loading zshrc:\n    $ \u{1b}[1mmise en -s \"zsh -f\"\u{1b}[22m\n"
 )]
@@ -2247,6 +2359,7 @@ pub struct EnArgs {
 ///
 /// Use this if you don't want to permanently install mise. It's not necessary to use this if you have `mise activate` in your shell rc file.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1meval \"$(mise env -s bash)\"\u{1b}[22m\n    $ \u{1b}[1meval \"$(mise env -s zsh)\"\u{1b}[22m\n    $ \u{1b}[1mmise env -s fish | source\u{1b}[22m\n    $ \u{1b}[1mexecx($(mise env -s xonsh))\u{1b}[22m\n"
 )]
@@ -2282,6 +2395,7 @@ pub struct EnvArgs {
 ///
 /// The "--" separates runtimes from the commands to pass along to the subprocess.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise exec node@20 -- node ./app.js\u{1b}[22m  # launch app.js using node-20.x\n    $ \u{1b}[1mmise x node@20 -- node ./app.js\u{1b}[22m     # shorter alias\n\n    # Specify command as a string:\n    $ \u{1b}[1mmise exec node@20 python@3.11 --command \"node -v && python -V\"\u{1b}[22m\n\n    # Run a command in a different directory:\n    $ \u{1b}[1mmise x -C /path/to/project node@20 -- node ./app.js\u{1b}[22m\n"
 )]
@@ -2370,6 +2484,7 @@ pub struct ExecArgs {
 ///
 /// Sorts keys and cleans up whitespace in mise.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise fmt\u{1b}[22m\n"
 )]
@@ -2393,6 +2508,7 @@ pub struct FmtArgs {
 ///
 /// This is designed to be used in a project where contributors may not have mise installed.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate bootstrap --write ./bin/mise\u{1b}[22m\n    $ \u{1b}[1m./bin/mise install\u{1b}[22m                                    \u{1b}[2m# downloads mise to .mise if not already installed\u{1b}[22m\n\n    \u{1b}[2m# add a launcher for contributors who clone the project on Windows\u{1b}[22m\n    $ \u{1b}[1mmise generate bootstrap --write ./bin/mise --windows\u{1b}[22m  \u{1b}[2m# also writes bin/mise.cmd\u{1b}[22m\n    $ \u{1b}[1m.\\bin\\mise.cmd install\u{1b}[22m\n"
 )]
@@ -2432,6 +2548,7 @@ pub struct GenerateBootstrapArgs {
 
 /// Generate a mise.toml file
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate config\u{1b}[22m             \u{1b}[2m# generate mise.toml interactively\u{1b}[22m\n    $ \u{1b}[1mmise generate config .mise.toml\u{1b}[22m  \u{1b}[2m# generate a specific file\u{1b}[22m\n    $ \u{1b}[1mmise generate config -g\u{1b}[22m          \u{1b}[2m# generate the global config file\u{1b}[22m\n    $ \u{1b}[1mmise generate config -y\u{1b}[22m          \u{1b}[2m# skip interactive editor\u{1b}[22m\n    $ \u{1b}[1mmise generate config -n\u{1b}[22m          \u{1b}[2m# preview without writing\u{1b}[22m\n"
 )]
@@ -2452,6 +2569,7 @@ pub struct GenerateConfigArgs {
 
 /// Generate a devcontainer to execute mise
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate devcontainer\u{1b}[22m\n"
 )]
@@ -2478,6 +2596,7 @@ pub struct GenerateDevcontainerArgs {
 ///
 /// For more advanced pre-commit functionality, see mise's sister project: https://hk.jdx.dev/
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate git-pre-commit --write --task=pre-commit\u{1b}[22m\n    $ \u{1b}[1mgit commit -m \"feat: add new feature\"\u{1b}[22m \u{1b}[2m# runs `mise run pre-commit`\u{1b}[22m\n\n    \u{1b}[2m# config lives in a subdirectory, so the hook has to change into it first\u{1b}[22m\n    $ \u{1b}[1mmise generate git-pre-commit --write -- -C subdir\u{1b}[22m\n"
 )]
@@ -2507,6 +2626,7 @@ pub struct GenerateGitPreCommitArgs {
 ///
 /// This command generates a GitHub Action workflow file that runs a mise task like `mise run ci` when you push changes to your repository.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate github-action --write --task=ci\u{1b}[22m\n    $ \u{1b}[1mgit commit -m \"feat: add new feature\"\u{1b}[22m\n    $ \u{1b}[1mgit push\u{1b}[22m \u{1b}[2m# runs `mise run ci` on GitHub\u{1b}[22m\n"
 )]
@@ -2524,6 +2644,7 @@ pub struct GenerateGithubActionArgs {
 
 /// Generate documentation for tasks in a project
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise generate task-docs\u{1b}[22m\n"
 )]
@@ -2561,6 +2682,7 @@ pub enum GenerateTaskDocsStyleValue {
 ///
 /// By default, this will build shims like ./bin/<task>. These can be paired with `mise generate bootstrap` so contributors to a project can execute mise tasks without installing mise into their system. When a parent and nested task both exist, the parent stub is written to `<parent>/_default`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tasks add test -- echo 'running tests'\u{1b}[22m\n    $ \u{1b}[1mmise generate task-stubs\u{1b}[22m\n    $ \u{1b}[1m./bin/test\u{1b}[22m\n    running tests\n"
 )]
@@ -2586,6 +2708,7 @@ pub struct GenerateTaskStubsArgs {
 ///
 /// When generating stubs with platform-specific URLs, the command will append new platforms to existing stub files rather than overwriting them. This allows you to incrementally build cross-platform tool stubs.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    Generate a tool stub for a single URL:\n    $ \u{1b}[1mmise generate tool-stub ./bin/gh --url \"https://github.com/cli/cli/releases/download/v2.96.0/gh_2.96.0_linux_amd64.tar.gz\"\u{1b}[22m\n\n    Generate a tool stub with platform-specific URLs:\n    $ \u{1b}[1mmise generate tool-stub ./bin/rg \\\n        --platform-url linux-x64:https://github.com/BurntSushi/ripgrep/releases/download/14.0.3/ripgrep-14.0.3-x86_64-unknown-linux-musl.tar.gz \\\n        --platform-url darwin-arm64:https://github.com/BurntSushi/ripgrep/releases/download/14.0.3/ripgrep-14.0.3-aarch64-apple-darwin.tar.gz\u{1b}[22m\n\n    Append additional platforms to an existing stub:\n    $ \u{1b}[1mmise generate tool-stub ./bin/rg \\\n        --platform-url linux-x64:https://example.com/rg-linux.tar.gz\u{1b}[22m\n    $ \u{1b}[1mmise generate tool-stub ./bin/rg \\\n        --platform-url darwin-arm64:https://example.com/rg-darwin.tar.gz\u{1b}[22m\n    # The stub now contains both platforms\n\n    Use auto-detection for platform from URL:\n    $ \u{1b}[1mmise generate tool-stub ./bin/node \\\n        --platform-url https://nodejs.org/dist/v22.17.1/node-v22.17.1-darwin-arm64.tar.gz\u{1b}[22m\n    # Platform 'macos-arm64' will be auto-detected from the URL\n\n    Generate with platform-specific binary paths:\n    $ \u{1b}[1mmise generate tool-stub ./bin/tool \\\n        --platform-url linux-x64:https://example.com/tool-linux.tar.gz \\\n        --platform-url windows-x64:https://example.com/tool-windows.zip \\\n        --platform-bin windows-x64:tool.exe\u{1b}[22m\n\n    Generate without downloading (faster):\n    $ \u{1b}[1mmise generate tool-stub ./bin/tool --url \"https://example.com/tool.tar.gz\" --skip-download\u{1b}[22m\n\n    Fetch checksums for an existing stub:\n    $ \u{1b}[1mmise generate tool-stub ./bin/jq --fetch\u{1b}[22m\n    # This will read the existing stub and download files to fill in any missing checksums/sizes\n\n    Generate a bootstrap stub that installs mise if needed:\n    $ \u{1b}[1mmise generate tool-stub ./bin/tool --url \"https://example.com/tool.tar.gz\" --bootstrap\u{1b}[22m\n    # The stub will check for mise and install it automatically before running the tool\n\n    Generate a bootstrap stub with a pinned mise version:\n    $ \u{1b}[1mmise generate tool-stub ./bin/tool --url \"https://example.com/tool.tar.gz\" --bootstrap --bootstrap-version 2025.1.0\u{1b}[22m\n\n    Lock an existing tool stub with pinned version and platform URLs/checksums:\n    $ \u{1b}[1mmise generate tool-stub ./bin/node --lock\u{1b}[22m\n\n    Bump the version in a locked stub:\n    $ \u{1b}[1mmise generate tool-stub ./bin/node --lock --version 22\u{1b}[22m\n    # Resolves the latest node 22.x, pins it, and updates platform URLs/checksums\n"
 )]
@@ -2692,6 +2815,7 @@ pub enum GenerateToolStubChecksumAlgorithmValue {
 
 /// Generate files for various tools/services
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct GenerateArgs {
     #[arg(subcommand)]
     pub command: GenerateCommands,
@@ -2729,6 +2853,7 @@ pub enum GenerateCommands {
 ///
 /// Shows which token source mise would use, useful for debugging authentication issues. The token is masked by default.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise github token\u{1b}[22m\n    github.com: ghp_…xxxx (source: GITHUB_TOKEN)\n\n    $ \u{1b}[1mmise github token --unmask\u{1b}[22m\n    github.com: ghp_xxxxxxxxxxxx (source: GITHUB_TOKEN)\n\n    $ \u{1b}[1mmise github token github.mycompany.com\u{1b}[22m\n    github.mycompany.com: (none)\n"
 )]
@@ -2756,6 +2881,7 @@ pub struct GithubTokenArgs {
 
 /// GitHub related commands
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct GithubArgs {
     #[arg(subcommand)]
     pub command: GithubCommands,
@@ -2776,6 +2902,7 @@ pub enum GithubCommands {
 ///
 /// Use `mise local` to set a tool version locally in the current directory.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n    # set the current version of node to 20.x\n    # will use a fuzzy version (e.g.: 20) in .tool-versions file\n    $ \u{1b}[1mmise global --fuzzy node@20\u{1b}[22m\n\n    # set the current version of node to 20.x\n    # will use a precise version (e.g.: 20.0.0) in .tool-versions file\n    $ \u{1b}[1mmise global --pin node@20\u{1b}[22m\n\n    # show the current version of node in ~/.tool-versions\n    $ \u{1b}[1mmise global node\u{1b}[22m\n    20.0.0\n"
 )]
@@ -2808,6 +2935,7 @@ pub struct GlobalArgs {
 
 /// [internal] called by activate hook to update env vars directory change
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct HookEnvArgs {
     /// Skip early exit check
     #[arg(long = "force", short = 'f')]
@@ -2836,6 +2964,7 @@ pub enum HookEnvReasonValue {
 
 /// [internal] called by shell when a command is not found
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct HookNotFoundArgs {
     /// Shell type to generate script for
     #[arg(long = "shell", short = 's', value_name = "SHELL")]
@@ -2849,6 +2978,7 @@ pub struct HookNotFoundArgs {
 ///
 /// Skips config directory by default.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct ImplodeArgs {
     /// List directories that would be removed without actually removing them
     #[arg(long = "dry-run", short = 'n')]
@@ -2860,6 +2990,7 @@ pub struct ImplodeArgs {
 
 /// Edit mise.toml interactively
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise edit\u{1b}[22m             \u{1b}[2m# edit mise.toml interactively\u{1b}[22m\n    $ \u{1b}[1mmise edit .mise.toml\u{1b}[22m  \u{1b}[2m# edit a specific file\u{1b}[22m\n    $ \u{1b}[1mmise edit -g\u{1b}[22m          \u{1b}[2m# edit the global config file\u{1b}[22m\n    $ \u{1b}[1mmise edit -y\u{1b}[22m          \u{1b}[2m# skip interactive editor\u{1b}[22m\n    $ \u{1b}[1mmise edit -n\u{1b}[22m          \u{1b}[2m# preview without writing\u{1b}[22m\n"
 )]
@@ -2884,6 +3015,7 @@ pub struct EditArgs {
 ///
 /// Tools will be installed in parallel. To disable, set `--jobs=1` or `MISE_JOBS=1`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise install node@20.0.0\u{1b}[22m  # install specific node version\n    $ \u{1b}[1mmise install node@20\u{1b}[22m      # install fuzzy node version\n    $ \u{1b}[1mmise install node\u{1b}[22m         # install version specified in mise.toml\n    $ \u{1b}[1mmise install\u{1b}[22m              # installs everything specified in mise.toml\n    $ \u{1b}[1mmise install --include-task-tools\u{1b}[22m # also install tools required by tasks\n"
 )]
@@ -2964,6 +3096,7 @@ pub struct InstallArgs {
 ///
 /// Used for building a tool to a directory for use outside of mise
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # install node@20.0.0 into ./mynode\n    $ \u{1b}[1mmise install-into node@20.0.0 ./mynode && ./mynode/bin/node -v\u{1b}[22m\n    20.0.0\n"
 )]
@@ -2984,6 +3117,7 @@ pub struct InstallIntoArgs {
 ///
 /// Supports prefixes such as `node@20` to get the latest version of node 20.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise latest node@20\u{1b}[22m  # get the latest version of node 20\n    20.0.0\n\n    $ \u{1b}[1mmise latest node\u{1b}[22m     # get the latest stable version of node\n    20.0.0\n\n    $ \u{1b}[1mmise latest node --minimum-release-age 2024-01-01\u{1b}[22m  # latest stable node released before 2024-01-01\n"
 )]
@@ -3018,6 +3152,7 @@ pub struct LatestArgs {
 ///
 /// Use this for adding installs either custom compiled outside mise or built with a different tool.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # build node-20.0.0 with node-build and link it into mise\n    $ \u{1b}[1mnode-build 20.0.0 ~/.nodes/20.0.0\u{1b}[22m\n    $ \u{1b}[1mmise link node@20.0.0 ~/.nodes/20.0.0\u{1b}[22m\n\n    # have mise use the node version provided by Homebrew\n    $ \u{1b}[1mbrew install node\u{1b}[22m\n    $ \u{1b}[1mmise link node@brew $(brew --prefix node)\u{1b}[22m\n    $ \u{1b}[1mmise use node@brew\u{1b}[22m\n"
 )]
@@ -3040,6 +3175,7 @@ pub struct LinkArgs {
 ///
 /// Use this to set a tool's version when within a directory Use `mise global` to set a tool version globally This uses `.tool-version` by default unless there is a `mise.toml` file or if `MISE_USE_TOML` is set. A future v2 release of mise will default to using `mise.toml`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n    # set the current version of node to 20.x for the current directory\n    # will use a precise version (e.g.: 20.0.0) in .tool-versions file\n    $ \u{1b}[1mmise local node@20\u{1b}[22m\n\n    # set node to 20.x for the current project (recurses up to find .tool-versions)\n    $ \u{1b}[1mmise local -p node@20\u{1b}[22m\n\n    # set the current version of node to 20.x for the current directory\n    # will use a fuzzy version (e.g.: 20) in .tool-versions file\n    $ \u{1b}[1mmise local --fuzzy node@20\u{1b}[22m\n\n    # removes node from .tool-versions\n    $ \u{1b}[1mmise local --remove=node\u{1b}[22m\n\n    # show the current version of node in .tool-versions\n    $ \u{1b}[1mmise local node\u{1b}[22m\n    20.0.0\n"
 )]
@@ -3081,6 +3217,7 @@ pub struct LocalArgs {
 ///
 /// Updates checksums and download URLs for all platforms already specified in the lockfile. If no lockfile exists, shows what would be created based on the current configuration, including tools declared by tasks. This allows you to refresh lockfile data for platforms other than the one you're currently on. Operates on the lockfile in the current config root. Use TOOL arguments to target specific tools.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise lock\u{1b}[22m                       # update lockfile for all common platforms\n    $ \u{1b}[1mmise lock node python\u{1b}[22m           # update only node and python\n    $ \u{1b}[1mmise lock --platform linux-x64\u{1b}[22m  # update only linux-x64 platform\n    $ \u{1b}[1mmise lock --dry-run\u{1b}[22m             # show what would be updated\n    $ \u{1b}[1mmise lock --bump\u{1b}[22m                # re-resolve selectors like \"latest\" or \"20\" to the latest matching versions\n    $ \u{1b}[1mmise lock --bump --dry-run --json\u{1b}[22m   # list available updates as JSON without writing\n    $ \u{1b}[1mmise lock --minimum-release-age 2024-01-01\u{1b}[22m   # lock latest/fuzzy versions released before 2024-01-01\n    $ \u{1b}[1mmise lock --local\u{1b}[22m               # update mise.local.lock for local configs\n    $ \u{1b}[1mmise lock --global\u{1b}[22m              # update only global config lockfiles\n"
 )]
@@ -3148,6 +3285,7 @@ pub struct LockArgs {
 ///
 /// It's a useful command to get the current state of your tools.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise ls\u{1b}[22m\n    node    20.0.0 ~/src/myapp/.tool-versions latest\n    python  3.11.0 ~/.tool-versions           3.10\n    python  3.10.0\n\n    $ \u{1b}[1mmise ls --current\u{1b}[22m\n    node    20.0.0 ~/src/myapp/.tool-versions 20\n    python  3.11.0 ~/.tool-versions           3.11.0\n\n    $ \u{1b}[1mmise ls --json\u{1b}[22m\n    {\n      \"node\": [\n        {\n          \"version\": \"20.0.0\",\n          \"install_path\": \"/Users/jdx/.mise/installs/node/20.0.0\",\n          \"source\": {\n            \"type\": \"mise.toml\",\n            \"path\": \"/Users/jdx/mise.toml\"\n          }\n        }\n      ],\n      \"python\": [...]\n    }\n\n    $ \u{1b}[1mmise ls --all-sources\u{1b}[22m\n    node    20.0.0  ~/src/myapp/mise.toml  20\n                    ~/.config/mise/config.toml  latest\n"
 )]
@@ -3215,6 +3353,7 @@ pub struct LsArgs {
 ///
 /// Note that the results may be cached, run `mise cache clean` to clear the cache and get fresh results.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise ls-remote node\u{1b}[22m\n    18.0.0\n    20.0.0\n\n    $ \u{1b}[1mmise ls-remote node@20\u{1b}[22m\n    20.0.0\n    20.1.0\n\n    $ \u{1b}[1mmise ls-remote node 20\u{1b}[22m\n    20.0.0\n    20.1.0\n\n    $ \u{1b}[1mmise ls-remote node --minimum-release-age 2024-01-01\u{1b}[22m\n    20.0.0\n\n    $ \u{1b}[1mmise ls-remote github:cli/cli --json\u{1b}[22m\n    [{\"version\":\"2.62.0\",\"created_at\":\"2024-11-14T15:40:35Z\",\"prerelease\":false},{\"version\":\"2.61.0\",\"created_at\":\"2024-10-23T19:22:15Z\",\"prerelease\":false}]\n"
 )]
@@ -3272,6 +3411,7 @@ pub struct LsRemoteArgs {
 ///
 /// Note: This is primarily intended for integration with AI assistants like Claude, Cursor, or other tools that support the Model Context Protocol.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Start the MCP server (typically used by AI assistant tools)\n    $ \u{1b}[1mmise mcp\u{1b}[22m\n\n    # Example integration with Claude Desktop (add to claude_desktop_config.json):\n    {\n      \"mcpServers\": {\n        \"mise\": {\n          \"command\": \"mise\",\n          \"args\": [\"mcp\"],\n          \"env\": {}\n        }\n      }\n    }\n\n    # Interactive testing with JSON-RPC commands:\n    $ \u{1b}[1mecho '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}' | mise mcp\u{1b}[22m\n\n    # Resources you can query:\n    - \u{1b}[1mmise://tools\u{1b}[22m - List active tools\n    - \u{1b}[1mmise://tools?include_inactive=true\u{1b}[22m - List all installed tools\n    - \u{1b}[1mmise://tasks\u{1b}[22m - List all tasks\n    - \u{1b}[1mmise://env\u{1b}[22m - List environment variables\n    - \u{1b}[1mmise://config\u{1b}[22m - Show configuration info\n\n    # Tools available:\n    - \u{1b}[1mlist_commands\u{1b}[22m - Every mise command and what running it does\n      Example: {\"include_hidden\": false}\n    - \u{1b}[1minstall_tool\u{1b}[22m - Install a tool (not yet implemented)\n    - \u{1b}[1mrun_task\u{1b}[22m - Execute a mise task with optional arguments\n      Example: {\"task\": \"build\", \"args\": [\"--verbose\"]}\n"
 )]
@@ -3283,6 +3423,7 @@ pub struct McpArgs {}
 ///
 /// Requires `mise settings experimental=true` (or `MISE_EXPERIMENTAL=1`).
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    Build with defaults (debian:bookworm-slim base):\n    $ \u{1b}[1mmise oci build\u{1b}[22m\n\n    Build with a specific base image and tag:\n    $ \u{1b}[1mmise oci build --from ubuntu:24.04 --tag myorg/dev:latest -o ./img\u{1b}[22m\n\n    Inspect the result with skopeo:\n    $ \u{1b}[1mskopeo inspect oci:./mise-oci\u{1b}[22m\n\n    Push to a registry:\n    $ \u{1b}[1mmise oci push --image-dir ./mise-oci ghcr.io/me/dev:latest\u{1b}[22m\n\n\u{1b}[1m\u{1b}[4mNotes:\u{1b}[22m\u{1b}[24m\n\n    - The image only contains tools from the project's mise config (and\n      any configs at-or-below the project root). Tools from\n      `~/.config/mise/config.toml` are not included; pass --include-global\n      to package them too.\n    - asdf and vfox plugins are not supported in v1; use a different backend\n      (core, aqua, ubi, github, cargo, npm, go, pipx, spm, http) for each tool.\n    - The host mise binary is embedded at /usr/local/bin/mise by default;\n      build on the same OS/arch as your target image (or pass --no-mise).\n"
 )]
@@ -3332,6 +3473,7 @@ pub struct OciBuildArgs {
 ///
 /// Requires `mise settings experimental=true` (or `MISE_EXPERIMENTAL=1`).
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    Build and push to GHCR:\n    $ \u{1b}[1mmise oci push ghcr.io/me/devenv:latest\u{1b}[22m\n\n    Push an image built earlier:\n    $ \u{1b}[1mmise oci build -o ./img\u{1b}[22m\n    $ \u{1b}[1mmise oci push --image-dir ./img ghcr.io/me/devenv:v1\u{1b}[22m\n\n\u{1b}[1m\u{1b}[4mAuth:\u{1b}[22m\u{1b}[24m\n\n    Credentials are resolved the same way docker/podman resolve them:\n    \u{1b}[1m$REGISTRY_AUTH_FILE\u{1b}[22m, \u{1b}[1m$XDG_RUNTIME_DIR/containers/auth.json\u{1b}[22m,\n    \u{1b}[1m~/.config/containers/auth.json\u{1b}[22m, then \u{1b}[1m~/.docker/config.json\u{1b}[22m\n    (inline auths and credential helpers). Log in with either:\n    $ \u{1b}[1mdocker login ghcr.io\u{1b}[22m\n    $ \u{1b}[1mpodman login ghcr.io\u{1b}[22m\n"
 )]
@@ -3390,6 +3532,7 @@ pub struct OciPushArgs {
 ///
 /// Requires `mise settings experimental=true` (or `MISE_EXPERIMENTAL=1`) and one of: `podman`, `docker`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    Build the current mise.toml and drop into bash:\n    $ \u{1b}[1mmise oci run -it -- bash\u{1b}[22m\n\n    Run a one-shot command with env + volume (note: `-v` is reserved\n    for --verbose, so use `--volume`):\n    $ \u{1b}[1mmise oci run -e DEBUG=1 --volume $PWD:/work -w /work -- npm test\u{1b}[22m\n\n    Re-use a previously built layout (skip the build step):\n    $ \u{1b}[1mmise oci build -o ./img && mise oci run --image-dir ./img -- node -e 'console.log(process.version)'\u{1b}[22m\n\n\u{1b}[1m\u{1b}[4mEngines:\u{1b}[22m\u{1b}[24m\n\n    Prefers \u{1b}[1mpodman\u{1b}[22m (loads OCI layouts natively). Falls back to \u{1b}[1mdocker\u{1b}[22m\n    (loaded via \u{1b}[1mdocker load\u{1b}[22m). Pass \u{1b}[1m--engine podman\u{1b}[22m or \u{1b}[1m--engine docker\u{1b}[22m to override.\n"
 )]
@@ -3466,6 +3609,7 @@ pub enum OciRunEngineValue {
 ///
 /// This command is experimental and requires `mise settings experimental=true` (or `MISE_EXPERIMENTAL=1`). Behavior, flags, and output layout may change in future releases.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct OciArgs {
     #[arg(subcommand)]
     pub command: OciCommands,
@@ -3488,6 +3632,7 @@ pub enum OciCommands {
 ///
 /// See `mise upgrade` to upgrade these versions.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mDeprecation:\u{1b}[22m\u{1b}[24m\n\nThe `-l` shorthand for `--bump` is deprecated and will be removed in mise 2027.8.5.\nAfter removal, `-l` will become shorthand for `--local`. Use `-b` or `--bump` instead.\n\n\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise outdated\u{1b}[22m\n    Plugin  Requested  Current  Latest\n    python  3.11       3.11.0   3.11.1\n    node    20         20.0.0   20.1.0\n\n    $ \u{1b}[1mmise outdated node\u{1b}[22m\n    Plugin  Requested  Current  Latest\n    node    20         20.0.0   20.1.0\n\n    $ \u{1b}[1mmise outdated --json\u{1b}[22m\n    {\"python\": {\"requested\": \"3.11\", \"current\": \"3.11.0\", \"latest\": \"3.11.1\"}, ...}\n\n    $ \u{1b}[1mmise outdated --local\u{1b}[22m\n    Plugin  Requested  Current  Latest\n    node    20         20.0.0   20.1.0\n"
 )]
@@ -3535,6 +3680,7 @@ pub struct OutdatedArgs {
 ///
 /// To appear here, become a patron at <https://jdx.dev/sponsors.html>.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise patrons\u{1b}[22m\n    $ \u{1b}[1mmise patrons -J\u{1b}[22m\n    $ \u{1b}[1mmise patrons --refresh\u{1b}[22m"
 )]
@@ -3553,6 +3699,7 @@ pub struct PatronsArgs {
 ///
 /// This behavior can be modified in ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # install the poetry via shorthand\n    $ \u{1b}[1mmise plugins install poetry\u{1b}[22m\n\n    # install the poetry plugin using a specific git url\n    $ \u{1b}[1mmise plugins install poetry https://github.com/mise-plugins/mise-poetry.git\u{1b}[22m\n\n    # install the poetry plugin using the git url only\n    # (poetry is inferred from the url)\n    $ \u{1b}[1mmise plugins install https://github.com/mise-plugins/mise-poetry.git\u{1b}[22m\n\n    # install the poetry plugin using a specific ref\n    $ \u{1b}[1mmise plugins install poetry https://github.com/mise-plugins/mise-poetry.git#11d0c1e\u{1b}[22m\n"
 )]
@@ -3595,6 +3742,7 @@ pub struct PluginsInstallArgs {
 ///
 /// This is used for developing a plugin.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # essentially just `ln -s ./vfox-cmake ~/.local/share/mise/plugins/cmake`\n    $ \u{1b}[1mmise plugins link cmake ./vfox-cmake\u{1b}[22m\n\n    # infer plugin name as \"cmake\"\n    $ \u{1b}[1mmise plugins link ./vfox-cmake\u{1b}[22m\n"
 )]
@@ -3620,6 +3768,7 @@ pub struct PluginsLinkArgs {
 ///
 /// Can also show remotely available plugins to install.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise plugins ls\u{1b}[22m\n    cmake\n    poetry\n\n    $ \u{1b}[1mmise plugins ls --urls\u{1b}[22m\n    cmake     https://github.com/mise-plugins/vfox-cmake.git\n    poetry    https://github.com/mise-plugins/vfox-poetry.git\n"
 )]
@@ -3664,6 +3813,7 @@ pub struct PluginsLsArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct PluginsLsRemoteArgs {
     #[arg(
         help = "Show the git url for each plugin e.g.: https://github.com/mise-plugins/mise-poetry.git",
@@ -3682,6 +3832,7 @@ pub struct PluginsLsRemoteArgs {
 
 /// Removes a plugin
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise plugins uninstall cmake\u{1b}[22m\n"
 )]
@@ -3701,6 +3852,7 @@ pub struct PluginsUninstallArgs {
 ///
 /// note: this updates the plugin itself, not the runtime versions
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise plugins update\u{1b}[22m              # update all plugins\n    $ \u{1b}[1mmise plugins update cmake\u{1b}[22m       # update only cmake\n    $ \u{1b}[1mmise plugins update cmake#beta\u{1b}[22m  # specify a ref\n"
 )]
@@ -3719,6 +3871,7 @@ pub struct PluginsUpdateArgs {
 
 /// Manage plugins
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct PluginsArgs {
     /// list all available remote plugins
     ///
@@ -3785,6 +3938,7 @@ pub enum PluginsCommands {
 ///
 /// Adds one or more packages to the project using the appropriate package manager. Package specs use the format `ecosystem:package`, e.g., `npm:react` or `npm:@types/react@19`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DepsAddArgs {
     /// Add as a development dependency
     #[arg(long = "dev", short = 'D')]
@@ -3798,6 +3952,7 @@ pub struct DepsAddArgs {
 ///
 /// Checks if dependency lockfiles are newer than installed outputs and runs install commands if needed.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DepsInstallArgs {
     /// Show why a provider is fresh or stale (requires a provider argument)
     #[arg(long = "explain")]
@@ -3831,6 +3986,7 @@ pub struct DepsInstallArgs {
 ///
 /// Removes one or more packages from the project using the appropriate package manager. Package specs use the format `ecosystem:package`, e.g., `npm:lodash`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct DepsRemoveArgs {
     /// Package(s) to remove (e.g., npm:lodash)
     #[arg(positional, value_name = "PACKAGES", required)]
@@ -3843,6 +3999,7 @@ pub struct DepsRemoveArgs {
 ///
 /// Providers with `auto = true` are automatically invoked before `mise x` and `mise run` unless skipped with the --no-deps flag.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise deps\u{1b}[22m                    # Install all project dependencies\n    $ \u{1b}[1mmise deps install\u{1b}[22m            # Same as bare `mise deps`\n    $ \u{1b}[1mmise deps install --force\u{1b}[22m    # Force reinstall even if fresh\n    $ \u{1b}[1mmise deps install --dry-run\u{1b}[22m  # Show what would run\n    $ \u{1b}[1mmise deps --monorepo\u{1b}[22m         # Install deps from explicit monorepo config roots\n    $ \u{1b}[1mmise deps add npm:react\u{1b}[22m      # Add a dependency\n    $ \u{1b}[1mmise deps add -D npm:vitest\u{1b}[22m  # Add a dev dependency\n    $ \u{1b}[1mmise deps remove npm:lodash\u{1b}[22m  # Remove a dependency\n\n\u{1b}[1m\u{1b}[4mConfiguration:\u{1b}[22m\u{1b}[24m\n\n```toml\n# Built-in npm provider (auto-detects lockfile)\n[deps.npm]\nauto = true              # Auto-run before mise x/run\n\n# Custom provider\n[deps.codegen]\nauto = true\nsources = [\"schema/*.graphql\"]\noutputs = [\"src/generated/\"]\nrun = \"npm run codegen\"\n\n[deps]\ndisable = [\"npm\"]        # Disable specific providers at runtime\n```\n"
 )]
@@ -3898,6 +4055,7 @@ pub enum DepsCommands {
 ///
 /// You can list prunable tools with `mise ls --prunable`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise prune --dry-run\u{1b}[22m\n    rm -rf ~/.local/share/mise/versions/node/20.0.0\n    rm -rf ~/.local/share/mise/versions/node/20.0.1\n"
 )]
@@ -3930,6 +4088,7 @@ pub struct PruneArgs {
 ///
 /// For example, `poetry` is shorthand for `asdf:mise-plugins/mise-poetry`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise registry\u{1b}[22m\n    node    core:node\n    poetry  asdf:mise-plugins/mise-poetry\n    ubi     cargo:ubi-cli\n\n    $ \u{1b}[1mmise registry poetry\u{1b}[22m\n    asdf:mise-plugins/mise-poetry\n"
 )]
@@ -3958,6 +4117,7 @@ pub struct RegistryArgs {
 
 /// internal command to generate markdown from help
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct RenderHelpArgs {}
 
 /// Creates new shims based on bin paths from currently installed tools.
@@ -3973,6 +4133,7 @@ pub struct RenderHelpArgs {}
 ///
 /// Note that this creates shims for _all_ installed tools, not just the ones that are currently active in mise.toml.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise reshim\u{1b}[22m\n    $ \u{1b}[1m~/.local/share/mise/shims/node -v\u{1b}[22m\n    v20.0.0\n"
 )]
@@ -4005,6 +4166,7 @@ pub struct ReshimArgs {
 ///     EOF
 ///     $ mise run build
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Runs the \"lint\" tasks. This needs to either be defined in mise.toml\n    # or as a standalone script. See the project README for more information.\n    $ \u{1b}[1mmise run lint\u{1b}[22m\n\n    # Forces the \"build\" tasks to run even if its sources are up-to-date.\n    $ \u{1b}[1mmise run --force build\u{1b}[22m\n\n    # Run \"test\" with stdin/stdout/stderr all connected to the current terminal.\n    # This forces `--jobs=1` to prevent interleaving of output.\n    $ \u{1b}[1mmise run --raw test\u{1b}[22m\n\n    # Runs the \"lint\", \"test\", and \"check\" tasks in parallel.\n    $ \u{1b}[1mmise run lint ::: test ::: check\u{1b}[22m\n\n    # Execute multiple tasks each with their own arguments.\n    $ \u{1b}[1mmise run cmd1 arg1 arg2 ::: cmd2 arg1 arg2\u{1b}[22m\n",
     restart_token = ":::",
@@ -4213,6 +4375,7 @@ pub enum RunTaskCacheValue {
 ///
 /// By default, it will show all tools that fuzzy match the search term. For non-fuzzy matches, use the `--match-type` flag.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise search jq\u{1b}[22m\n    Tool  Description\n    jq    Command-line JSON processor. https://github.com/jqlang/jq\n    jqp   A TUI playground to experiment with jq. https://github.com/noahgorstein/jqp\n    jiq   jid on jq - interactive JSON query tool using jq expressions. https://github.com/fiatjaf/jiq\n    gojq  Pure Go implementation of jq. https://github.com/itchyny/gojq\n\n    $ \u{1b}[1mmise search --interactive\u{1b}[22m\n    Tool\n    Search a tool\n    ❯ jq    Command-line JSON processor. https://github.com/jqlang/jq\n      jqp   A TUI playground to experiment with jq. https://github.com/noahgorstein/jqp\n      jiq   jid on jq - interactive JSON query tool using jq expressions. https://github.com/fiatjaf/jiq\n      gojq  Pure Go implementation of jq. https://github.com/itchyny/gojq\n    /jq \n    esc clear filter • enter confirm\n"
 )]
@@ -4256,6 +4419,7 @@ pub enum SearchMatchTypeValue {
 ///
 /// Packagers can disable this command so that mise is updated through the package manager instead. See https://mise.jdx.dev/contributing.html#packaging-and-self-update-instructions
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct SelfUpdateArgs {
     /// Update even if already up to date
     #[arg(long = "force", short = 'f')]
@@ -4277,6 +4441,7 @@ pub struct SelfUpdateArgs {
 ///
 /// Use `-E <env>` to create/modify environment-specific config files like `mise.<env>.toml`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise set NODE_ENV=production\u{1b}[22m\n\n    $ \u{1b}[1mmise set NODE_ENV\u{1b}[22m\n    production\n\n    $ \u{1b}[1mmise set -E staging NODE_ENV=staging\u{1b}[22m\n    # creates or modifies mise.staging.toml\n\n    $ \u{1b}[1mmise set\u{1b}[22m\n    key       value       source\n    NODE_ENV  production  ~/.config/mise/config.toml\n\n    $ \u{1b}[1mmise set --prompt PASSWORD\u{1b}[22m\n    Enter value for PASSWORD: [hidden input]\n\n    \u{1b}[1m\u{1b}[4mMultiline Values (--stdin):\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mcat private.key | mise set --stdin MY_KEY\u{1b}[22m\n\n    $ \u{1b}[1mprintf \"line1\\nline2\" | mise set --stdin MY_KEY\u{1b}[22m\n\n    \u{1b}[1m\u{1b}[4m[experimental] Age Encryption:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise set --age-encrypt API_KEY=secret\u{1b}[22m\n\n    $ \u{1b}[1mmise set --age-encrypt --prompt API_KEY\u{1b}[22m\n    Enter value for API_KEY: [hidden input]\n"
 )]
@@ -4360,6 +4525,7 @@ pub struct SetArgs {
 ///
 /// Used with an array setting, this will append the value to the array. This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise settings add disable_hints python_multi\u{1b}[22m\n"
 )]
@@ -4381,6 +4547,7 @@ pub struct SettingsAddArgs {
 ///
 /// Note that aliases are also stored in this file but managed separately with `mise tool-alias get`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise settings get idiomatic_version_file\u{1b}[22m\n    true\n"
 )]
@@ -4399,6 +4566,7 @@ pub struct SettingsGetArgs {
 ///
 /// Note that aliases are also stored in this file but managed separately with `mise tool-alias`
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise settings ls\u{1b}[22m\n    idiomatic_version_file = false\n    ...\n\n    $ \u{1b}[1mmise settings ls python\u{1b}[22m\n    default_packages_file = \"~/.default-python-packages\"\n    ...\n",
     group("output")
@@ -4431,6 +4599,7 @@ pub struct SettingsLsArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml by default. With `--local`, modifies the local config file instead. See https://mise.jdx.dev/configuration.html#target-file-for-write-operations
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise settings idiomatic_version_file=true\u{1b}[22m\n"
 )]
@@ -4450,6 +4619,7 @@ pub struct SettingsSetArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise settings unset idiomatic_version_file\u{1b}[22m\n"
 )]
@@ -4464,6 +4634,7 @@ pub struct SettingsUnsetArgs {
 
 /// Manage settings
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # list all settings\n    $ \u{1b}[1mmise settings\u{1b}[22m\n\n    # get the value of the setting \"always_keep_download\"\n    $ \u{1b}[1mmise settings always_keep_download\u{1b}[22m\n\n    # set the value of the setting \"always_keep_download\" to \"true\"\n    $ \u{1b}[1mmise settings always_keep_download=true\u{1b}[22m\n\n    # set the value of the setting \"node.mirror_url\" to \"https://npmmirror.com/mirrors/node/\"\n    $ \u{1b}[1mmise settings node.mirror_url https://npmmirror.com/mirrors/node/\u{1b}[22m\n",
     group("output")
@@ -4522,6 +4693,7 @@ pub enum SettingsCommands {
 ///
 /// This works by setting environment variables for the current shell session such as `MISE_NODE_VERSION=20` which is "eval"ed as a shell function created by `mise activate`.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise shell node@20\u{1b}[22m\n    $ \u{1b}[1mnode -v\u{1b}[22m\n    v20.0.0\n"
 )]
@@ -4551,6 +4723,7 @@ pub struct ShellArgs {
 
 /// Show the command for a shell alias
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise shell-alias get ll\u{1b}[22m\n    ls -la\n"
 )]
@@ -4564,6 +4737,7 @@ pub struct ShellAliasGetArgs {
 ///
 /// Shows the shell aliases that are set in the current directory. These are defined in `mise.toml` under the `[shell_alias]` section.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise shell-alias ls\u{1b}[22m\n    alias    command\n    ll       ls -la\n    gs       git status\n"
 )]
@@ -4577,6 +4751,7 @@ pub struct ShellAliasLsArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise shell-alias set ll \"ls -la\"\u{1b}[22m\n    $ \u{1b}[1mmise shell-alias set gs \"git status\"\u{1b}[22m\n"
 )]
@@ -4593,6 +4768,7 @@ pub struct ShellAliasSetArgs {
 ///
 /// This modifies the contents of ~/.config/mise/config.toml
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise shell-alias unset ll\u{1b}[22m\n"
 )]
@@ -4604,6 +4780,7 @@ pub struct ShellAliasUnsetArgs {
 
 /// Manage shell aliases.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct ShellAliasArgs {
     /// Don't show table header
     #[arg(long = "no-header")]
@@ -4630,6 +4807,7 @@ pub enum ShellAliasCommands {
 
 /// Show the companies sponsoring mise and the jdx.dev open source tools
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct SponsorsArgs {}
 
 /// Symlinks all tool versions from an external tool into mise
@@ -4638,6 +4816,7 @@ pub struct SponsorsArgs {}
 ///
 /// This won't overwrite managed installs, runtime aliases, or links from other providers.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mbrew install node@18 node@20\u{1b}[22m\n    $ \u{1b}[1mmise sync node --brew\u{1b}[22m\n    $ \u{1b}[1mmise use -g node@18\u{1b}[22m - uses Homebrew-provided node\n",
     group("SyncNodeType", required, multiple)
@@ -4660,6 +4839,7 @@ pub struct SyncNodeArgs {
 ///
 /// This won't overwrite managed installs, runtime aliases, or links from other providers.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mpyenv install 3.11.0\u{1b}[22m\n    $ \u{1b}[1mmise sync python --pyenv\u{1b}[22m\n    $ \u{1b}[1mmise use -g python@3.11.0\u{1b}[22m - uses pyenv-provided python\n    \n    $ \u{1b}[1muv python install 3.11.0\u{1b}[22m\n    $ \u{1b}[1mmise install python@3.10.0\u{1b}[22m\n    $ \u{1b}[1mmise sync python --uv\u{1b}[22m\n    $ \u{1b}[1mmise x python@3.11.0 -- python -V\u{1b}[22m - uses uv-provided python\n    $ \u{1b}[1muv run -p 3.10.0 -- python -V\u{1b}[22m - uses mise-provided python\n"
 )]
@@ -4674,6 +4854,7 @@ pub struct SyncPythonArgs {
 
 /// Symlinks all ruby tool versions from an external tool into mise
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mbrew install ruby\u{1b}[22m\n    $ \u{1b}[1mmise sync ruby --brew\u{1b}[22m\n    $ \u{1b}[1mmise use -g ruby\u{1b}[22m - Use the latest version of Ruby installed by Homebrew\n"
 )]
@@ -4685,6 +4866,7 @@ pub struct SyncRubyArgs {
 
 /// Synchronize tools from other version managers with mise
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct SyncArgs {
     #[arg(subcommand)]
     pub command: SyncCommands,
@@ -4707,6 +4889,7 @@ pub enum SyncCommands {
 ///
 /// Adds a task to the local mise.toml file. See https://mise.jdx.dev/configuration.html#target-file-for-write-operations
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tasks add pre-commit --depends \"test\" --depends \"render\" -- echo pre-commit\u{1b}[22m\n"
 )]
@@ -4765,6 +4948,7 @@ pub struct TasksAddArgs {
 
 /// Display a tree visualization of a dependency graph
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Show dependencies for all tasks\n    $ \u{1b}[1mmise tasks deps\u{1b}[22m\n\n    # Show dependencies for the \"lint\", \"test\" and \"check\" tasks\n    $ \u{1b}[1mmise tasks deps lint test check\u{1b}[22m\n\n    # Show dependencies in DOT format\n    $ \u{1b}[1mmise tasks deps --dot\u{1b}[22m\n\n    # Collapse repeated dependencies\n    $ \u{1b}[1mmise tasks deps --compact\u{1b}[22m\n"
 )]
@@ -4790,6 +4974,7 @@ pub struct TasksDepsArgs {
 ///
 /// The task will be created as a standalone script if it does not already exist.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tasks edit build\u{1b}[22m\n    $ \u{1b}[1mmise tasks edit test\u{1b}[22m\n"
 )]
@@ -4804,6 +4989,7 @@ pub struct TasksEditArgs {
 
 /// [experimental] Inspect the workspace project graph
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Inspect projects and their dependency edges\n    $ \u{1b}[1mmise tasks graph\u{1b}[22m\n\n    # Emit the project graph as JSON\n    $ \u{1b}[1mmise tasks graph --json\u{1b}[22m\n\n    # Explain where inferred projects and task fields came from\n    $ \u{1b}[1mmise tasks graph --explain\u{1b}[22m\n"
 )]
@@ -4821,6 +5007,7 @@ pub struct TasksGraphArgs {
 
 /// Get information about a task
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tasks info\u{1b}[22m\n    Name: test\n    Aliases: t\n    Description: Test the application\n    Source: ~/src/myproj/mise.toml\n\n    $ \u{1b}[1mmise tasks info test --json\u{1b}[22m\n    {\n      \"name\": \"test\",\n      \"aliases\": \"t\",\n      \"description\": \"Test the application\",\n      \"source\": \"~/src/myproj/mise.toml\",\n      \"config_sources\": [\"~/src/myproj/mise.toml\"],\n      \"depends\": [],\n      \"env\": {},\n      \"dir\": null,\n      \"hide\": false,\n      \"raw\": false,\n      \"sources\": [],\n      \"outputs\": [],\n      \"run\": [\n        \"echo \\\"testing!\\\"\"\n      ],\n      \"file\": null,\n      \"usage_spec\": {}\n    }\n"
 )]
@@ -4834,6 +5021,7 @@ pub struct TasksInfoArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tasks ls\u{1b}[22m\n"
 )]
@@ -4916,6 +5104,7 @@ pub enum TasksLsSortOrderValue {
 ///     EOF
 ///     $ mise run build
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Runs the \"lint\" tasks. This needs to either be defined in mise.toml\n    # or as a standalone script. See the project README for more information.\n    $ \u{1b}[1mmise run lint\u{1b}[22m\n\n    # Forces the \"build\" tasks to run even if its sources are up-to-date.\n    $ \u{1b}[1mmise run --force build\u{1b}[22m\n\n    # Run \"test\" with stdin/stdout/stderr all connected to the current terminal.\n    # This forces `--jobs=1` to prevent interleaving of output.\n    $ \u{1b}[1mmise run --raw test\u{1b}[22m\n\n    # Runs the \"lint\", \"test\", and \"check\" tasks in parallel.\n    $ \u{1b}[1mmise run lint ::: test ::: check\u{1b}[22m\n\n    # Execute multiple tasks each with their own arguments.\n    $ \u{1b}[1mmise run cmd1 arg1 arg2 ::: cmd2 arg1 arg2\u{1b}[22m\n",
     restart_token = ":::",
@@ -5133,6 +5322,7 @@ pub enum TasksRunTaskCacheValue {
 
 /// Validate tasks for common errors and issues
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Validate all tasks\n    $ \u{1b}[1mmise tasks validate\u{1b}[22m\n\n    # Validate specific tasks\n    $ \u{1b}[1mmise tasks validate build test\u{1b}[22m\n\n    # Output results as JSON\n    $ \u{1b}[1mmise tasks validate --json\u{1b}[22m\n\n    # Only show errors (skip warnings)\n    $ \u{1b}[1mmise tasks validate --errors-only\u{1b}[22m\n\n\u{1b}[1m\u{1b}[4mValidation Checks:\u{1b}[22m\u{1b}[24m\n\nThe validate command performs the following checks:\n\n  • \u{1b}[1mCircular Dependencies\u{1b}[22m: Detects dependency cycles\n  • \u{1b}[1mMissing References\u{1b}[22m: Finds references to nonexistent tasks\n  • \u{1b}[1mUsage Spec Parsing\u{1b}[22m: Validates #USAGE directives and specs\n  • \u{1b}[1mTimeout Format\u{1b}[22m: Checks timeout values are valid durations\n  • \u{1b}[1mAlias Conflicts\u{1b}[22m: Detects duplicate aliases across tasks\n  • \u{1b}[1mFile Existence\u{1b}[22m: Verifies file-based tasks exist\n  • \u{1b}[1mDirectory Templates\u{1b}[22m: Validates directory paths and templates\n  • \u{1b}[1mShell Commands\u{1b}[22m: Checks shell executables exist\n  • \u{1b}[1mGlob Patterns\u{1b}[22m: Validates source and output patterns\n  • \u{1b}[1mRun Entries\u{1b}[22m: Ensures tasks reference valid dependencies\n"
 )]
@@ -5153,6 +5343,7 @@ pub struct TasksValidateArgs {
 
 /// Manage tasks
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct TasksArgs {
     /// Only show global tasks
     #[arg(long = "global", short = 'g', overrides("--local"))]
@@ -5251,6 +5442,7 @@ pub enum TasksCommands {
 
 /// Test a tool installs and executes
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise test-tool ripgrep\u{1b}[22m\n"
 )]
@@ -5289,6 +5481,7 @@ pub struct TestToolArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise token forgejo\u{1b}[22m\n    codeberg.org: a180…61f6 (source: FORGEJO_TOKEN)\n\n    $ \u{1b}[1mmise token forgejo --unmask\u{1b}[22m\n    codeberg.org: a18099ca69064be387fbe37b8ad1d333758361f6 (source: FORGEJO_TOKEN)\n\n    $ \u{1b}[1mmise token forgejo forgejo.mycompany.com\u{1b}[22m\n    forgejo.mycompany.com: (none)\n"
 )]
@@ -5302,6 +5495,7 @@ pub struct TokenForgejoArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise token github\u{1b}[22m\n    github.com: ghp_…xxxx (source: GITHUB_TOKEN)\n\n    $ \u{1b}[1mmise token github --unmask\u{1b}[22m\n    github.com: ghp_xxxxxxxxxxxx (source: GITHUB_TOKEN)\n\n    $ \u{1b}[1mmise token github github.mycompany.com\u{1b}[22m\n    github.mycompany.com: (none)\n\n    $ \u{1b}[1mmise token github --oauth --refresh\u{1b}[22m\n    github.com: gho_…xxxx (source: GitHub OAuth)\n"
 )]
@@ -5331,6 +5525,7 @@ pub struct TokenGithubArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise token gitlab\u{1b}[22m\n    gitlab.com: glpa…xxxx (source: GITLAB_TOKEN)\n\n    $ \u{1b}[1mmise token gitlab --unmask\u{1b}[22m\n    gitlab.com: glpat-xxxxxxxxxxxx (source: GITLAB_TOKEN)\n\n    $ \u{1b}[1mmise token gitlab gitlab.mycompany.com\u{1b}[22m\n    gitlab.mycompany.com: (none)\n"
 )]
@@ -5345,6 +5540,7 @@ pub struct TokenGitlabArgs {
 
 /// Display git provider tokens mise will use
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct TokenArgs {
     #[arg(subcommand)]
     pub command: TokenCommands,
@@ -5377,6 +5573,7 @@ pub enum TokenCommands {
 
 /// Gets information about a tool
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise tool node\u{1b}[22m\n    Backend:            core\n    Installed Versions: 20.0.0 22.0.0\n    Active Version:     20.0.0\n    Requested Version:  20\n    Config Source:      ~/.config/mise/mise.toml\n    Tool Options:       [none]\n",
     group("ToolInfoFilter")
@@ -5429,6 +5626,7 @@ pub struct ToolArgs {
 ///
 /// For more information, see: https://mise.jdx.dev/dev-tools/tool-stubs.html
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(disable_help_flag, disable_version_flag)]
 pub struct ToolStubArgs {
     /// Path to the TOML tool stub file to execute
@@ -5453,6 +5651,7 @@ pub struct ToolStubArgs {
 ///
 /// Trust is shared across git worktrees: a config file inside a linked worktree is trusted when the equivalent path in the repository's main checkout has been trusted. Paranoid mode disables this sharing since worktrees can check out branches with different config contents.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # trusts ~/some_dir/mise.toml\n    $ \u{1b}[1mmise trust ~/some_dir/mise.toml\u{1b}[22m\n\n    # trusts mise.toml in the current or parent directory\n    $ \u{1b}[1mmise trust\u{1b}[22m\n"
 )]
@@ -5482,6 +5681,7 @@ pub struct TrustArgs {
 ///
 /// This only removes the installed version, it does not modify mise.toml.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # will uninstall specific version\n    $ \u{1b}[1mmise uninstall node@18.0.0\u{1b}[22m\n\n    # will uninstall the current node version (if only one version is installed)\n    $ \u{1b}[1mmise uninstall node\u{1b}[22m\n\n    # will uninstall all installed versions of node\n    $ \u{1b}[1mmise uninstall --all node@18.0.0\u{1b}[22m # will uninstall all node versions\n"
 )]
@@ -5510,6 +5710,7 @@ pub struct UninstallArgs {
 ///
 /// By default, this command modifies `mise.toml` in the current directory.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Remove NODE_ENV from the current directory's config\n    $ \u{1b}[1mmise unset NODE_ENV\u{1b}[22m\n\n    # Remove NODE_ENV from the global config\n    $ \u{1b}[1mmise unset NODE_ENV -g\u{1b}[22m\n"
 )]
@@ -5534,6 +5735,7 @@ pub struct UnsetArgs {
 
 /// Remove explicit trust for a config
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct UntrustArgs {
     /// The config file to untrust
     #[arg(positional, value_name = "CONFIG_FILE")]
@@ -5556,6 +5758,7 @@ pub struct UntrustArgs {
 ///
 /// Will also prune the installed version if no other configurations are using it.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # will uninstall specific version\n    $ \u{1b}[1mmise unuse node@18.0.0\u{1b}[22m\n\n    # will uninstall specific version from global config\n    $ \u{1b}[1mmise unuse -g node@18.0.0\u{1b}[22m\n\n    # will uninstall specific version from .mise.local.toml\n    $ \u{1b}[1mmise unuse --env local node@20\u{1b}[22m\n\n    # will uninstall specific version from .mise.staging.toml\n    $ \u{1b}[1mmise unuse --env staging node@20\u{1b}[22m\n"
 )]
@@ -5596,6 +5799,7 @@ pub struct UnuseArgs {
 ///
 /// This will update mise.lock if it is enabled, see https://mise.jdx.dev/configuration/settings.html#lockfile
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mDeprecation:\u{1b}[22m\u{1b}[24m\n\nThe `-l` shorthand for `--bump` is deprecated and will be removed in mise 2027.8.5.\nAfter removal, `-l` will become shorthand for `--local`. Use `-b` or `--bump` instead.\n\n\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Upgrades node to the latest version matching the range in mise.toml\n    $ \u{1b}[1mmise upgrade node\u{1b}[22m\n\n    # Upgrades node to the latest version and bumps the version in mise.toml\n    $ \u{1b}[1mmise upgrade node --bump\u{1b}[22m\n\n    # Upgrades all tools to the latest versions\n    $ \u{1b}[1mmise upgrade\u{1b}[22m\n\n    # Upgrades all tools to the latest versions and bumps the version in mise.toml\n    $ \u{1b}[1mmise upgrade --bump\u{1b}[22m\n\n    # Just print what would be done, don't actually do it\n    $ \u{1b}[1mmise upgrade --dry-run\u{1b}[22m\n\n    # Upgrades node and python to the latest versions\n    $ \u{1b}[1mmise upgrade node python\u{1b}[22m\n\n    # Upgrade all tools except go\n    $ \u{1b}[1mmise upgrade --exclude go\u{1b}[22m\n\n    # Show a multiselect menu to choose which tools to upgrade\n    $ \u{1b}[1mmise upgrade --interactive\u{1b}[22m\n\n    # Only upgrade tools defined in local mise.toml, not global ones\n    $ \u{1b}[1mmise upgrade --local\u{1b}[22m\n"
 )]
@@ -5689,6 +5893,7 @@ pub struct UpgradeArgs {
 ///
 /// See https://usage.jdx.dev for more information on this specification.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 pub struct UsageArgs {}
 
 /// Installs a tool and adds the version to mise.toml.
@@ -5707,6 +5912,7 @@ pub struct UsageArgs {}
 ///
 /// Use the `--global` flag to use the global config file instead.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # run with no arguments to use the interactive selector\n    $ \u{1b}[1mmise use\u{1b}[22m\n\n    # set the current version of node to 20.x in mise.toml of current directory\n    # will write the fuzzy version (e.g.: 20)\n    $ \u{1b}[1mmise use node@20\u{1b}[22m\n\n    # set the current version of node to 20.x in ~/.config/mise/config.toml\n    # will write the precise version (e.g.: 20.0.0)\n    $ \u{1b}[1mmise use -g --pin node@20\u{1b}[22m\n\n    # sets .mise.local.toml (which is intended not to be committed to a project)\n    $ \u{1b}[1mmise use --env local node@20\u{1b}[22m\n\n    # sets .mise.staging.toml (which is used if MISE_ENV=staging)\n    $ \u{1b}[1mmise use --env staging node@20\u{1b}[22m\n"
 )]
@@ -5799,6 +6005,7 @@ pub struct UseArgs {
 ///
 /// If the version is out of date, it will display a warning.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise version\u{1b}[22m\n    $ \u{1b}[1mmise --version\u{1b}[22m\n    $ \u{1b}[1mmise -v\u{1b}[22m\n    $ \u{1b}[1mmise -V\u{1b}[22m\n"
 )]
@@ -5814,6 +6021,7 @@ pub struct VersionArgs {
 ///
 /// For more advanced process management (daemon management, auto-restart, readiness checks, cron scheduling), see mise's sister project: https://pitchfork.jdx.dev
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise watch build\u{1b}[22m\n    Runs the \"build\" tasks. Will re-run the tasks when any of its sources change.\n    Uses \"sources\" from the tasks definition to determine which files to watch.\n\n    $ \u{1b}[1mmise watch build --glob src/**/*.rs\u{1b}[22m\n    Runs the \"build\" tasks but specify the files to watch with a glob pattern.\n    This overrides the \"sources\" from the tasks definition.\n\n    $ \u{1b}[1mmise watch build --clear\u{1b}[22m\n    Extra arguments are passed to watchexec. See `watchexec --help` for details.\n\n    $ \u{1b}[1mmise watch serve --watch src --exts rs --restart\u{1b}[22m\n    Starts an api server, watching for changes to \"*.rs\" files in \"./src\" and kills/restarts the server when they change.\n"
 )]
@@ -6486,6 +6694,7 @@ pub enum WatchFsEventsValue {
 ///
 /// The tool must be installed for this to work.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    # Show the latest installed version of node\n    # If it is is not installed, errors\n    $ \u{1b}[1mmise where node@20\u{1b}[22m\n    /home/jdx/.local/share/mise/installs/node/20.0.0\n\n    # Show the current, active install directory of node\n    # Errors if node is not referenced in any .tool-version file\n    $ \u{1b}[1mmise where node\u{1b}[22m\n    /home/jdx/.local/share/mise/installs/node/20.0.0\n"
 )]
@@ -6509,6 +6718,7 @@ pub struct WhereArgs {
 ///
 /// Use this to figure out what version of a tool is currently active.
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     after_long_help = "\u{1b}[1m\u{1b}[4mExamples:\u{1b}[22m\u{1b}[24m\n\n    $ \u{1b}[1mmise which node\u{1b}[22m\n    /home/username/.local/share/mise/installs/node/20.0.0/bin/node\n\n    $ \u{1b}[1mmise which node --plugin\u{1b}[22m\n    node\n\n    $ \u{1b}[1mmise which node --version\u{1b}[22m\n    20.0.0\n"
 )]
@@ -6534,6 +6744,7 @@ pub struct WhichArgs {
 }
 
 #[derive(Args)]
+#[arg(unknown_flags = "value")]
 #[arg(
     name = "mise",
     about = "Dev tools, env vars, and tasks in one CLI",

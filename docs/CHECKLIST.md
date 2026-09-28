@@ -53,9 +53,10 @@ where the references disagree and we picked a side.
 - [x] Value-taking short ends the bundle: `-vpfile` → `v`, `p=file`
 - [x] `-` alone is a value
 - [x] Multi-byte short names (`-é`) decoded as one `char`
-- [ ] **decision** usage rejects a whole bundle containing an unknown letter
-      before applying any; we are strict (unknown flag is an error), so a
-      partially-applied bundle is never observed. Revisit with lenient mode.
+- [x] **decision** usage rejects a whole bundle containing an unknown letter
+      before applying any. Strict (the default), the error makes a partly
+      applied bundle unobservable; `unknown_flags = "value"` checks a bundle of
+      two or more letters whole (`Globals::short` for inherited letters) first.
 - [x] Negative numbers vs digit shorts: a declared `-0` stays a flag
 - [ ] A negative number routed into a default subcommand whose positional opts in
       (corpus `default-takes-an-opted-negative-number`)
@@ -135,7 +136,9 @@ where the references disagree and we picked a side.
 - [x] Byte offset of the offending token (for carets)
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] "did you mean" suggestions
-- [ ] Lenient mode: unknown flag-like tokens become words (usage default)
+- [x] Lenient mode: `#[arg(unknown_flags = "value")]` (usage's default; ours stays
+      strict) makes unknown flag-like words positional values, never subcommand
+      words; per struct, not inherited; `token::flag_word` for combinators
 
 ## 8. Help, version, completion
 
