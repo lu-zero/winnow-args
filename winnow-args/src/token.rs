@@ -535,6 +535,22 @@ pub fn word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
     })
 }
 
+/// A flag-like word taken whole as a value, for `unknown_flags = "value"`:
+/// the last branch of an `alt`, after every flag. Only a whole word: once a
+/// bundle has bound a letter, an unknown one after it is still an error.
+pub fn flag_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
+    let front = input.front();
+    if input.is_empty() || input.mode() != Mode::Word || !is_flag_like(front) || front == b"--" {
+        return Err(Error::from_input(input));
+    }
+    let offset = input.offset();
+    Ok(Word {
+        after_separator: false,
+        value: input.take_word(),
+        offset,
+    })
+}
+
 /// `--` as a word, for a positional declared `double_dash = "preserve"`: the
 /// separator is its value and flags go on being flags.
 pub fn separator_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
