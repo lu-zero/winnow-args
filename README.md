@@ -10,6 +10,10 @@ Command line parsing built from [winnow](../winnow) parsers over a `BStr`.
 - `docs/CHECKLIST.md` — what is done and what is next; `docs/DESIGN.md` — why;
   `docs/PERF.md` — measurements, one entry per feature.
 
+Cargo features of `winnow-args`: `derive` (the derives) and `help-text` (the
+prose of derived help; without it help still lists commands, flags, values and
+defaults, and mise's shadow is 12 % smaller). Both are on by default.
+
 ```
 cargo test
 cargo run --example example -- -vp /tmp

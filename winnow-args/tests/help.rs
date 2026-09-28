@@ -1,5 +1,8 @@
 //! Help and version: rendered from doc comments and attributes, requested with
 //! `-h`, `--help`, `help <command>`, `-V`, or a bare `arg_required_else_help` call.
+//! The text is prose, so these need the `help-text` feature (see
+//! `no_help_text.rs` for help without it).
+#![cfg(feature = "help-text")]
 
 use winnow::stream::BStr;
 use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
@@ -146,7 +149,9 @@ fn a_subcommand_help_names_its_path() {
     assert!(text.contains("--format <FORMAT>  Output format [possible values: json, toml]"));
     // A `ValueEnum`'s visible variants, without being declared again.
     assert!(
-        text.contains("--color <COLOR>    When to use color [possible values: auto, always, never]"),
+        text.contains(
+            "--color <COLOR>    When to use color [possible values: auto, always, never]"
+        ),
         "{text}"
     );
     // A bundle can ask for help too.

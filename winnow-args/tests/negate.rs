@@ -77,6 +77,7 @@ fn a_global_negation_reaches_subcommands() {
 }
 
 #[test]
+#[cfg(feature = "help-text")]
 fn help_shows_both_spellings() {
     let e = parse(&["-h"], &[]).unwrap_err();
     let help = with_env(&[], || e.render_help("negate").unwrap());

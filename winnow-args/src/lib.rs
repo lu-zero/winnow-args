@@ -235,6 +235,26 @@ where
     }
 }
 
+/// Help prose the derive emits: kept with the `help-text` feature.
+#[cfg(feature = "help-text")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __text {
+    ($text:literal) => {
+        $text
+    };
+}
+
+/// Help prose the derive emits: `""` without the `help-text` feature.
+#[cfg(not(feature = "help-text"))]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __text {
+    ($text:literal) => {
+        ""
+    };
+}
+
 #[doc(hidden)]
 pub mod __private {
     pub use crate::error::Error;

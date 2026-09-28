@@ -7,8 +7,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["derive"]
+default = ["derive", "help-text"]
 derive = ["dep:winnow-args-derive"]
+# The prose of derived help: descriptions, about and after text. Without it,
+# help still lists commands, flags, values and defaults.
+help-text = []
 
 [dependencies]
 winnow.workspace = true
