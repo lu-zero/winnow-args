@@ -7,6 +7,9 @@
 
 use std::fmt::Write as _;
 
+use crate::color::Paint;
+pub use crate::color::{Depth, Palette, Theme};
+
 /// One command's help: what it is, what it takes, what it contains.
 #[derive(Debug)]
 pub struct Command {
@@ -135,116 +138,118 @@ fn terminal_width() -> Option<usize> {
     None
 }
 
-/// How help and errors are painted: an ANSI SGR sequence for each role, or
-/// `""` for none. The escapes never count toward a column's width.
+/// How help and errors are painted: a [`Palette`] for a terminal of some
+/// [`Depth`]. The escapes never count toward a column's width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Style {
-    /// `Usage:`, `Options:` and the other headings.
-    pub header: &'static str,
-    /// The program's name in the usage line.
-    pub program: &'static str,
-    /// What is typed as is: flags, subcommand names.
-    pub literal: &'static str,
-    /// Value names: all of `<PATH>`, the name in `[FILE]`.
-    pub placeholder: &'static str,
-    /// `error:`.
-    pub error: &'static str,
-    /// The part of the command line an error is about.
-    pub invalid: &'static str,
-    /// What an error says is missing: something to type.
-    pub valid: &'static str,
+    /// The paint for each kind of text.
+    pub palette: Palette,
+    /// What the terminal shows; colors deeper than this are mapped down.
+    pub depth: Depth,
 }
 
-/// Ends any SGR sequence.
-const RESET: &str = "\u{1b}[0m";
+/// A paint resolved for a depth: what the renderer writes with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Ink {
+    paint: Paint,
+    depth: Depth,
+}
+
+impl Ink {
+    /// Plain text.
+    const NONE: Ink = Ink {
+        paint: Paint::NONE,
+        depth: Depth::None,
+    };
+}
 
 impl Style {
     /// Nothing painted: for pipes, files and tests.
-    pub const PLAIN: Style = Style {
-        header: "",
-        program: "",
-        literal: "",
-        placeholder: "",
-        error: "",
-        invalid: "",
-        valid: "",
-    };
+    pub const PLAIN: Style = Style::at(Palette::PLAIN, Depth::None);
 
-    /// The default colors: usage's help palette — bold yellow headers, bold
-    /// green flags and subcommands, the program plain — with bold cyan where
-    /// usage has magenta, for value names. Errors take the codes clap and
-    /// usage's diagnostics share: bold red `error:`, yellow for what was typed
-    /// wrong, green for what is missing.
-    pub const COLORED: Style = Style {
-        header: "\u{1b}[1;33m",
-        program: "",
-        literal: "\u{1b}[1;32m",
-        placeholder: "\u{1b}[1;36m",
-        error: "\u{1b}[1m\u{1b}[31m",
-        invalid: "\u{1b}[33m",
-        valid: "\u{1b}[32m",
-    };
+    /// [`Palette::DEFAULT`] (usage's palette, cyan value names) in the 16
+    /// basic colors.
+    pub const COLORED: Style = Style::at(Palette::DEFAULT, Depth::Ansi16);
 
-    /// clap 4's default colors: bold underlined headers, bold literals, plain
-    /// placeholders, bold red `error:`, yellow for what was typed wrong and
-    /// green for what is missing.
-    pub const CLAP: Style = Style {
-        header: "\u{1b}[1m\u{1b}[4m",
-        program: "\u{1b}[1m",
-        literal: "\u{1b}[1m",
-        placeholder: "",
-        error: "\u{1b}[1m\u{1b}[31m",
-        invalid: "\u{1b}[33m",
-        valid: "\u{1b}[32m",
-    };
+    /// [`Palette::CLAP`], clap 4's colors.
+    pub const CLAP: Style = Style::at(Palette::CLAP, Depth::Ansi16);
 
-    /// [`Style::COLORED`] when standard output is a terminal, else
-    /// [`Style::PLAIN`]; see [`Style::auto_for`].
+    /// `palette` on a terminal of `depth`.
+    pub const fn at(palette: Palette, depth: Depth) -> Style {
+        Style { palette, depth }
+    }
+
+    /// [`Theme::DEFAULT`] for standard output, at the depth
+    /// [`Depth::detect`] finds.
     pub fn auto() -> Style {
         use std::io::IsTerminal as _;
-        Style::auto_for(std::io::stdout().is_terminal())
+        Style::themed(&Theme::DEFAULT, std::io::stdout().is_terminal())
     }
 
     /// [`Style::auto`] for standard error, where errors go.
     pub fn auto_stderr() -> Style {
         use std::io::IsTerminal as _;
-        Style::auto_for(std::io::stderr().is_terminal())
+        Style::themed(&Theme::DEFAULT, std::io::stderr().is_terminal())
     }
 
-    /// The convention usage and clap follow: a non-empty `NO_COLOR` refuses
-    /// color, a `CLICOLOR_FORCE` other than `0` asks for it anyway, and
-    /// otherwise a terminal gets color. Under [`with_env`](crate::with_env) the
-    /// stream never counts as a terminal: output depends on the environment given.
+    /// [`Theme::DEFAULT`] for a stream that is (or is not) a terminal.
     pub fn auto_for(is_terminal: bool) -> Style {
-        let set = |name| crate::env::var(name).filter(|v| !v.is_empty());
-        if set("NO_COLOR").is_some() {
-            return Style::PLAIN;
-        }
-        let forced = set("CLICOLOR_FORCE").is_some_and(|v| v != "0");
-        if forced || (is_terminal && !crate::env::overridden()) {
-            Style::COLORED
-        } else {
-            Style::PLAIN
+        Style::themed(&Theme::DEFAULT, is_terminal)
+    }
+
+    /// `theme`'s palette for the depth [`Depth::detect`] finds for a stream
+    /// that is (or is not) a terminal.
+    pub fn themed(theme: &Theme, is_terminal: bool) -> Style {
+        let depth = Depth::detect(is_terminal);
+        Style::at(theme.palette(depth), depth)
+    }
+
+    fn ink(self, paint: Paint) -> Ink {
+        Ink {
+            paint,
+            depth: self.depth,
         }
     }
 
-    /// `text` in `paint`, reset after.
-    pub(crate) fn paint(paint: &str, text: &str) -> String {
+    pub(crate) fn header(self) -> Ink {
+        self.ink(self.palette.header)
+    }
+
+    pub(crate) fn program(self) -> Ink {
+        self.ink(self.palette.program)
+    }
+
+    pub(crate) fn literal(self) -> Ink {
+        self.ink(self.palette.literal)
+    }
+
+    pub(crate) fn placeholder(self) -> Ink {
+        self.ink(self.palette.placeholder)
+    }
+
+    pub(crate) fn error(self) -> Ink {
+        self.ink(self.palette.error)
+    }
+
+    pub(crate) fn invalid(self) -> Ink {
+        self.ink(self.palette.invalid)
+    }
+
+    pub(crate) fn valid(self) -> Ink {
+        self.ink(self.palette.valid)
+    }
+
+    /// `text` in `ink`, reset after.
+    pub(crate) fn paint(ink: Ink, text: &str) -> String {
         let mut out = String::new();
-        push_painted(&mut out, paint, text);
+        push_painted(&mut out, ink, text);
         out
     }
 }
 
-/// Append `text` in `paint` (nothing if `paint` is empty), reset after.
-fn push_painted(out: &mut String, paint: &str, text: &str) {
-    if paint.is_empty() {
-        out.push_str(text);
-    } else {
-        out.push_str(paint);
-        out.push_str(text);
-        out.push_str(RESET);
-    }
+/// Append `text` in `ink` (plain if it paints nothing), reset after.
+fn push_painted(out: &mut String, ink: Ink, text: &str) {
+    ink.paint.write(out, ink.depth, text);
 }
 
 /// Painted text and how many columns it takes on screen.
@@ -255,8 +260,8 @@ struct Cell {
 }
 
 impl Cell {
-    fn push(&mut self, paint: &str, text: &str) {
-        push_painted(&mut self.text, paint, text);
+    fn push(&mut self, ink: Ink, text: &str) {
+        push_painted(&mut self.text, ink, text);
         self.width += text.chars().count();
     }
 
@@ -264,11 +269,11 @@ impl Cell {
     /// does: square brackets say "optional", they are not part of the value.
     fn push_placeholder(&mut self, style: Style, required: bool, name: &str) {
         if required {
-            self.push(style.placeholder, &format!("<{name}>"));
+            self.push(style.placeholder(), &format!("<{name}>"));
         } else {
-            self.push("", "[");
-            self.push(style.placeholder, name);
-            self.push("", "]");
+            self.push(Ink::NONE, "[");
+            self.push(style.placeholder(), name);
+            self.push(Ink::NONE, "]");
         }
     }
 }
@@ -302,7 +307,7 @@ pub fn render_styled(
     if !about.is_empty() {
         let _ = writeln!(out, "{}\n", wrap_text(about, width));
     }
-    push_painted(&mut out, style.header, "Usage:");
+    push_painted(&mut out, style.header(), "Usage:");
     let _ = writeln!(out, " {}\n", usage(command, path, style));
 
     let visible_subs: Vec<&Sub> = command.subcommands.iter().filter(|s| !s.hide).collect();
@@ -311,10 +316,10 @@ pub fn render_styled(
             .iter()
             .map(|s| {
                 let mut name = Cell::default();
-                name.push(style.literal, s.name);
+                name.push(style.literal(), s.name);
                 for alias in s.aliases {
-                    name.push("", ", ");
-                    name.push(style.literal, alias);
+                    name.push(Ink::NONE, ", ");
+                    name.push(style.literal(), alias);
                 }
                 (name, s.about.to_owned())
             })
@@ -342,9 +347,9 @@ pub fn render_styled(
     }
     let builtin = |short: &str, long_name: &str| {
         let mut cell = Cell::default();
-        cell.push(style.literal, short);
-        cell.push("", ", ");
-        cell.push(style.literal, long_name);
+        cell.push(style.literal(), short);
+        cell.push(Ink::NONE, ", ");
+        cell.push(style.literal(), long_name);
         cell
     };
     for heading in headings {
@@ -392,10 +397,10 @@ pub fn render_styled(
 
 /// `prog [OPTIONS] <A> [B]... [COMMAND]`.
 pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
-    let mut line = Style::paint(style.program, &path.join(" "));
+    let mut line = Style::paint(style.program(), &path.join(" "));
     let mut cell = Cell::default();
     if command.items.iter().any(|i| !i.positional && !i.hide) || command.help_flag {
-        cell.push("", " ");
+        cell.push(Ink::NONE, " ");
         cell.push_placeholder(style, false, "OPTIONS");
     }
     for item in command
@@ -403,11 +408,11 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
         .iter()
         .filter(|i| i.positional && !i.hide && !i.trailing)
     {
-        cell.push("", " ");
+        cell.push(Ink::NONE, " ");
         push_item_placeholder(&mut cell, style, item);
     }
     if !command.subcommands.is_empty() {
-        cell.push("", " ");
+        cell.push(Ink::NONE, " ");
         cell.push_placeholder(style, command.subcommand_required, "COMMAND");
     }
     line.push_str(&cell.text);
@@ -418,11 +423,11 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
     {
         // clap paints the brackets and `--` as literals: they are typed.
         let mut cell = Cell::default();
-        cell.push("", " ");
-        cell.push(style.literal, "[--");
-        cell.push("", " ");
+        cell.push(Ink::NONE, " ");
+        cell.push(style.literal(), "[--");
+        cell.push(Ink::NONE, " ");
         push_item_placeholder(&mut cell, style, item);
-        cell.push(style.literal, "]");
+        cell.push(style.literal(), "]");
         line.push_str(&cell.text);
     }
     line
@@ -432,7 +437,7 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
 fn push_item_placeholder(cell: &mut Cell, style: Style, item: &Item) {
     cell.push_placeholder(style, item.required, item.value_name.unwrap_or("VALUE"));
     if item.multiple {
-        cell.push("", "...");
+        cell.push(Ink::NONE, "...");
     }
 }
 
@@ -440,28 +445,28 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
     let mut spec = Cell::default();
     match (item.short, item.long) {
         (Some(s), long) => {
-            spec.push(style.literal, &format!("-{s}"));
+            spec.push(style.literal(), &format!("-{s}"));
             if let Some(l) = long {
-                spec.push("", ", ");
-                spec.push(style.literal, &format!("--{l}"));
+                spec.push(Ink::NONE, ", ");
+                spec.push(style.literal(), &format!("--{l}"));
             }
         }
         (None, Some(l)) => {
-            spec.push("", "    ");
-            spec.push(style.literal, &format!("--{l}"));
+            spec.push(Ink::NONE, "    ");
+            spec.push(style.literal(), &format!("--{l}"));
         }
         (None, None) => {}
     }
     if let Some(no) = item.negate {
-        spec.push("", " / ");
-        spec.push(style.literal, &format!("--{no}"));
+        spec.push(Ink::NONE, " / ");
+        spec.push(style.literal(), &format!("--{no}"));
     }
     if let Some(value) = item.value_name {
-        spec.push("", " ");
-        spec.push(style.placeholder, &format!("<{value}>"));
+        spec.push(Ink::NONE, " ");
+        spec.push(style.placeholder(), &format!("<{value}>"));
     }
     if item.multiple {
-        spec.push("", "...");
+        spec.push(Ink::NONE, "...");
     }
     spec
 }
@@ -506,7 +511,7 @@ fn section(
     if rows.is_empty() {
         return;
     }
-    push_painted(out, style.header, &format!("{title}:"));
+    push_painted(out, style.header(), &format!("{title}:"));
     out.push('\n');
     let longest = rows.iter().map(|(left, _)| left.width).max().unwrap_or(0);
     let available = width.saturating_sub(4);

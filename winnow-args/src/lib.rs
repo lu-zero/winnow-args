@@ -35,6 +35,7 @@
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 
+pub mod color;
 pub mod combinator;
 pub mod env;
 pub mod error;
@@ -119,16 +120,22 @@ pub trait Args: Sized {
 
 /// Print what a failed parse means, and give the exit status: help and version
 /// on stdout with 0, a bare `arg_required_else_help` invocation's help on stderr
-/// with 2, anything else as an error on stderr with 2. Colored per [`help::Style::auto`]
-/// for the stream written to.
+/// with 2, anything else as an error on stderr with 2. Colored with
+/// [`color::Theme::DEFAULT`] where the stream written to shows color; see
+/// [`report_with`] for another theme.
 pub fn report(error: &Error, program: &str) -> i32 {
+    report_with(error, program, &color::Theme::DEFAULT)
+}
+
+/// [`report`], painted with `theme`: its palette for the depth
+/// [`color::Depth::detect`] finds on the stream written to.
+pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
+    use std::io::IsTerminal as _;
+    let stdout = || help::Style::themed(theme, std::io::stdout().is_terminal());
+    let stderr = || help::Style::themed(theme, std::io::stderr().is_terminal());
     // Help goes to stdout, except a bare invocation's, which is an error.
     let bare = error.is_bare_help();
-    let style = if bare {
-        help::Style::auto_stderr()
-    } else {
-        help::Style::auto()
-    };
+    let style = if bare { stderr() } else { stdout() };
     if let Some(help) = error.render_help_styled(program, style) {
         if bare {
             eprintln!("{help}");
@@ -141,7 +148,7 @@ pub fn report(error: &Error, program: &str) -> i32 {
         println!("{version}");
         return 0;
     }
-    eprintln!("{}", error.render(help::Style::auto_stderr()));
+    eprintln!("{}", error.render(stderr()));
     2
 }
 

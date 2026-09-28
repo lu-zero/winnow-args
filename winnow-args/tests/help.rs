@@ -5,6 +5,7 @@
 #![cfg(all(feature = "derive", feature = "help-text"))]
 
 use winnow::stream::BStr;
+use winnow_args::color::{Color, Depth, Paint, Palette, Theme};
 use winnow_args::help::Style;
 use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
 
@@ -339,18 +340,14 @@ fn color_defaults_to_usage_palette_with_cyan_values() {
 
 #[test]
 fn color_uses_clap_codes() {
-    // Measured from clap 4's help for the bench CLI.
+    // clap 4's codes for the bench CLI, with each paint written as one
+    // sequence (`1;4` where clap writes `1` then `4`): the same on screen.
     let text = styled(&["-h"], &[]);
     assert!(
-        text.contains(
-            "\u{1b}[1m\u{1b}[4mUsage:\u{1b}[0m \u{1b}[1mmise\u{1b}[0m [OPTIONS] [COMMAND]"
-        ),
+        text.contains("\u{1b}[1;4mUsage:\u{1b}[0m \u{1b}[1mmise\u{1b}[0m [OPTIONS] [COMMAND]"),
         "{text:?}"
     );
-    assert!(
-        text.contains("\u{1b}[1m\u{1b}[4mOptions:\u{1b}[0m\n"),
-        "{text:?}"
-    );
+    assert!(text.contains("\u{1b}[1;4mOptions:\u{1b}[0m\n"), "{text:?}");
     assert!(
         text.contains("  \u{1b}[1m-v\u{1b}[0m, \u{1b}[1m--verbose\u{1b}[0m...  Show extra output"),
         "{text:?}"
@@ -386,11 +383,95 @@ fn errors_paint_what_was_typed() {
     let e = parse::<Cli>(&["--fore"]).unwrap_err();
     assert_eq!(
         e.render(Style::CLAP),
-        "\u{1b}[1m\u{1b}[31merror:\u{1b}[0m unknown flag `\u{1b}[33m--fore\u{1b}[0m`\n\n\
+        "\u{1b}[1;31merror:\u{1b}[0m unknown flag `\u{1b}[33m--fore\u{1b}[0m`\n\n\
          For more information, try '\u{1b}[1m--help\u{1b}[0m'."
     );
     assert_eq!(
         e.render(Style::PLAIN),
         format!("error: {e}\n\nFor more information, try '--help'.")
     );
+}
+
+#[test]
+fn depth_follows_the_terminal_and_the_environment() {
+    let depth = |env: &[(&str, &str)]| with_env(env, || Depth::detect(true));
+    let forced = |env: &[(&str, &str)]| {
+        let mut all = vec![("CLICOLOR_FORCE", "1")];
+        all.extend_from_slice(env);
+        with_env(&all, || Depth::detect(false))
+    };
+    // Under `with_env` nothing is a terminal: only forcing gives color.
+    assert_eq!(depth(&[("TERM", "xterm")]), Depth::None);
+    assert_eq!(forced(&[]), Depth::Ansi16);
+    assert_eq!(forced(&[("TERM", "xterm-256color")]), Depth::Ansi256);
+    assert_eq!(forced(&[("TERM", "screen-256")]), Depth::Ansi256);
+    assert_eq!(forced(&[("COLORTERM", "truecolor")]), Depth::TrueColor);
+    assert_eq!(forced(&[("COLORTERM", "24bit")]), Depth::TrueColor);
+    assert_eq!(forced(&[("TERM", "xterm-direct")]), Depth::TrueColor);
+    assert_eq!(forced(&[("TERM_PROGRAM", "iTerm.app")]), Depth::TrueColor);
+    assert_eq!(forced(&[("WT_SESSION", "x")]), Depth::TrueColor);
+    assert_eq!(
+        forced(&[("TERM_PROGRAM", "Apple_Terminal")]),
+        Depth::Ansi256
+    );
+    // `NO_COLOR` wins over everything; an empty one says nothing.
+    assert_eq!(
+        forced(&[("NO_COLOR", "1"), ("COLORTERM", "truecolor")]),
+        Depth::None
+    );
+    assert_eq!(forced(&[("NO_COLOR", "")]), Depth::Ansi16);
+    // `FORCE_COLOR` levels, as supports-color reads them.
+    let force = |level| with_env(&[("FORCE_COLOR", level)], || Depth::detect(false));
+    assert_eq!(force(""), Depth::Ansi16);
+    assert_eq!(force("true"), Depth::Ansi16);
+    assert_eq!(force("2"), Depth::Ansi256);
+    assert_eq!(force("3"), Depth::TrueColor);
+    assert_eq!(force("0"), Depth::None);
+    assert_eq!(force("false"), Depth::None);
+    // A forced level is a floor: the terminal may say more.
+    assert_eq!(
+        with_env(&[("FORCE_COLOR", "1"), ("COLORTERM", "truecolor")], || {
+            Depth::detect(false)
+        }),
+        Depth::TrueColor
+    );
+}
+
+#[test]
+fn a_rich_theme_falls_back_by_depth() {
+    const ORANGE: Color = Color::Rgb(255, 135, 0);
+    let rich = Palette {
+        header: Paint::fg(ORANGE).bold(),
+        ..Palette::DEFAULT
+    };
+    let theme = Theme {
+        truecolor: Some(rich),
+        ..Theme::DEFAULT
+    };
+    let usage = |depth| {
+        let e = parse::<Cli>(&["-h"]).unwrap_err();
+        let style = Style::at(theme.palette(depth), depth);
+        let text = with_env(&[], || e.render_help_styled("mise", style).unwrap());
+        text.lines()
+            .find(|l| l.contains("Usage:"))
+            .unwrap()
+            .to_owned()
+    };
+    assert!(usage(Depth::TrueColor).starts_with("\u{1b}[1;38;2;255;135;0mUsage:\u{1b}[0m"));
+    // Below 24-bit the theme's basic palette is used as it is.
+    assert!(usage(Depth::Ansi256).starts_with("\u{1b}[1;33mUsage:\u{1b}[0m"));
+    assert!(usage(Depth::Ansi16).starts_with("\u{1b}[1;33mUsage:\u{1b}[0m"));
+    assert_eq!(usage(Depth::None), "Usage: mise [OPTIONS] [COMMAND]");
+    // A palette used below its depth maps each color to the nearest one.
+    let e = parse::<Cli>(&["-h"]).unwrap_err();
+    let text = with_env(&[], || {
+        e.render_help_styled("mise", Style::at(rich, Depth::Ansi256))
+            .unwrap()
+    });
+    assert!(text.contains("\u{1b}[1;38;5;208mUsage:"), "{text:?}");
+    let text = with_env(&[], || {
+        e.render_help_styled("mise", Style::at(rich, Depth::Ansi16))
+            .unwrap()
+    });
+    assert!(text.contains("\u{1b}[1;33mUsage:"), "{text:?}");
 }

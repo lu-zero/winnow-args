@@ -11,8 +11,24 @@
 //!     cargo run --example help --no-default-features --features derive -- -h
 //!
 //! The last one leaves the prose out (the `help-text` feature).
+//!
+//! Colors follow the terminal: `NO_COLOR=1` turns them off,
+//! `CLICOLOR_FORCE=1` keeps them in a pipe, and on a 24-bit terminal
+//! (`COLORTERM=truecolor`) the headings use the orange of [`THEME`], which a
+//! 16-color terminal shows in the default palette's yellow.
 
-use winnow_args::{Args, Subcommand, ValueEnum, report, words};
+use winnow_args::color::{Color, Paint, Palette, Theme};
+use winnow_args::{Args, Subcommand, ValueEnum, report_with, words};
+
+/// The default palette everywhere, and orange headings where 24-bit color is
+/// available.
+const THEME: Theme = Theme {
+    truecolor: Some(Palette {
+        header: Paint::fg(Color::Rgb(255, 135, 0)).bold(),
+        ..Palette::DEFAULT
+    }),
+    ..Theme::DEFAULT
+};
 
 /// Dev tools, env vars, and tasks in one CLI
 ///
@@ -89,7 +105,7 @@ fn main() {
     let cli = match Cli::parse_from(&words(&args)) {
         Ok(cli) => cli,
         // `-h`, `--help`, `help …` and `-V` end up here too.
-        Err(e) => std::process::exit(report(&e, "tool")),
+        Err(e) => std::process::exit(report_with(&e, "tool", &THEME)),
     };
     println!(
         "verbose {}, cd {:?}, jobs {:?}, color {:?}, progress {}",
