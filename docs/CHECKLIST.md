@@ -149,7 +149,8 @@ where the references disagree and we picked a side.
 - [x] `help <cmd…>` (usage, clap and bpaf all supply it); `disable_help_subcommand`
 - [x] `report`: help/version on stdout (0), bare `arg_required_else_help` help and
       errors on stderr (2)
-- [x] Wrapping to `COLUMNS` (else 100); the column capped at two fifths of the page
+- [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size` feature), else 100;
+      the column capped at two fifths of the page
 - [x] `[possible values]` for `ValueEnum` fields: `FromArg::CHOICES`, the visible variants
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)

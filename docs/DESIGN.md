@@ -115,8 +115,8 @@ than the derive warm, because each `alt` branch re-lexes the token.
 
 At mise's full scale (211 commands, `docs/PERF.md` step 17) the derive runs
 `mise use -g node@20` in 3 810 instructions and ~320 ns warm, against usage's
-7 549 and ~783 ns; clap needs 4.9 M instructions. Its binary is 37 % larger
-than usage's.
+7 549 and ~783 ns; clap needs 4.9 M instructions. Its binary is 44 % larger
+than usage's (one codegen unit, PERF.md step 27).
 
 The mise shadow is generated from usage's (`tasks/gen-mise-shadow.py`), so
 both parse the same 211-command CLI, and `bench/tests/mise.rs` holds them to
@@ -141,5 +141,5 @@ defaults, choices, the version) stays either way.
 ## Next steps
 
 See `CHECKLIST.md`: binary size (without help prose mise's shadow is still
-37 % larger than usage's), usage's conformance corpus, then consolidating the
+16 % larger than usage's with one codegen unit, `docs/PERF.md` step 27), usage's conformance corpus, then consolidating the
 draft history.

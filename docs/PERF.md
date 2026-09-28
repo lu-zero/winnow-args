@@ -683,8 +683,43 @@ builds every winnow-args binary without prose.
 | `parse-n-wa` (no doc comments) | 380 400 | 380 400 |
 | usage's mise shadow, for reference | 1 174 488 | — |
 
-mise's prose is 221 KB, 12 % of the binary. Without it winnow-args' mise
-is still 37 % larger than usage's (which keeps its prose), so the size item
+mise's prose is 221 KB, 12 % of the binary. (Correction, step 27: these
+sizes move ±110 KB with codegen-unit partitioning; with one codegen unit the
+prose is 318 KB, 19 %.) Without it winnow-args' mise
+is still larger than usage's (which keeps its prose), so the size item
 stays open. Parsing is unaffected (`use -g node@20`: 3594 warm instructions
 with, 3570 without, within layout noise); rendering `--help` drops from
 256 384 to 85 620 instructions with less text to lay out.
+
+## 27. `terminal-size`: wrap to the terminal; codegen units and size
+
+An optional `terminal-size` feature (off by default) adds the `terminal_size`
+0.4 crate, as clap's `wrap_help` does. `help::width()` is `COLUMNS` first (so a
+user or a test can say what to assume, as in usage), then the terminal on
+standard output, then 100. Under `with_env` the terminal is not asked, so
+pinned tests stay pinned. The example now reports help through `report`:
+`cargo run --example example --features terminal-size -- -h`. (A pty with 0
+rows, as `script` makes one without `stty rows`, reads as no terminal:
+`terminal_size` wants both dimensions.)
+
+**Codegen units make default-profile sizes unreliable.** Building with the
+feature made `parse-n-mise-wa` 112 KB *smaller*, though it never renders help:
+changing winnow-args' features changes its crate hash, which moves code
+between the 16 codegen units and changes cross-unit inlining (`.text`
+−77 KB, `.eh_frame` −21 KB, `.gcc_except_table` −11 KB; some
+`parse_argv_with` bodies shrank while `main`'s closure grew 14 KB). With
+`CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1` both builds are identical:
+
+| stripped bytes, one codegen unit | default | `terminal-size` | no `help-text` |
+|---|------:|------:|------:|
+| `parse-n-mise-wa` | 1 671 664 | 1 671 664 | 1 353 464 |
+| `help-n-mise-wa`  | 1 688 032 | 1 689 400 | 1 369 832 |
+| `parse-n-wa`      |   374 624 |         — |   374 624 |
+| usage's mise shadow | 1 163 168 | | |
+
+So `terminal-size` costs 1 368 bytes where help is rendered and nothing
+elsewhere; rendering `--help` is unchanged (256 282 instructions, plus one
+`ioctl`). The `help-text` saving of step 26 was really 318 KB (19 %), not
+221 KB. Against usage with one codegen unit, winnow-args' mise is 44 % larger
+with its prose and 16 % larger without. Size comparisons from here on use one
+codegen unit.
