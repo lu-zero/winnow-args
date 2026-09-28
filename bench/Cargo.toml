@@ -12,6 +12,8 @@ publish = false
 default = ["help-text"]
 # `--no-default-features` builds every winnow-args binary without help prose.
 help-text = ["winnow-args/help-text"]
+# Wrap help to the terminal, for measuring what probing it costs.
+terminal-size = ["winnow-args/terminal-size"]
 
 [dependencies]
 winnow.workspace = true

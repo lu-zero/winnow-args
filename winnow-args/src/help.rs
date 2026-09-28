@@ -105,13 +105,34 @@ pub fn resolve<'w>(
     (command, path)
 }
 
-/// The width help wraps to: `COLUMNS` when it is a positive number, else 100
-/// (clap's width when it cannot ask the terminal).
+/// The width help wraps to: `COLUMNS` when it is a positive number, so a user
+/// or a test can say what to assume; else, with the `terminal-size` feature,
+/// the width of the terminal on standard output; else 100 (clap's width when
+/// it cannot ask the terminal).
+///
+/// Under [`with_env`](crate::with_env) the terminal is not asked: the page
+/// depends only on the environment given.
 pub fn width() -> usize {
     crate::env::var("COLUMNS")
         .and_then(|columns| columns.to_str()?.trim().parse().ok())
         .filter(|&columns| columns > 0)
+        .or_else(terminal_width)
         .unwrap_or(100)
+}
+
+#[cfg(feature = "terminal-size")]
+fn terminal_width() -> Option<usize> {
+    if crate::env::overridden() {
+        return None;
+    }
+    terminal_size::terminal_size()
+        .map(|(width, _)| usize::from(width.0))
+        .filter(|&width| width > 0)
+}
+
+#[cfg(not(feature = "terminal-size"))]
+fn terminal_width() -> Option<usize> {
+    None
 }
 
 /// Render `command`'s help, wrapped to [`width`]. `path` is the command line

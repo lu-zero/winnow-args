@@ -12,7 +12,11 @@ derive = ["dep:winnow-args-derive"]
 # The prose of derived help: descriptions, about and after text. Without it,
 # help still lists commands, flags, values and defaults.
 help-text = []
+# Wrap help to the terminal's width when `COLUMNS` does not say, as clap's
+# `wrap_help` does.
+terminal-size = ["dep:terminal_size"]
 
 [dependencies]
 winnow.workspace = true
 winnow-args-derive = { workspace = true, optional = true }
+terminal_size = { version = "0.4", optional = true }

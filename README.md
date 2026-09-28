@@ -12,7 +12,9 @@ Command line parsing built from [winnow](../winnow) parsers over a `BStr`.
 
 Cargo features of `winnow-args`: `derive` (the derives) and `help-text` (the
 prose of derived help; without it help still lists commands, flags, values and
-defaults, and mise's shadow is 12 % smaller). Both are on by default.
+defaults, and mise's shadow is 19 % smaller), both on by default; and
+`terminal-size`, off by default, which wraps help to the terminal's width when
+`COLUMNS` is unset (clap's `wrap_help`).
 
 ```
 cargo test
