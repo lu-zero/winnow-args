@@ -786,3 +786,14 @@ at two widths.
 
 Color costs 4.9 KB where help is rendered and nothing elsewhere. Plain
 rendering pays up to 10 % for building each flag's cell piece by piece.
+
+## 30. Default colors: usage's palette, cyan values
+
+`Style::COLORED`, now what `Style::auto` picks, is usage's help palette (bold
+yellow `1;33` headings, bold green `1;32` flags and subcommands, the program
+plain) with bold cyan `1;36` where usage has magenta for value names; `[NAME]`
+paints only the name, as usage does, `<NAME>` all of it. Errors keep the codes
+clap and usage's diagnostics share. `Style::CLAP` stays, with a `program` role
+for clap's bold program name. A test pins the codes; the strip-equals-plain
+test runs under both styles. Nothing changes where help is not rendered, and
+the plain page is byte for byte the same.

@@ -138,8 +138,12 @@ code would test the user's crate. So the derive wraps each piece of prose in
 its `help-text` feature: the literal, or `""`. The structure (names, values,
 defaults, choices, the version) stays either way.
 
-Color is a `help::Style`: one SGR sequence per role (header, literal,
-placeholder, error, invalid, valid), clap 4's codes by default. Rendering
+Color is a `help::Style`: one SGR sequence per role (header, program,
+literal, placeholder, error, invalid, valid). The default, `Style::COLORED`, is
+usage's help palette (bold yellow headings, bold green flags and subcommands,
+the program plain) with bold cyan instead of magenta for value names, and
+usage's rule that `[NAME]` paints only the name; errors use the codes clap and
+usage's diagnostics share. `Style::CLAP` has clap 4's help codes. Rendering
 builds each left-hand cell as painted text plus its visible width, so padding
 and wrapping never count escapes, and the painted page with its escapes
 stripped is the plain page. `render` and `render_help` stay plain strings;
