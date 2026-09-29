@@ -167,8 +167,7 @@ impl Style {
     /// Nothing painted: for pipes, files and tests.
     pub const PLAIN: Style = Style::at(Palette::PLAIN, Depth::None);
 
-    /// [`Palette::DEFAULT`] (usage's palette, cyan value names) in the 16
-    /// basic colors.
+    /// [`Palette::DEFAULT`] in the 16 basic colors.
     pub const COLORED: Style = Style::at(Palette::DEFAULT, Depth::Ansi16);
 
     /// [`Palette::CLAP`], clap 4's colors.

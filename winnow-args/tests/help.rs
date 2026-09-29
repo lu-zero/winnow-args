@@ -313,17 +313,18 @@ fn color_paints_without_moving_anything() {
 }
 
 #[test]
-fn color_defaults_to_usage_palette_with_cyan_values() {
+fn color_defaults_to_greens_and_cyans() {
+    // 16 colors: bold cyan headings, bold green flags, cyan value names.
     let text = styled_as(Style::COLORED, &["-h"], &[]);
     // The program stays plain; in `[NAME]` only the name is painted.
     assert!(
-        text.contains("\u{1b}[1;33mUsage:\u{1b}[0m mise [\u{1b}[1;36mOPTIONS\u{1b}[0m] [\u{1b}[1;36mCOMMAND\u{1b}[0m]"),
+        text.contains("\u{1b}[1;36mUsage:\u{1b}[0m mise [\u{1b}[36mOPTIONS\u{1b}[0m] [\u{1b}[36mCOMMAND\u{1b}[0m]"),
         "{text:?}"
     );
-    assert!(text.contains("\u{1b}[1;33mOptions:\u{1b}[0m\n"), "{text:?}");
+    assert!(text.contains("\u{1b}[1;36mOptions:\u{1b}[0m\n"), "{text:?}");
     assert!(
         text.contains(
-            "  \u{1b}[1;32m-C\u{1b}[0m, \u{1b}[1;32m--cd\u{1b}[0m \u{1b}[1;36m<DIR>\u{1b}[0m"
+            "  \u{1b}[1;32m-C\u{1b}[0m, \u{1b}[1;32m--cd\u{1b}[0m \u{1b}[36m<DIR>\u{1b}[0m"
         ),
         "{text:?}"
     );
@@ -333,9 +334,30 @@ fn color_defaults_to_usage_palette_with_cyan_values() {
     );
     let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
     assert!(
-        text.contains("  [\u{1b}[1;36mTOOL@VERSION\u{1b}[0m]...  Tool(s) to add"),
+        text.contains("  [\u{1b}[36mTOOL@VERSION\u{1b}[0m]...  Tool(s) to add"),
         "{text:?}"
     );
+    // 256 colors: teal 73, green 71, slate teal 109.
+    let text = styled_as(
+        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
+        &["-h"],
+        &[],
+    );
+    assert!(
+        text.contains("\u{1b}[1;38;5;73mUsage:\u{1b}[0m mise [\u{1b}[38;5;109mOPTIONS\u{1b}[0m]"),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("\u{1b}[1;38;5;71m--cd\u{1b}[0m \u{1b}[38;5;109m<DIR>\u{1b}[0m"),
+        "{text:?}"
+    );
+    // No yellow anywhere in either default.
+    for palette in [Palette::DEFAULT, Palette::DEFAULT_256] {
+        let e = parse::<Cli>(&["--fore"]).unwrap_err();
+        let text = e.render(Style::at(palette, palette.depth()))
+            + &styled_as(Style::at(palette, palette.depth()), &["--help"], &[]);
+        assert!(!text.contains("33m") && !text.contains(";136m"), "{text:?}");
+    }
 }
 
 #[test]
@@ -457,9 +479,9 @@ fn a_rich_theme_falls_back_by_depth() {
             .to_owned()
     };
     assert!(usage(Depth::TrueColor).starts_with("\u{1b}[1;38;2;255;135;0mUsage:\u{1b}[0m"));
-    // Below 24-bit the theme's basic palette is used as it is.
-    assert!(usage(Depth::Ansi256).starts_with("\u{1b}[1;33mUsage:\u{1b}[0m"));
-    assert!(usage(Depth::Ansi16).starts_with("\u{1b}[1;33mUsage:\u{1b}[0m"));
+    // Below 24-bit the theme's own palettes are used as they are.
+    assert!(usage(Depth::Ansi256).starts_with("\u{1b}[1;38;5;73mUsage:\u{1b}[0m"));
+    assert!(usage(Depth::Ansi16).starts_with("\u{1b}[1;36mUsage:\u{1b}[0m"));
     assert_eq!(usage(Depth::None), "Usage: mise [OPTIONS] [COMMAND]");
     // A palette used below its depth maps each color to the nearest one.
     let e = parse::<Cli>(&["-h"]).unwrap_err();

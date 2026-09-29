@@ -160,7 +160,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] `[possible values]` for `ValueEnum` fields: `FromArg::CHOICES`, the visible variants
 - [ ] A subcommand's help lists the global flags it inherits (clap does;
       `tool use -h` in `examples/help.rs` omits `-v`)
-- [x] Color: `help::Style` (`PLAIN`, `COLORED` — usage's palette, cyan values — and
+- [x] Color: `help::Style` (`PLAIN`, `COLORED` — greens and cyans, no yellow — and
       `CLAP`), chosen by `NO_COLOR`, `CLICOLOR_FORCE` and whether the stream is a terminal
 - [x] Color depth: `color::Depth::detect` (16, 256, 24-bit from `COLORTERM`, `TERM`,
       `TERM_PROGRAM`, `FORCE_COLOR`, `CLICOLOR`); a `Theme` has a palette per
