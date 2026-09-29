@@ -14,18 +14,18 @@
 //!
 //! Colors follow the terminal: `NO_COLOR=1` turns them off,
 //! `CLICOLOR_FORCE=1` keeps them in a pipe, and on a 24-bit terminal
-//! (`COLORTERM=truecolor`) the headings use the orange of [`THEME`], which a
-//! 16-color terminal shows in the default palette's yellow.
+//! (`COLORTERM=truecolor`) the headings use the deeper teal of [`THEME`];
+//! other terminals get the default theme's palettes.
 
 use winnow_args::color::{Color, Paint, Palette, Theme};
 use winnow_args::{Args, Subcommand, ValueEnum, report_with, words};
 
-/// The default palette everywhere, and orange headings where 24-bit color is
+/// The default theme, with a deeper teal for headings where 24-bit color is
 /// available.
 const THEME: Theme = Theme {
     truecolor: Some(Palette {
-        header: Paint::fg(Color::Rgb(255, 135, 0)).bold(),
-        ..Palette::DEFAULT
+        header: Paint::fg(Color::Rgb(38, 166, 154)).bold(),
+        ..Palette::DEFAULT_256
     }),
     ..Theme::DEFAULT
 };

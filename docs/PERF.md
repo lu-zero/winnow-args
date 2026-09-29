@@ -876,3 +876,24 @@ No dependency: the escapes are written by hand.
 
 Help rendering is not on the hot path; parse binaries are unchanged
 (`parse-n-mise-wa` 1 629 104 bytes stripped, `release-lto`).
+
+## 34. Default palettes: greens and teals, no yellow
+
+Yellow was too loud, and xterm's yellow and cyan are nearly unreadable on a
+light background (contrast 1.47 and 1.71 against `#eeeeee`). The defaults now
+keep to greens for what is typed and cyans/teals for structure and values:
+
+| role | 16 colors | 256 colors | contrast on `#262626` / `#eeeeee` |
+|---|---|---|---|
+| headings | bold cyan | bold teal 73 `#5fafaf` | 5.94 / 2.20 |
+| flags, subcommands | bold green | bold green 71 `#5faf5f` | 5.61 / 2.33 |
+| value names | cyan | slate teal 109 `#87afaf` | 6.33 / 2.06 |
+| `error:` | bold red | bold red 167 `#d75f5f` | 4.10 / 3.18 |
+| what was typed wrong | red | rose 174 `#d78787` | 5.55 / 2.35 |
+| what is missing | green | sage 108 `#87af87` | 6.13 / 2.13 |
+
+`Theme::DEFAULT` uses the 256-color palette on 256-color and 24-bit terminals.
+No mid-tone reaches 4.5 on both backgrounds, and the palette cannot know which
+one it is on; these read well on dark and far better than before on light. The
+16-color palette's look is the terminal theme's. `Palette::CLAP` keeps clap's
+own error colors, yellow included. Rendering only; parsing is untouched.

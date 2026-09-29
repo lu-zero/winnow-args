@@ -138,12 +138,14 @@ code would test the user's crate. So the derive wraps each piece of prose in
 its `help-text` feature: the literal, or `""`. The structure (names, values,
 defaults, choices, the version) stays either way.
 
-Color is a `help::Style`: one SGR sequence per role (header, program,
-literal, placeholder, error, invalid, valid). The default, `Style::COLORED`, is
-usage's help palette (bold yellow headings, bold green flags and subcommands,
-the program plain) with bold cyan instead of magenta for value names, and
-usage's rule that `[NAME]` paints only the name; errors use the codes clap and
-usage's diagnostics share. `Style::CLAP` has clap 4's help codes.
+Color is a `help::Style`: one paint per role (header, program, literal,
+placeholder, error, invalid, valid). The default keeps to greens for what is
+typed and cyans/teals for structure and values, with no yellow: in 16 colors
+bold cyan headings, bold green flags and subcommands, cyan value names; in 256
+colors the tamer teal 73, green 71 and slate teal 109, with red 167, rose 174
+and sage 108 for errors (chosen for contrast on dark and light backgrounds,
+docs/PERF.md step 34). It follows usage's layout rules: the program plain, and
+only the name painted in `[NAME]`. `Palette::CLAP` has clap 4's codes.
 
 Terminals differ in how many colors they show, so a `help::Style` is a
 `color::Palette` plus a `color::Depth` (none, 16, 256, 24-bit). `Depth::detect`
