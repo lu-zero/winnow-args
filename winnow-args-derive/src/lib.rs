@@ -2171,12 +2171,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
         quote! {
             #[doc(hidden)]
+            #[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
             #vis struct #slots_name {
                 #(#decls)*
                 #(#displaced_decls)*
                 #(#nested_decls)*
             }
 
+            #[automatically_derived]
             impl ::core::default::Default for #slots_name {
                 fn default() -> Self {
                     Self {
@@ -2188,7 +2190,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
 
             #[automatically_derived]
-            #[allow(unused_mut, unused_variables, unreachable_code, clippy::all)]
+            #[allow(
+                unused_mut,
+                unused_variables,
+                unreachable_code,
+                clippy::all,
+                clippy::pedantic,
+                clippy::nursery,
+                clippy::restriction
+            )]
             impl ::winnow_args::__private::Flatten for #name {
                 type Slots = #slots_name;
 
