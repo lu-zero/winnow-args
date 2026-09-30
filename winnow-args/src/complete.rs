@@ -274,45 +274,41 @@ fn push(out: &mut Completions, value: &str, help: &'static str, typed: &str) {
 /// the program's name. `None` when it is not a callback, so the program goes
 /// on to parse it.
 ///
-/// The callbacks the scripts make:
-///
-/// - `__complete_word__ bash LINE WORD`: the line up to the cursor, and the
-///   word bash will replace (bash splits words at `=` and `:` too);
-/// - `__complete_word__ zsh WORD…` and `__complete_word__ fish WORD…`: the
-///   words after the program's name, the last one being typed.
+/// The callback is `__complete_word__ --shell SHELL --line LINE`, `LINE`
+/// being the command line up to the cursor; bash adds `--bash-word WORD`, the
+/// part of the current word it will replace (it breaks words at `=` and `:`
+/// too).
 pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
     let (first, rest) = args.split_first()?;
     if first.to_str()? != REQUEST {
         return None;
     }
-    let rest: Vec<String> = rest
-        .iter()
-        .map(|a| a.to_string_lossy().into_owned())
-        .collect();
-    let (shell, rest) = rest.split_first()?;
-    let shell = Shell::from_name(shell)?;
-    Some(match shell {
-        Shell::Bash => {
-            let line = rest.first().map_or("", String::as_str);
-            let replaced = rest.get(1).map_or("", String::as_str);
-            let mut words = split_line(line);
-            if !words.is_empty() {
-                words.remove(0);
-            }
-            if words.is_empty() {
-                words.push(String::new());
-            }
-            let words: Vec<&str> = words.iter().map(String::as_str).collect();
-            let typed = words.last().copied().unwrap_or("");
-            render_bash(&complete(root, &words), typed, replaced)
+    let (mut shell, mut line, mut replaced) = (None, String::new(), None);
+    let mut rest = rest.iter().map(|a| a.to_string_lossy().into_owned());
+    while let Some(option) = rest.next() {
+        let value = rest.next().unwrap_or_default();
+        match option.as_str() {
+            "--shell" => shell = Shell::from_name(&value),
+            "--line" => line = value,
+            "--bash-word" => replaced = Some(value),
+            _ => {}
         }
-        Shell::Zsh | Shell::Fish => {
-            let mut words: Vec<&str> = rest.iter().map(String::as_str).collect();
-            if words.is_empty() {
-                words.push("");
-            }
-            render(&complete(root, &words), shell)
+    }
+    let shell = shell?;
+    let mut words = split_line(&line);
+    if !words.is_empty() {
+        words.remove(0);
+    }
+    if words.is_empty() {
+        words.push(String::new());
+    }
+    let words: Vec<&str> = words.iter().map(String::as_str).collect();
+    let completions = complete(root, &words);
+    Some(match (shell, replaced) {
+        (Shell::Bash, Some(replaced)) => {
+            render_bash(&completions, words.last().copied().unwrap_or(""), &replaced)
         }
+        _ => render(&completions, shell),
     })
 }
 
@@ -435,7 +431,8 @@ _{function}_complete() {{
         elif [[ -n $line ]]; then
             COMPREPLY+=("$line")
         fi
-    done < <(command {bin} {REQUEST} bash "${{COMP_LINE:0:COMP_POINT}}" "${{COMP_WORDS[COMP_CWORD]}}" 2>/dev/null)
+    done < <(command {bin} {REQUEST} --shell bash --line "${{COMP_LINE:0:COMP_POINT}}" \
+        --bash-word "${{COMP_WORDS[COMP_CWORD]}}" 2>/dev/null)
     if [[ -n $files ]]; then
         compopt -o filenames 2>/dev/null
         local IFS=$'\n'
@@ -457,7 +454,7 @@ _{function}() {{
         elif [[ -n $line ]]; then
             candidates+=("$line")
         fi
-    done < <(command {bin} {REQUEST} zsh "${{(@)words[2,CURRENT]}}" 2>/dev/null)
+    done < <(command {bin} {REQUEST} --shell zsh --line "${{BUFFER[1,CURSOR]}}" 2>/dev/null)
     (( ${{#candidates}} )) && _describe -t values '{bin}' candidates
     [[ -n $files ]] && _files
     return 0
@@ -472,8 +469,7 @@ fi
         Shell::Fish => format!(
             r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
 function __{function}_complete
-    set -l words (commandline -opc)[2..-1] (commandline -ct)
-    for line in (command {bin} {REQUEST} fish $words 2>/dev/null)
+    for line in (command {bin} {REQUEST} --shell fish --line (commandline -cp) 2>/dev/null)
         if test "$line" = \u0001files
             __fish_complete_path (commandline -ct)
         else if test -n "$line"
