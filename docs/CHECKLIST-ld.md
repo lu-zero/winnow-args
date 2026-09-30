@@ -78,16 +78,19 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
       `thinlto_index_only_takes_its_value_after_equals`)
 - [x] Optional values: `--build-id` alone is `fast` (wild), `--build-id=sha1`.
       (`value_optional` + `default_missing` + `require_equals`; `mold: build-id`)
-- [ ] Options taking several following words (wild's three-parameter
-      handlers).
-- [ ] `-l:libfoo.a` names a file exactly, not a library: the value's meaning,
+- [x] Options taking several following words (wild's three-parameter
+      handler, Mach-O's `-platform_version macos 11.0 12.0`):
+      `#[arg(values = 3)]` on a `Vec` flag; the words after the first are taken
+      whatever they look like (`tests/ld_values.rs`).
+- [x] `-l:libfoo.a` names a file exactly, not a library: the value's meaning,
       but the lexer must leave the `:` alone. (`mold: library`)
-- [ ] Numbers in C syntax: `0x` hex, leading-zero octal
+- [x] Numbers in C syntax (`value::CInt<T>`): `0x` hex, leading-zero octal
       (`--image-base=0x400000`, `--section-start=.text=0x1000`,
       `-Ttext=0x1000`): a `FromArg`. (`mold: image-base`, `section-start`;
       wild's `-Ttext`/`-Tdata`/`-Tbss` round trips,
       `test_section_start_takes_precedence_over_ttext`)
-- [ ] `--defsym=SYMBOL=EXPR`: the first `=` ends the name.
+- [x] `--defsym=SYMBOL=EXPR`: the first `=` ends the name
+      (`value::KeyValue<K, V>`, also for `--section-start=.text=0x1000`).
       (`mold: defsym`, `defsym2`, `defsym-error`, `defsym-overflow`)
 
 ## Phase 3: `-z` keywords

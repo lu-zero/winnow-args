@@ -948,3 +948,18 @@ byte-identical binaries. In a `long_only` struct (11 fields), a 16-word
 ld-shaped line costs 4 621 warm instructions against 4 393 without it (+5 %,
 about 14 a word: the check leaves at the first byte for everything but a
 single-dash word).
+
+## 39. ld's values (ld phase 2)
+
+`value::CInt<T>` reads C integers (`0x` hex, leading-zero octal, a sign for
+signed types) as mold's `parse_c_number` does; `value::KeyValue<K, V>` splits
+at the first `=` (`--defsym=sym=a=b`, `--section-start=.text=0x1000`);
+`#[arg(values = N)]` makes each occurrence of a `Vec` flag read N words
+(`-platform_version macos 11.0 12.0`), the words after the first via
+`Arg::read_next`, whatever they look like. `-l:libfoo.a` already worked.
+
+Nothing is linked unless used: warm instructions on the mise lines are
+unchanged (3417, 4691, 3032, 2945 under `release-lto`), stripped sizes are
+unchanged, and `parse-n-wa`'s `.text` is byte-identical. mise's `.text`
+differs only in symbol names (the impl blocks of `value` renumbered) and a
+few `.rodata` addresses that moved with them.

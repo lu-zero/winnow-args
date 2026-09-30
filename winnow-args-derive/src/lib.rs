@@ -495,6 +495,8 @@ struct Field {
     negate: Option<String>,
     /// Never spelled with one dash under `long_only`: `--omagic` (ld).
     two_dashes: bool,
+    /// Words each occurrence takes (a `Vec` flag): `-platform_version macos 11.0 12.0`.
+    values: usize,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -929,9 +931,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 None => {
                     let value = f.flag_value(ty, quote!(__value));
                     let read = f.read();
+                    // `values = N`: the words after the first, whatever they look like.
+                    let more = (f.values > 1).then(|| {
+                        let more = f.values - 1;
+                        quote! {
+                            for _ in 0..#more {
+                                let __value = __arg.read_next(__input)?;
+                                #ident.push(#value);
+                            }
+                        }
+                    });
                     quote! {
                         let __value = #read;
                         #ident.push(#value);
+                        #more
                     }
                 }
                 Some(d) => {
@@ -1961,6 +1974,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut hyphen_values = false;
     let mut require_equals = false;
     let (mut two_dashes, mut prefix) = (false, false);
+    let mut values = 1;
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -2014,6 +2028,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     None
                 });
+            } else if meta.path.is_ident("values") {
+                let n = meta.value()?.parse::<syn::LitInt>()?;
+                values = n.base10_parse::<usize>()?;
+                if values == 0 {
+                    return Err(syn::Error::new(n.span(), "a flag takes at least one value"));
+                }
             } else if meta.path.is_ident("two_dashes") {
                 two_dashes = true;
             } else if meta.path.is_ident("prefix") {
@@ -2076,7 +2096,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -2113,6 +2133,17 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
+    }
+    if values > 1
+        && (positional
+            || subcommand
+            || !matches!(kind, Kind::Many(_))
+            || delimiter.is_some()
+            || default_missing.is_some())
+    {
+        return error(
+            "`values` is for a `Vec<T>` flag, without `delimiter` or `default_missing`".into(),
+        );
     }
     if two_dashes && (long.is_none() && alias.is_empty() || positional || subcommand) {
         return error("`two_dashes` is for flags with a long name".into());
@@ -2229,6 +2260,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         negate,
         two_dashes,
         prefix,
+        values,
     })
 }
 
