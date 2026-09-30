@@ -96,7 +96,8 @@ phase 3: brush parses them as declaration builtins, like `declare`.
       `"printf with option-like format arguments and attached values"`)
 - [x] Everything after the option zone verbatim: `exec`, `eval`,
       `.`/`source`, `let` (no options at all: `let -x=1` is an expression).
-- [ ] …and `command`, `builtin`, parsed by brush as declaration builtins.
+- [x] …and `command`, `builtin` (brush hands `builtin` its words unparsed;
+      `builtin -x` looking for a builtin named `-x` is the same under clap).
 - [x] `--help` is data for `echo` (and will be for `true`, `test`):
       `impl_winnow_args!(…, no_help)`.
       (`builtin: "valid builtin with hyphen args"`, `command: "command with --"`,
@@ -112,22 +113,38 @@ phase 3: brush parses them as declaration builtins, like `declare`.
 
 ## Phase 3: `+` options
 
-- [ ] Lex `+x` bundles natively beside `-x` ones: `set +e`, `set +o pipefail`,
+Done on brush branch `winnow-args-engine` (local, `c499caf0`): `set`,
+`declare` (also `local`, `readonly`, `typeset`), `export`, `command`,
+`builtin`. Left: `complete`/`compgen`.
+
+- [x] Lex `+x` bundles natively beside `-x` ones (`#[arg(plus_options)]`;
+      a tri-state `Option<bool>` field with `short = 'x', plus = 'x'`): `set +e`, `set +o pipefail`,
       `declare +i`, `declare +x`, `typeset +r`. brush's usage engine rewrites
       `+abc` into `--+a --+b --+c` before parsing; winnow-args should not need
       that. (`set: "set with options"`, `"set with multiple combined options"`;
       `declare: "Removing integer attribute prevents arithmetic evaluation"`)
-- [ ] `+` bundles stop at the same boundary as `-` ones (first operand, `-`,
+- [x] `+` bundles stop at the same boundary as `-` ones (first operand, `-`,
       `--`). (`set: "set with option-looking args"`)
-- [ ] `set -`: ends the options and turns off `-x`/`-v`; `set --` clears the
-      positional parameters. (`set: "set with -"`, `"set with --"`,
+- [x] `set -`: ends the options and turns off `-x`/`-v`; `set --` clears the
+      positional parameters (the operand list keeps its leading `-`/`--`:
+      `double_dash = "preserve", stop_flags`). (`set: "set with -"`, `"set with --"`,
       `"set clearing args"`)
 - [x] Value letter ending a bundle takes the next word: `set -euxo pipefail`.
 - [x] Optional values: bare `set -o`/`set +o` list the options.
       (`value_optional` + `default_missing`; `set: "set with no args"`)
-- [ ] Assignments as operands for the declaration builtins: `declare -i n=3`,
+- [x] Assignments as operands for the declaration builtins (brush splits
+      them off before parsing; `#[arg(skip)]` holds them, and
+      `impl_winnow_args!(…, declarations = field)` stores them): `declare -i n=3`,
       `export A=1 B`, `local x=`. (the 129 `declare` cases, `local`, `export`)
 - [ ] `complete`/`compgen` `-o`/`+o` option names.
+- [x] Each name of a shared builtin gets its own bash usage line
+      (`local: usage: local [option] name[=value] ...`).
+- [x] Measure: compat suite unchanged (1971 passing, as with clap).
+      `three-way.py`: config-lint-500 107 → 70 ms (−35 %), interp-loop
+      285 → 232 ms (−19 %), the others within noise. Per call: `set -f +f`
+      120 → 5.2 µs, `set +o noglob` 47 → 5.7, `declare -i n=1` 30 → 5.5,
+      `command true` 9.4 → 5.5, `export E=1` 6.9 → 4.5; the control `:` 3.1
+      both. The binary is 24 KB smaller than with clap alone.
       (`complete: "Roundtrip: complete -o options"`, `compgen: "compgen -o plusdirs"`)
 
 ## Phase 4: numeric and signal operands
