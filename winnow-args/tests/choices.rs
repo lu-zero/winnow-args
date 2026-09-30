@@ -134,3 +134,25 @@ fn string_choices_are_checked_before_conversion() {
         (ErrorKind::InvalidChoice, Some("DIRECTION"), 8)
     );
 }
+
+/// `#[arg(rename_all = "lowercase")]`: bash's completion actions are
+/// `arrayvar`, `bashdefault`, not kebab-case.
+#[derive(winnow_args::ValueEnum, Debug, PartialEq)]
+#[arg(rename_all = "lowercase")]
+enum Action {
+    ArrayVar,
+    BashDefault,
+    #[arg(name = "file")]
+    FileName,
+}
+
+#[test]
+fn rename_all_spells_every_variant() {
+    use winnow_args::FromArg;
+    let parse = |s: &str| Action::from_arg(BStr::new(s)).map_err(|e| e.to_string());
+    assert_eq!(parse("arrayvar"), Ok(Action::ArrayVar));
+    assert_eq!(parse("bashdefault"), Ok(Action::BashDefault));
+    assert_eq!(parse("file"), Ok(Action::FileName));
+    assert!(parse("array-var").is_err());
+    assert_eq!(Action::CHOICES, ["arrayvar", "bashdefault", "file"]);
+}

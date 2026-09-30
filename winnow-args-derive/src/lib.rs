@@ -40,13 +40,14 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Subcommand` can only be derived for enums",
         ));
     };
+    let case = rename_all(input)?;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
     let mut subs = Vec::new();
     for variant in &data.variants {
         let ident = &variant.ident;
-        let info = variant_names(variant, &mut names)?;
+        let info = variant_names(variant, &mut names, case)?;
         let pattern = byte_patterns(&info.names);
         let primary = LitStr::new(&info.names[0], Span::call_site());
         let inner = match &variant.fields {
@@ -209,6 +210,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`ValueEnum` can only be derived for enums",
         ));
     };
+    let case = rename_all(input)?;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let (mut choices, mut visible) = (Vec::new(), Vec::new());
@@ -223,7 +225,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             names: spellings,
             hide,
             ..
-        } = variant_names(variant, &mut names)?;
+        } = variant_names(variant, &mut names, case)?;
         let name = LitStr::new(&spellings[0], Span::call_site());
         if !hide {
             visible.push(name.clone());
@@ -273,9 +275,67 @@ struct Variant {
 }
 
 /// A variant's spellings, checked against `seen` for duplicates, and its help.
+/// How a variant's name is spelled when it gives none: an enum's
+/// `#[arg(rename_all = "…")]`.
+#[derive(Clone, Copy)]
+enum Case {
+    /// `DryRun` → `dry-run` (the default).
+    Kebab,
+    /// `DryRun` → `dryrun`.
+    Lower,
+    /// `DryRun` → `DRYRUN`.
+    Upper,
+    /// `DryRun` → `dry_run`.
+    Snake,
+    /// `DryRun` → `DryRun`.
+    Verbatim,
+}
+
+impl Case {
+    fn apply(self, ident: &str) -> String {
+        let ident = ident.trim_start_matches("r#");
+        match self {
+            Case::Kebab => kebab_case(ident),
+            Case::Lower => ident.to_lowercase(),
+            Case::Upper => ident.to_uppercase(),
+            Case::Snake => kebab_case(ident).replace('-', "_"),
+            Case::Verbatim => ident.to_owned(),
+        }
+    }
+}
+
+/// An enum's `#[arg(rename_all = "…")]`, kebab-case if absent.
+fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
+    let mut case = Case::Kebab;
+    for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+        attr.parse_nested_meta(|meta| {
+            if !meta.path.is_ident("rename_all") {
+                return Err(meta.error("expected `rename_all`"));
+            }
+            let lit = meta.value()?.parse::<LitStr>()?;
+            case = match lit.value().as_str() {
+                "kebab-case" => Case::Kebab,
+                "lowercase" => Case::Lower,
+                "UPPERCASE" => Case::Upper,
+                "snake_case" => Case::Snake,
+                "verbatim" => Case::Verbatim,
+                _ => {
+                    return Err(syn::Error::new(
+                        lit.span(),
+                        "expected \"kebab-case\", \"lowercase\", \"UPPERCASE\", \"snake_case\" or \"verbatim\"",
+                    ));
+                }
+            };
+            Ok(())
+        })?;
+    }
+    Ok(case)
+}
+
 fn variant_names<'a>(
     variant: &'a syn::Variant,
     seen: &mut Vec<(String, &'a Ident)>,
+    case: Case,
 ) -> syn::Result<Variant> {
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
@@ -305,7 +365,7 @@ fn variant_names<'a>(
     let ident = &variant.ident;
     let shown = alias.len();
     let names: Vec<String> =
-        std::iter::once(name.unwrap_or_else(|| kebab_case(&ident.to_string())))
+        std::iter::once(name.unwrap_or_else(|| case.apply(&ident.to_string())))
             .chain(alias)
             .chain(hidden)
             .collect();
