@@ -56,8 +56,9 @@ Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
       `hash`, `times`, `caller`, `enable`, `jobs`, `wait`, `mapfile`, `read`.
       The whole suite with the feature on: 2442 cases, 1971 passing, as with
       clap.
-- [ ] Still on the old engine among the plain ones: `unset` (parses its
-      options by hand), `type`, `readonly`, `true_false`, `colon`.
+- [x] Still on the old engine among the plain ones: `unset`, `type`,
+      `readonly`, `true_false`, `colon`: all ported by phase 6 (`readonly` is
+      `declare`'s; `true`, `false`, `:` parse nothing).
 - [ ] Where bash is laxer than every brush engine: `pwd extra` ignores the
       operand, `caller notanumber` fails silently with status 1.
 - [x] Attached and bundled values: `read -rp prompt: x`, `-rdX`.
@@ -223,8 +224,8 @@ port (`bg`, `fg`, `cd`, `umask`, `type`, `shopt`, `suspend`, `unset`, `bind`,
 - [x] Binary size: clap 6 535 448, winnow 6 468 584 bytes (−65 KiB). clap
       stays linked: brush-shell's own command line and brush-builtins' direct
       dependency.
-- [ ] A clap-free build: brush-shell's CLI on winnow-args and clap made
-      optional in brush-builtins.
+- [x] A clap-free build: on `winnow-port` (phase 7), clap remains only
+      under uucore (`printf`'s formatter).
 
 ## Phase 7: on brush's engine-neutral contracts
 

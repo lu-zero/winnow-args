@@ -13,10 +13,6 @@ fn err<T: Args + std::fmt::Debug>(line: &[&str], env: &[(&str, &str)]) -> Error 
     parse::<T>(line, env).expect_err(&format!("{line:?} should fail"))
 }
 
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its errors"
-)]
 #[derive(Args, Debug)]
 struct Conflicts {
     #[arg(short, long, conflicts("--local", "--path"))]
@@ -80,10 +76,6 @@ fn the_last_of_two_overriding_flags_wins() {
     );
 }
 
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its errors"
-)]
 #[derive(Args, Debug)]
 struct Requires {
     #[arg(long, requires("--json", "--key"))]
@@ -110,10 +102,6 @@ fn requires_needs_every_target_to_have_a_value() {
     assert!(parse::<Requires>(&[], &[]).is_ok());
 }
 
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its errors"
-)]
 #[derive(Args, Debug)]
 #[arg(group("output"), group("source", required, multiple))]
 struct Groups {
@@ -148,10 +136,6 @@ fn groups_bound_how_many_members_are_given() {
     assert!(parse::<Groups>(&["--brew", "--nvm", "--toml"], &[]).is_ok());
 }
 
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its errors"
-)]
 #[derive(Args, Debug)]
 struct Required {
     #[arg(short, long)]
