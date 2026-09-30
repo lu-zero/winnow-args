@@ -138,8 +138,10 @@ code would test the user's crate. So the derive wraps each piece of prose in
 its `help-text` feature: the literal, or `""`. The structure (names, values,
 defaults, choices, the version) stays either way.
 
-Color is a `help::Style`: one paint per role (header, program, literal,
-placeholder, error, invalid, valid). The default keeps to greens for what is
+Color is a `help::Style`: one paint per role — `header`, `program`, `flag`,
+`command`, `placeholder`, `env`, `default`, `choice`, `dim` (annotation labels,
+the brackets of an optional `[NAME]`, `...`), `code` (`` `quoted` `` spans in
+descriptions, backticks kept), and for errors `error`, `invalid`, `valid`. The default keeps to greens for what is
 typed and cyans/teals for structure and values, with no yellow: in 16 colors
 bold cyan headings, bold green flags and subcommands, cyan value names; in 256
 colors the tamer teal 73, green 71 and slate teal 109, with red 167, rose 174
@@ -148,8 +150,9 @@ docs/PERF.md step 34). Annotations paint their values, not their labels: the
 environment variable cyan (teal 37), the default green (sea green 72), each
 possible value bright green (green 71), each on its own; wrapping skips escape
 sequences when counting columns. It follows usage's layout rules: the program
-plain, and only the name painted in `[NAME]`. `Palette::CLAP` has clap 4's
-codes and leaves values plain, as clap does.
+plain, and only the name painted in `[NAME]`. `Palette::CLAP` reproduces clap
+4's default styles: no color in help (bold and underline only), color only in
+errors, and without clap's `color` feature nothing at all.
 
 Terminals differ in how many colors they show, so a `help::Style` is a
 `color::Palette` plus a `color::Depth` (none, 16, 256, 24-bit). `Depth::detect`
