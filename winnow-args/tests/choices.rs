@@ -156,3 +156,21 @@ fn rename_all_spells_every_variant() {
     assert!(parse("array-var").is_err());
     assert_eq!(Action::CHOICES, ["arrayvar", "bashdefault", "file"]);
 }
+
+/// `#[winnow_args(…)]` is the same as `#[arg(…)]`, for types another derive
+/// reading `arg` (clap's) also derives from.
+#[derive(winnow_args::ValueEnum, Debug, PartialEq)]
+#[winnow_args(rename_all = "lowercase")]
+enum Spelled {
+    ArrayVar,
+    #[winnow_args(name = "file")]
+    FileName,
+}
+
+#[test]
+fn the_winnow_args_attribute_name_works_too() {
+    use winnow_args::FromArg as _;
+    assert_eq!(Spelled::CHOICES, ["arrayvar", "file"]);
+    assert_eq!(Spelled::ArrayVar, Spelled::ArrayVar);
+    let _ = Spelled::FileName;
+}

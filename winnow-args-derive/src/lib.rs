@@ -16,7 +16,7 @@ use syn::{
     Type, parse_macro_input, spanned::Spanned as _,
 };
 
-#[proc_macro_derive(Args, attributes(arg))]
+#[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand(&input)
@@ -24,7 +24,7 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_derive(Subcommand, attributes(arg))]
+#[proc_macro_derive(Subcommand, attributes(arg, winnow_args))]
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_subcommand(&input)
@@ -194,7 +194,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
-#[proc_macro_derive(ValueEnum, attributes(arg))]
+#[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     expand_value_enum(&input)
@@ -307,7 +307,7 @@ impl Case {
 /// An enum's `#[arg(rename_all = "…")]`, kebab-case if absent.
 fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
     let mut case = Case::Kebab;
-    for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+    for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if !meta.path.is_ident("rename_all") {
                 return Err(meta.error("expected `rename_all`"));
@@ -339,7 +339,7 @@ fn variant_names<'a>(
 ) -> syn::Result<Variant> {
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
-    for attr in variant.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+    for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("name") {
                 name = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -464,6 +464,12 @@ fn short_none_long_none(f: &Field) -> bool {
     f.short().is_none() && f.longs().is_empty()
 }
 
+/// An attribute for these derives: `#[arg(…)]`, or `#[winnow_args(…)]` on a
+/// type that other derives (clap's claim `arg`) also read.
+fn is_ours(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("arg") || attr.path().is_ident("winnow_args")
+}
+
 /// Whether `ty` is `bool`.
 fn is_bool(ty: &Type) -> bool {
     last_segment(ty).is_some_and(|s| s.ident == "bool" && s.arguments.is_none())
@@ -471,24 +477,21 @@ fn is_bool(ty: &Type) -> bool {
 
 /// Whether a field is `#[arg(skip)]`: left at its default, not parsed.
 fn is_skipped(f: &syn::Field) -> bool {
-    f.attrs
-        .iter()
-        .filter(|a| a.path().is_ident("arg"))
-        .any(|a| {
-            let mut skip = false;
-            let _ = a.parse_nested_meta(|meta| {
-                if meta.path.is_ident("skip") {
-                    skip = true;
-                } else if meta.input.peek(syn::Token![=]) {
-                    meta.value()?.parse::<syn::Expr>()?;
-                } else if meta.input.peek(syn::token::Paren) {
-                    let _content;
-                    syn::parenthesized!(_content in meta.input);
-                }
-                Ok(())
-            });
-            skip
-        })
+    f.attrs.iter().filter(|a| is_ours(a)).any(|a| {
+        let mut skip = false;
+        let _ = a.parse_nested_meta(|meta| {
+            if meta.path.is_ident("skip") {
+                skip = true;
+            } else if meta.input.peek(syn::Token![=]) {
+                meta.value()?.parse::<syn::Expr>()?;
+            } else if meta.input.peek(syn::token::Paren) {
+                let _content;
+                syn::parenthesized!(_content in meta.input);
+            }
+            Ok(())
+        });
+        skip
+    })
 }
 
 /// `T` in `Box<T>`.
@@ -1750,7 +1753,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
         &mut options.default_subcommand,
         &mut options.arg_required_else_help,
     );
-    for attr in input.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+    for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("restart_token") {
                 *restart = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -2168,7 +2171,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
-    for attr in f.attrs.iter().filter(|a| a.path().is_ident("arg")) {
+    for attr in f.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("short") {
                 short = Some(if meta.input.peek(syn::Token![=]) {
