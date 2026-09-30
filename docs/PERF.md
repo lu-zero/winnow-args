@@ -1037,3 +1037,24 @@ On the 15-word ld line, 4 832 warm instructions with an `unknown` field
 against 4 681 without (+3 %): the bundle check reads each multi-letter
 single-dash word (`-lc`, `-lpthread`) once more. Nothing is generated without
 the field or `unknown_flags = "value"`.
+
+## 45. `flatten`
+
+`#[arg(flatten)] common: T` parses `T`'s flags as if declared in the parent.
+The derive gives every flags-only struct a hidden `Flatten` impl: a slot
+struct, `bind` (its own arms, one lexed flag at a time, returning whether it
+took it), `short`/`is_long` for bundle checks and `long_only`, and `finish`
+(environment, defaults, rules, required, the value). The parent keeps the
+slots and offers each flag its own arms do not take, after a `sequence` and
+before globals; its help lists `T`'s items after its own, joined at compile
+time (`concat_items`). Nesting works the same way.
+
+`bind` moves the slots out and back around its `match`, so a flattened flag
+costs a few moves more than one declared in place. Nothing changes for a
+struct that flattens nothing: warm instructions per parse are unchanged
+(2 185 and 3 491 on the bench lines) and the `release-lto` binaries within a
+few hundred bytes; the unused impls are not linked.
+
+Not yet: `T`'s names in the parent's duplicate check (the parent's own arms
+win), rules naming `T`'s flags, and a flattened struct with positionals,
+a subcommand, keywords or `global` flags.

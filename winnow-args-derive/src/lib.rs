@@ -659,6 +659,11 @@ fn is_sequence(f: &syn::Field) -> bool {
     has_flag(f, "sequence")
 }
 
+/// Whether a field is `#[arg(flatten)]`: another struct's flags, parsed as ours.
+fn is_flatten(f: &syn::Field) -> bool {
+    has_flag(f, "flatten")
+}
+
 /// Whether a field is `#[arg(unknown)]`: the flags no one declared, whole.
 fn is_unknown(f: &syn::Field) -> bool {
     has_flag(f, "unknown")
@@ -1152,13 +1157,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let fields = named
         .named
         .iter()
-        .filter(|f| !is_skipped(f) && !is_sequence(f) && !is_unknown(f))
+        .filter(|f| !is_skipped(f) && !is_sequence(f) && !is_unknown(f) && !is_flatten(f))
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
     let skipped: Vec<&Ident> = named
         .named
         .iter()
-        .filter(|f| is_skipped(f) && !is_sequence(f) && !is_unknown(f))
+        .filter(|f| is_skipped(f) && !is_sequence(f) && !is_unknown(f) && !is_flatten(f))
         .filter_map(|f| f.ident.as_ref())
         .collect();
     // `#[arg(sequence)] items: Vec<T>`: occurrences of `T`'s flags and
@@ -1208,6 +1213,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         None => None,
     };
+    // `#[arg(flatten)] common: T`: `T`'s flags, parsed as if declared here.
+    let flattens: Vec<(Ident, Type)> = named
+        .named
+        .iter()
+        .filter(|f| is_flatten(f))
+        .map(|f| (f.ident.clone().expect("named field"), f.ty.clone()))
+        .collect();
+    if !flattens.is_empty() && !input.generics.params.is_empty() {
+        return Err(syn::Error::new(
+            input.generics.span(),
+            "`flatten` in a generic struct is not supported yet",
+        ));
+    }
     check_duplicates(&fields)?;
     let dd = |f: &Field| match f.role {
         Role::Positional { double_dash, .. } => double_dash,
@@ -1273,27 +1291,29 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let slots = fields.iter().map(|f| {
-        let ident = slot(&f.ident);
-        let cfg = &f.cfg;
-        if f.keywords {
-            return quote!(#cfg let mut #ident: ::std::vec::Vec<&__wa::BStr> = ::std::vec::Vec::new(););
-        }
-        let decl = match &f.kind {
-            Kind::Switch if f.negate.is_some() => {
-                quote!(let mut #ident: ::core::option::Option<bool> = ::core::option::Option::None;)
-            }
-            Kind::Switch => quote!(let mut #ident: bool = false;),
-            Kind::Count(ty) => quote!(let mut #ident: #ty = 0;),
-            Kind::Optional(ty) | Kind::Required(ty) => {
-                quote!(let mut #ident: ::core::option::Option<#ty> = ::core::option::Option::None;)
-            }
-            Kind::Many(ty) => {
-                quote!(let mut #ident: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();)
-            }
-        };
-        quote!(#cfg #decl)
-    });
+    // Each field's slot: its `cfg`, name, type and starting value.
+    let slot_parts: Vec<(&TokenStream2, Ident, TokenStream2, TokenStream2)> = fields
+        .iter()
+        .map(|f| {
+            let none = quote!(::core::option::Option::None);
+            let new = quote!(::std::vec::Vec::new());
+            let (ty, init) = match &f.kind {
+                // Borrows the command line, so never in a `Flatten` slot struct.
+                _ if f.keywords => (quote!(::std::vec::Vec<&__wa::BStr>), new),
+                Kind::Switch if f.negate.is_some() => (quote!(::core::option::Option<bool>), none),
+                Kind::Switch => (quote!(bool), quote!(false)),
+                Kind::Count(ty) => (quote!(#ty), quote!(0)),
+                Kind::Optional(ty) | Kind::Required(ty) => {
+                    (quote!(::core::option::Option<#ty>), none)
+                }
+                Kind::Many(ty) => (quote!(::std::vec::Vec<#ty>), new),
+            };
+            (&f.cfg, slot(&f.ident), ty, init)
+        })
+        .collect();
+    let slots = slot_parts
+        .iter()
+        .map(|(cfg, ident, ty, init)| quote!(#cfg let mut #ident: #ty = #init;));
 
     // What storing one flag occurrence looks like; the same for both spellings.
     let store = |f: &Field| {
@@ -1698,6 +1718,36 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ),
         None => (quote!(), quote!(), quote!()),
     };
+    // `#[arg(flatten)]` fields: their slots, the flags offered to them after
+    // ours, and their values built at the end.
+    let flat_slot = |ident: &Ident| format_ident!("__flat_{}", ident);
+    let flatten_slots = flattens.iter().map(|(ident, ty)| {
+        let slot = flat_slot(ident);
+        quote! {
+            let mut #slot = <<#ty as __wa::Flatten>::Slots as ::core::default::Default>::default();
+        }
+    });
+    let flatten_arg: TokenStream2 = flattens
+        .iter()
+        .map(|(ident, ty)| {
+            let slot = flat_slot(ident);
+            quote!(if <#ty as __wa::Flatten>::bind(&mut #slot, &__arg, __input)? {} else)
+        })
+        .collect();
+    let flatten_build = flattens.iter().map(|(ident, ty)| {
+        let slot = flat_slot(ident);
+        quote!(#ident: <#ty as __wa::Flatten>::finish(#slot, __input)?,)
+    });
+    let flatten_shorts = flattens.iter().map(|(_, ty)| {
+        quote! {
+            __c if <#ty as __wa::Flatten>::short(__c).is_some() => {
+                <#ty as __wa::Flatten>::short(__c)
+            }
+        }
+    });
+    let flatten_longs = flattens
+        .iter()
+        .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
     let lexer = if plus_options {
         quote!(__wa::arg_plus)
     } else {
@@ -1727,7 +1777,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote! {
             __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
                 #(#plus_arms)*
-                _ => { #unexpected; }
+                _ => #flatten_arg { #unexpected; }
             },
         }
     });
@@ -1841,6 +1891,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
                     #(#own)*
                     #(#builtin)*
+                    #(#flatten_shorts)*
                     #theirs
                 }) {
                     #sink
@@ -1876,7 +1927,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         Vec::new()
     };
     let sequence_ty = sequence.as_ref().map(|(_, ty)| ty);
-    let lex = if long_only && (!names.is_empty() || sequence_ty.is_some()) {
+    let long_only_lex =
+        long_only && (!names.is_empty() || sequence_ty.is_some() || !flattens.is_empty());
+    let lex = if long_only_lex {
         let prefixes: Vec<u8> = fields
             .iter()
             .filter(|f| f.prefix)
@@ -1905,7 +1958,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
         quote! {
             match __wa::long_only(__input, |__name| {
-                #not_prefixed (#own #their_names) #their_prefixes
+                #not_prefixed (#own #their_names #(#flatten_longs)*) #their_prefixes
             }) {
                 ::core::option::Option::Some(__arg) => __arg,
                 ::core::option::Option::None => {
@@ -1917,7 +1970,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     } else {
         lex
     };
-    let lenient_bundle = if long_only && (!names.is_empty() || sequence_ty.is_some()) {
+    let lenient_bundle = if long_only_lex {
         quote!()
     } else {
         lenient_bundle
@@ -1959,12 +2012,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             quote!(#cfg { #code })
         }
     };
-    let env_fallbacks = fields
+    let env_fallbacks: Vec<TokenStream2> = fields
         .iter()
-        .map(|f| with_cfg(f, f.fallback(true, rules.is_displaced(&fields, f))));
-    let default_fallbacks = fields
+        .map(|f| with_cfg(f, f.fallback(true, rules.is_displaced(&fields, f))))
+        .collect();
+    let default_fallbacks: Vec<TokenStream2> = fields
         .iter()
-        .map(|f| with_cfg(f, f.fallback(false, rules.is_displaced(&fields, f))));
+        .map(|f| with_cfg(f, f.fallback(false, rules.is_displaced(&fields, f))))
+        .collect();
     let exclusive = rules.exclusive(&fields, &groups);
     let supplied = rules.supplied(&fields);
     let required = rules.required(&fields, &groups);
@@ -2004,6 +2059,222 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         };
         quote!(#cfg #value)
     });
+    let build: Vec<TokenStream2> = build.collect();
+    let flatten_build: Vec<TokenStream2> = flatten_build.collect();
+    // Flags only: no positionals, subcommand, `sequence`, `unknown`,
+    // keywords, `global` flags or generics.
+    let flattenable = positionals.is_empty()
+        && trailing.is_none()
+        && subcommand.is_none()
+        && sequence.is_none()
+        && unknown.is_none()
+        && !unknown_flags_value
+        && input.generics.params.is_empty()
+        && !fields
+            .iter()
+            .any(|f| f.keywords || matches!(f.role, Role::Flag { global: true, .. }));
+    let flatten_impl = flattenable.then(|| {
+        let vis = &input.vis;
+        let slots_name = format_ident!("__{}WinnowArgsSlots", name);
+        let displaced_idents: Vec<Ident> = fields
+            .iter()
+            .filter(|f| rules.is_displaced(&fields, f))
+            .map(|f| format_ident!("__displaced_{}", f.ident))
+            .collect();
+        let nested: Vec<(Ident, &Type)> =
+            flattens.iter().map(|(ident, ty)| (flat_slot(ident), ty)).collect();
+        let decls = slot_parts.iter().map(|(cfg, ident, ty, _)| quote!(#cfg #ident: #ty,));
+        let inits = slot_parts.iter().map(|(cfg, ident, _, init)| quote!(#cfg #ident: #init,));
+        let empty = TokenStream2::new();
+        let all: Vec<(&TokenStream2, &Ident)> = slot_parts
+            .iter()
+            .map(|(cfg, ident, _, _)| (*cfg, ident))
+            .chain(displaced_idents.iter().map(|d| (&empty, d)))
+            .chain(nested.iter().map(|(n, _)| (&empty, n)))
+            .collect();
+        let names: Vec<TokenStream2> =
+            all.iter().map(|(cfg, ident)| quote!(#cfg #ident,)).collect();
+        let mutable: Vec<TokenStream2> =
+            all.iter().map(|(cfg, ident)| quote!(#cfg mut #ident,)).collect();
+        let displaced_decls = displaced_idents.iter().map(|d| quote!(#d: bool,));
+        let displaced_inits = displaced_idents.iter().map(|d| quote!(#d: false,));
+        let nested_decls = nested
+            .iter()
+            .map(|(n, ty)| quote!(#n: <#ty as ::winnow_args::__private::Flatten>::Slots,));
+        let nested_inits = nested
+            .iter()
+            .map(|(n, _)| quote!(#n: ::core::default::Default::default(),));
+        let arm = |cfg: &TokenStream2, pattern: TokenStream2, body: TokenStream2| {
+            quote!(#cfg #pattern => { #body true })
+        };
+        let bind_long = fields.iter().filter_map(|f| {
+            Some(arm(&f.cfg, f.long_pattern()?, store(f)))
+        });
+        let bind_negated = fields.iter().filter_map(|f| {
+            let (pattern, body) = negated(f)?;
+            Some(arm(&f.cfg, pattern, body))
+        });
+        let bind_short = fields.iter().filter_map(|f| {
+            Some(arm(&f.cfg, f.short_pattern()?, store(f)))
+        });
+        let bind_plus = fields.iter().filter_map(|f| {
+            let letter = LitChar::new(f.plus?, Span::call_site());
+            let ident = slot(&f.ident);
+            let displace = rules.displace(&fields, f);
+            let body = if f.tristate {
+                quote!(#ident = ::core::option::Option::Some(false); #displace)
+            } else {
+                store(f)
+            };
+            Some(arm(&f.cfg, quote!(#letter), body))
+        });
+        let bind_nested: TokenStream2 = nested
+            .iter()
+            .map(|(n, ty)| {
+                quote!(if <#ty as __wa::Flatten>::bind(&mut #n, &__arg, __input)? { true } else)
+            })
+            .collect();
+        let plus = plus_options.then(|| {
+            quote! {
+                __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
+                    #(#bind_plus)*
+                    _ => #bind_nested { false }
+                },
+            }
+        });
+        let letters = fields.iter().filter_map(|f| {
+            let letters = f.short_pattern()?;
+            let takes_value = f.takes_value();
+            let cfg = &f.cfg;
+            Some(quote!(#cfg #letters => ::core::option::Option::Some(#takes_value),))
+        });
+        let nested_shorts = nested.iter().map(|(_, ty)| {
+            quote! {
+                __c if <#ty as __wa::Flatten>::short(__c).is_some() => {
+                    <#ty as __wa::Flatten>::short(__c)
+                }
+            }
+        });
+        let longs: Vec<String> = fields
+            .iter()
+            .filter(|f| !f.two_dashes)
+            .flat_map(|f| spellings(f).into_iter().map(str::to_owned))
+            .collect();
+        let own_longs = if longs.is_empty() {
+            quote!(false)
+        } else {
+            let patterns = byte_patterns(&longs);
+            quote!(matches!(__name, #patterns))
+        };
+        let nested_longs = nested
+            .iter()
+            .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
+        quote! {
+            #[doc(hidden)]
+            #[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
+            #vis struct #slots_name {
+                #(#decls)*
+                #(#displaced_decls)*
+                #(#nested_decls)*
+            }
+
+            #[automatically_derived]
+            impl ::core::default::Default for #slots_name {
+                fn default() -> Self {
+                    Self {
+                        #(#inits)*
+                        #(#displaced_inits)*
+                        #(#nested_inits)*
+                    }
+                }
+            }
+
+            #[automatically_derived]
+            #[allow(
+                unused_mut,
+                unused_variables,
+                unreachable_code,
+                clippy::all,
+                clippy::pedantic,
+                clippy::nursery,
+                clippy::restriction
+            )]
+            impl ::winnow_args::__private::Flatten for #name {
+                type Slots = #slots_name;
+
+                fn bind<'__i>(
+                    __slots: &mut #slots_name,
+                    __arg: &::winnow_args::Arg<'__i>,
+                    __input: &mut ::winnow_args::Argv<'__i>,
+                ) -> ::core::result::Result<bool, ::winnow_args::Error> {
+                    use ::winnow_args::__private as __wa;
+                    let __arg = *__arg;
+                    let #slots_name { #(#mutable)* } = ::core::mem::take(__slots);
+                    let __bound = match __arg {
+                        __wa::Arg::Long(__flag) => match __flag.name {
+                            #(#bind_long)*
+                            #(#bind_negated)*
+                            _ => #bind_nested { false }
+                        },
+                        #plus
+                        __wa::Arg::Short(__flag) => match __flag.letter {
+                            #(#bind_short)*
+                            _ => #bind_nested { false }
+                        },
+                        _ => false,
+                    };
+                    *__slots = #slots_name { #(#names)* };
+                    ::core::result::Result::Ok(__bound)
+                }
+
+                fn short(__c: char) -> ::core::option::Option<bool> {
+                    use ::winnow_args::__private as __wa;
+                    match __c {
+                        #(#letters)*
+                        #(#nested_shorts)*
+                        _ => ::core::option::Option::None,
+                    }
+                }
+
+                fn is_long(__name: &[u8]) -> bool {
+                    use ::winnow_args::__private as __wa;
+                    #own_longs #(#nested_longs)*
+                }
+
+                fn finish(
+                    __slots: #slots_name,
+                    __input: &::winnow_args::Argv<'_>,
+                ) -> ::core::result::Result<Self, ::winnow_args::Error> {
+                    use ::winnow_args::__private as __wa;
+                    let #slots_name { #(#mutable)* } = __slots;
+                    #(#env_fallbacks)*
+                    #exclusive
+                    #supplied
+                    #(#default_fallbacks)*
+                    #required
+                    ::core::result::Result::Ok(Self {
+                        #(#build,)*
+                        #(#skipped: ::core::default::Default::default(),)*
+                        #(#flatten_build)*
+                    })
+                }
+            }
+        }
+    });
+    let own_items = quote!(&[#(#help_items),*]);
+    let items = if flattens.is_empty() {
+        own_items
+    } else {
+        let tys: Vec<&Type> = flattens.iter().map(|(_, ty)| ty).collect();
+        quote!({
+            const __OWN: &[::winnow_args::help::Item] = #own_items;
+            const __N: usize = __OWN.len() #(+ <#tys as ::winnow_args::Args>::HELP.items.len())*;
+            const __ALL: [::winnow_args::help::Item; __N] = ::winnow_args::__private::concat_items::<__N>(
+                &[__OWN, #(<#tys as ::winnow_args::Args>::HELP.items),*],
+            );
+            &__ALL
+        })
+    };
 
     Ok(quote! {
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
@@ -2013,7 +2284,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 long_about: #long_about,
                 after_help: #after_help,
                 after_long_help: #after_long_help,
-                items: &[#(#help_items),*],
+                items: #items,
                 subcommands: #help_subcommands,
                 subcommand_required: #subcommand_required,
                 help_flag: #help_flag,
@@ -2029,6 +2300,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #(#slots)*
                 #sequence_slot
                 #unknown_slot
+                #(#flatten_slots)*
                 #(#displaced)*
                 #position
                 #filled_slot
@@ -2043,14 +2315,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #(#long_arms)*
                             #help_long
                             #version_long
-                            _ => #sequence_arg if !__globals.bind(&__arg, __input)? { #unknown_flag },
+                            _ => #sequence_arg #flatten_arg if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
                         #plus_match
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             #help_short
                             #version_short
-                            _ => #sequence_arg if !__globals.bind(&__arg, __input)? { #unknown_short },
+                            _ => #sequence_arg #flatten_arg if !__globals.bind(&__arg, __input)? { #unknown_short },
                         },
                         #separator_arm
                         #word_arm
@@ -2066,9 +2338,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #(#skipped: ::core::default::Default::default(),)*
                     #sequence_build
                     #unknown_build
+                    #(#flatten_build)*
                 })
             }
         }
+
+        #flatten_impl
     })
 }
 
