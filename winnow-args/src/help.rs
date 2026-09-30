@@ -238,8 +238,16 @@ impl Style {
         self.ink(self.palette.valid)
     }
 
-    pub(crate) fn value(self) -> Ink {
-        self.ink(self.palette.value)
+    pub(crate) fn env(self) -> Ink {
+        self.ink(self.palette.env)
+    }
+
+    pub(crate) fn default(self) -> Ink {
+        self.ink(self.palette.default)
+    }
+
+    pub(crate) fn choice(self) -> Ink {
+        self.ink(self.palette.choice)
     }
 
     /// `text` in `ink`, reset after.
@@ -490,14 +498,20 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
         text.push_str(&extra);
     };
     if let Some(env) = item.env {
-        add(format!("[env: {env}]"));
+        add(format!("[env: {}]", Style::paint(style.env(), env)));
     }
-    let value = |text: &str| Style::paint(style.value(), text);
     if let Some(default) = item.default {
-        add(format!("[default: {}]", value(default)));
+        add(format!(
+            "[default: {}]",
+            Style::paint(style.default(), default)
+        ));
     }
     if !item.choices.is_empty() {
-        let choices: Vec<String> = item.choices.iter().map(|c| value(c)).collect();
+        let choices: Vec<String> = item
+            .choices
+            .iter()
+            .map(|c| Style::paint(style.choice(), c))
+            .collect();
         add(format!("[possible values: {}]", choices.join(", ")));
     }
     text

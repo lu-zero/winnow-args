@@ -907,3 +907,10 @@ the spaces between them stay plain and a wrapped line never breaks inside a
 painted span; `Wrap` now skips SGR sequences when counting columns. The
 strip-equals-plain test covers wrapping with the new escapes at 50 and 100
 columns. Rendering only.
+
+## 36. Env, default and possible values each their own color
+
+The `value` role splits into `env` (cyan; teal 37 `#00afaf`, 5.59/2.34),
+`default` (green; sea green 72 `#5faf87`, 5.74/2.27) and `choice` (bright
+green; green 71 `#5faf5f`, 5.61/2.33), contrast against `#262626`/`#eeeeee`.
+Unpainted in `Palette::CLAP`. Rendering only.
