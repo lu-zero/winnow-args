@@ -563,6 +563,41 @@ pub fn flag_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
     })
 }
 
+/// GNU's `getopt_long_only`: a single-dash word whose name (up to the first
+/// `=`) `is_long` accepts is a long option, `-entry=main` as `--entry=main`,
+/// tried before the word is read as a bundle of short options. `None`,
+/// consuming nothing, for anything else, which [`arg`] then lexes as usual.
+///
+/// `is_long` decides which names may be spelled with one dash: `ld` keeps some
+/// to two (`--omagic`, since `-omagic` is `-o magic`), and a letter that always
+/// takes the rest of the word (`-lfoo`) wins over any long name it starts.
+#[inline]
+pub fn long_only<'i>(input: &mut Argv<'i>, is_long: impl Fn(&[u8]) -> bool) -> Option<Arg<'i>> {
+    if input.is_empty() || input.mode() != Mode::Word {
+        return None;
+    }
+    let body = input.front().strip_prefix(b"-")?;
+    if body.len() < 2 || body[0] == b'-' {
+        return None;
+    }
+    let (name, value) = match body.iter().position(|&b| b == b'=') {
+        Some(eq) => (&body[..eq], Some(&body[eq + 1..])),
+        None => (body, None),
+    };
+    if !is_long(name) {
+        return None;
+    }
+    let offset = input.offset();
+    let word = &input.take_word()[1..];
+    let name = &word[..name.len()];
+    let value = value.map(|_| BStr::new(&word[name.len() + 1..]));
+    Some(Arg::Long(LongFlag {
+        name,
+        value,
+        offset,
+    }))
+}
+
 /// `--` as a word, for a positional declared `double_dash = "preserve"`: the
 /// separator is its value and flags go on being flags.
 pub fn separator_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {

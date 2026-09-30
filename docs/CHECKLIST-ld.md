@@ -34,33 +34,40 @@ Legend: `[x]` winnow-args covers it today (the feature that does is named),
 
 ## Phase 1: GNU's dash rules
 
-A lexer mode, since the default (usage's grammar) differs on every point here.
+A lexer mode, since the default (usage's grammar) differs on every point here:
+`#[arg(long_only)]` on the struct, `token::long_only` for combinators
+(`tests/long_only.rs`).
 
-- [ ] Long options take one dash or two: `-shared` = `--shared`,
+- [x] Long options take one dash or two: `-shared` = `--shared`,
       `-soname x` = `--soname x`. (mold `match_option`, wild `strip_option`;
       `mold: shared`, `soname`)
-- [ ] Names starting with `o` need two dashes: `-omagic` is `-o magic`.
-      (`mold: omagic`, `nmagic`)
-- [ ] A list of names needs two dashes (`--execute-only`,
+- [x] Names starting with `o` need two dashes: `-omagic` is `-o magic`.
+      (`mold: omagic`, `nmagic`) (`#[arg(two_dashes)]` on the field)
+- [x] A list of names needs two dashes (`--execute-only`,
       `--export-dynamic-symbol`, `--max-cache-size`, `--undefined-glob`, …):
       with one dash they are a short option with an attached value.
       (`mold: undefined-glob`)
-- [ ] A single-dash word is tried as a long option before a short option
+- [x] A single-dash word is tried as a long option before a short option
       takes the rest of it: `-entry=main` is `--entry=main`, not
       `-e ntry=main`; `-eh-frame-hdr`, `-end-group`, `-filter`,
       `-fix-cortex-a53-843419` too (getopt_long_only; mold 890ec2da).
       (`a_single_dash_long_wins_over_a_short_with_an_attached_value`;
       `mold: entry`, `filter`, `auxiliary`)
-- [ ] …except `-l`, which always takes its attached value: `-lfoo` is
-      `--library=foo`. (`mold: library`)
+- [x] …except `-l`, which always takes its attached value: `-lfoo` is
+      `--library=foo`. (`mold: library`) (`#[arg(short = 'l', prefix)]`)
+- [ ] Errors spell a single-dash long option with two dashes (`--entry`), which
+      ld also accepts: `LongFlag` does not record the dashes, to keep `Arg`
+      small.
+- [ ] `long_only` with `unknown_flags = "value"` (rejected at compile time).
+- [ ] GNU ld also accepts unambiguous abbreviations (`--whole-arch`); mold and
+      wild do not.
 - [x] Long names are case-sensitive and may be capitalized: `-Map`,
       `-Bstatic`, `-Bsymbolic`.
 
 ## Phase 2: values
 
 - [x] `--name=value` and `--name value`.
-- [ ] `-name=value` and `-name value` for single-dash long options (after
-      phase 1).
+- [x] `-name=value` and `-name value` for single-dash long options.
 - [x] Short options with attached or separate values: `-Ldir`/`-L dir`,
       `-ofile`/`-o file`, `-lname`, `-Tscript`, `-e sym`, `-u sym`,
       `-h soname`, `-R path`, `-m emul`/`-melf_x86_64`, `-O2`.

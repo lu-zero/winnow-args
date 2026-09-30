@@ -493,6 +493,11 @@ struct Field {
     /// The long spelling that sets a `bool` false; the slot is then an
     /// `Option<bool>` until the end, so a default fills only what was not given.
     negate: Option<String>,
+    /// Never spelled with one dash under `long_only`: `--omagic` (ld).
+    two_dashes: bool,
+    /// A short letter that always takes the rest of its word (`-lfoo`), so
+    /// under `long_only` no long name starting with it is tried with one dash.
+    prefix: bool,
 }
 
 impl Field {
@@ -866,6 +871,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         disable_version_flag,
         disable_help_subcommand,
         unknown_flags_value,
+        long_only,
     } = struct_options(input)?;
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
@@ -1294,6 +1300,50 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
     let help_flag = help_long.is_some() || help_short.is_some();
 
+    // `long_only`: `-name` is `--name` for the long names that may take one
+    // dash, tried before the word is read as short letters.
+    if long_only && unknown_flags_value {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`long_only` and `unknown_flags = \"value\"` together are not supported yet",
+        ));
+    }
+    let single_dash_longs = |fields: &[Field]| -> Vec<String> {
+        let mut names: Vec<String> = fields
+            .iter()
+            .filter(|f| !f.two_dashes)
+            .flat_map(|f| spellings(f).into_iter().map(str::to_owned))
+            .collect();
+        names.extend(help_long.is_some().then(|| "help".to_owned()));
+        names.extend(version_long.is_some().then(|| "version".to_owned()));
+        names
+    };
+    let names = if long_only {
+        single_dash_longs(&fields)
+    } else {
+        Vec::new()
+    };
+    let lex = if !names.is_empty() {
+        let prefixes: Vec<u8> = fields
+            .iter()
+            .filter(|f| f.prefix)
+            .filter_map(|f| f.short().map(|c| c as u8))
+            .collect();
+        let names = byte_patterns(&names);
+        let not_prefixed = (!prefixes.is_empty()).then(|| {
+            let prefixes = prefixes.iter().map(|b| quote!(#b));
+            quote!(!matches!(__name.first(), ::core::option::Option::Some(#(#prefixes)|*)) &&)
+        });
+        quote! {
+            match __wa::long_only(__input, |__name| #not_prefixed matches!(__name, #names)) {
+                ::core::option::Option::Some(__arg) => __arg,
+                ::core::option::Option::None => #lex,
+            }
+        }
+    } else {
+        lex
+    };
+
     // `unknown_flags = "value"`: a flag-like word naming no flag goes to the
     // positionals whole, never to a subcommand. A bundle of several letters is
     // checked before any binds; a long word or a single letter once no arm or
@@ -1496,6 +1546,8 @@ struct StructOptions {
     disable_help_subcommand: bool,
     /// An unknown flag-like word is a positional value, as usage's default.
     unknown_flags_value: bool,
+    /// GNU's `getopt_long_only`: a long name may be spelled with one dash.
+    long_only: bool,
 }
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
@@ -1519,6 +1571,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("arg_required_else_help") {
                 *help = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("long_only") {
+                texts.long_only = true;
                 return Ok(());
             }
             if meta.path.is_ident("unknown_flags") {
@@ -1585,7 +1641,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `arg_required_else_help`, `unknown_flags`, `name`, `version`, `about`, \
+                     `arg_required_else_help`, `unknown_flags`, `long_only`, `name`, `version`, `about`, \
                      `long_about`, `after_help`, `after_long_help` or a `disable_*` option",
                 ));
             }
@@ -1625,6 +1681,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     options.disable_version_flag = texts.disable_version_flag;
     options.disable_help_subcommand = texts.disable_help_subcommand;
     options.unknown_flags_value = texts.unknown_flags_value;
+    options.long_only = texts.long_only;
     Ok(options)
 }
 
@@ -1903,6 +1960,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negative_numbers = false;
     let mut hyphen_values = false;
     let mut require_equals = false;
+    let (mut two_dashes, mut prefix) = (false, false);
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -1956,6 +2014,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     None
                 });
+            } else if meta.path.is_ident("two_dashes") {
+                two_dashes = true;
+            } else if meta.path.is_ident("prefix") {
+                prefix = true;
             } else if meta.path.is_ident("require_equals") {
                 require_equals = true;
             } else if meta.path.is_ident("allow_hyphen_values") {
@@ -2014,7 +2076,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -2051,6 +2113,17 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
+    }
+    if two_dashes && (long.is_none() && alias.is_empty() || positional || subcommand) {
+        return error("`two_dashes` is for flags with a long name".into());
+    }
+    if prefix
+        && (short.is_none_or(|c| !c.is_ascii())
+            || positional
+            || subcommand
+            || matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error("`prefix` is for a value-taking flag with an ASCII `short` letter".into());
     }
     let flag_value_name =
         (!positional && !subcommand && !matches!(kind, Kind::Switch | Kind::Count(_)))
@@ -2154,6 +2227,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hyphen_values,
         require_equals,
         negate,
+        two_dashes,
+        prefix,
     })
 }
 

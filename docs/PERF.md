@@ -932,3 +932,19 @@ Correction to steps 29–30: clap 4's default styles use no color in help, only
 bold and underline; color appears only in errors (red, yellow, green), and only
 with clap's `color` feature. `Palette::CLAP` always reproduced that, but the
 docs called it "clap's colors". Rendering only.
+
+## 38. `long_only`: GNU's dash rules (ld phase 1)
+
+`#[arg(long_only)]` makes a single-dash word whose name (up to `=`) is one of
+the struct's long names a long option, tried before short letters, as GNU's
+`getopt_long_only` and ld do: `-entry=main` is `--entry=main`, not
+`-e ntry=main`. `#[arg(two_dashes)]` keeps a name to `--` (`--omagic`, since
+`-omagic` is `-o magic`); `#[arg(short = 'l', prefix)]` keeps a letter that
+always takes the rest of its word (`-lazy` is `-l azy`). `token::long_only` is
+the combinator form. Tests port mold's `ArgCursor` vectors.
+
+The default grammar pays nothing: `parse-n-wa` and `parse-n-mise-wa` build to
+byte-identical binaries. In a `long_only` struct (11 fields), a 16-word
+ld-shaped line costs 4 621 warm instructions against 4 393 without it (+5 %,
+about 14 a word: the check leaves at the first byte for everything but a
+single-dash word).
