@@ -240,7 +240,7 @@ under uucore (`printf`'s formatter).
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
 - [x] Every builtin; `-x`/`+x` pairs are `Option<bool>` fields
       (`usage_minus_or_plus_flag_arg!` removed); `complete`/`compgen` share
-      their options through a declarative macro (no `flatten` yet).
+      their options with `#[arg(flatten)]`.
 - [x] brush's command line: `+o`/`+O` native (the pre-parse rewrite gone),
       `--help` without `-h` (`disable_help_short`), `#[cfg]` fields.
 - [x] Completion scripts (bash, zsh, fish, elvish, PowerShell) answered by
@@ -251,5 +251,6 @@ under uucore (`printf`'s formatter).
 - [x] Release binary 6 472 000 bytes against usage-port's 6 733 808 (−256 KiB).
       three-way.py (15 samples) level with usage-port within noise; per call
       winnow is 0.1–0.6 µs faster, and `set -f +f` 77.8 → 5.0 µs.
-- [ ] `flatten`, to share option groups without a macro.
+- [x] `flatten` (`d2c7f5f`): `complete`/`compgen` share
+      `CommonCompleteCommandArgs` as on usage-port (`be93f772`).
 - [ ] fish, elvish and PowerShell scripts run in their shells.
