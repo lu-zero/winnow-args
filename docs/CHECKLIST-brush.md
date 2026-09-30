@@ -35,24 +35,42 @@ Legend: `[x]` winnow-args covers it today (the feature that does is named),
 
 ## Phase 1: the engine, and builtins with ordinary grammar
 
-- [ ] `parser-winnow` feature in brush-core, brush-builtins and brush-shell;
-      an `impl_winnow_parse!` like `impl_usage_parse!`
-      (`brush-builtins/src/args/usage_support.rs`) mapping a derived
-      `winnow_args::Args` to brush's `FromArgs`.
-- [ ] Errors in bash's shape: `bash: set: -q: invalid option`, then
-      `set: usage: set [-abefhkmnptuvxBCEHPT] [-o option-name] [--] [-] [arg ...]`,
-      status 2. winnow-args' `Error` has the kind and the token; the engine
-      renders them, with each builtin's one-line synopsis.
-- [ ] Builtins with no special grammar ported and passing their compat files:
-      `alias`, `unalias`, `hash`, `pwd`, `times`, `true_false`, `colon`,
-      `caller`, `enable`, `jobs`, `wait`, `type`, `unset`, `readonly`,
-      `mapfile`, `read`.
+Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
+
+- [x] `parser-winnow` feature in brush-builtins and brush-shell, and
+      `arg_impl!(T, winnow)`: a ported builtin uses winnow-args with the
+      feature on, every other builtin keeps the engine selected before, so
+      builtins move one at a time. `impl_winnow_args!(T, "synopsis")` maps a
+      derived `winnow_args::Args` to brush's `FromArgs` and `builtins::Command`
+      (`brush-builtins/src/args/winnow_support.rs`).
+- [x] Errors in bash's shape: `hash: -x: invalid option`, then
+      `hash: usage: hash [-lr] [-p pathname] [-dt] [name ...]`, status 2;
+      bash's own usage line where the builtin gives one (`help -s`), else one
+      derived from the help data. brush prints the message as is (bash's
+      `bash: line N:` prefix is the shell's, not the builtin's).
+- [x] `--help` asks for help only as the first word, as in bash, and prints
+      the usage line and description; `-h` is not help.
+- [x] `help NAME` content (detailed, short usage, short description) from the
+      derive's static help data.
+- [x] Ported, compat results identical to clap's: `pwd`, `alias`, `unalias`,
+      `hash`, `times`, `caller`, `enable`, `jobs`, `wait`, `mapfile`, `read`.
+      The whole suite with the feature on: 2442 cases, 1971 passing, as with
+      clap.
+- [ ] Still on the old engine among the plain ones: `unset` (parses its
+      options by hand), `type`, `readonly`, `true_false`, `colon`.
+- [ ] Where bash is laxer than every brush engine: `pwd extra` ignores the
+      operand, `caller notanumber` fails silently with status 1.
 - [x] Attached and bundled values: `read -rp prompt: x`, `-rdX`.
       (`read: "read -a with empty lines"` and the other 66 `read` cases)
 - [x] Empty-string values: `read -d '' x`, `mapfile -d ''`.
 - [x] Repeated value options accumulate: `complete -o a -o b`.
 - [x] Builtins that must not treat `--help` specially. (`disable_help_flag`)
-- [ ] Measure: startup and interp-loop within noise of the other engines.
+- [x] Measure: `three-way.py` on node 3 / cpu 96, 15 samples: every workload
+      within noise of clap (startup 4.56 ms vs 4.61, interp-loop 286 vs 288,
+      wordops 121 ± 7 vs 115 ± 8, config-lint-500 106 ± 8 vs 103 ± 4,
+      deploy-sim 56 vs 56). The workloads barely touch the ported builtins;
+      `echo`, `printf` and `[` come in later phases. Binary +24 KB with both
+      parsers linked.
 
 ## Phase 2: option zone, then verbatim operands
 
