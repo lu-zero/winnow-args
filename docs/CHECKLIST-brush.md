@@ -185,16 +185,27 @@ Done on brush branch `winnow-args-engine` (local, `fa5bc249`): `kill`,
 
 ## Phase 5: not an option grammar
 
-- [ ] `test` / `[`: an expression language; take the words raw.
+Done on brush branch `winnow-args-engine` (local, `38c51eaa`): `test`/`[`,
+`getopts`, `help`. Compat suite unchanged (1971 passing). Per call, loop
+included: `[ a = a ]` 9.1 → 7.3 µs, `test -n x` 7.4 → 6.0, `getopts ab o -a`
+10.7 → 7.7 (bash: 3.0, 2.8, 3.2).
+
+- [x] `test` / `[`: an expression language; take the words raw
+      (`unknown_flags = "value"`, `double_dash = "preserve"`, no `--help`).
       (`test: "test: -- string"`, `"test: -o operator (shell option)"`)
-- [ ] `getopts`: brush implements bash's getopt for scripts; its 43 cases pin
-      the grammar (bundles, `-ovalue`, `--`, a lone `-`, a leading `:` in the
-      optstring, `OPTIND` resets). winnow-args' lexer could implement it.
+- [x] `getopts`: its own operands taken raw, the script's words after `name`
+      handed over whole, `--` included; brush's getopt then runs its 43 cases
+      as before (41 pass, 2 known to fail in both engines).
       (`getopts: "getopts: multiple options in one token"`,
       `"getopts: combined flags with arg-taking option consumes next arg"`,
       `"getopts: option value looks like another option"`, …)
-- [ ] `help -d`, `help -s`, `help -m`: bash's layout of the builtins'
-      descriptions, from the `help::Command` data. (`help: "Topic-specific help"`)
+- [ ] brush's getopt on winnow-args' lexer (bundles, `-ovalue`, `--`, a lone
+      `-`): it works as it is, so only if it pays.
+- [x] `help -s`: bash's `name: usage` line, identical to bash for every ported
+      builtin. `help -d`: `name - about`, the text brush's (bash words it
+      differently in all engines).
+      (`help: "Topic-specific help"`)
+- [ ] `help -m`: man-page layout, unimplemented in every engine.
 
 ## Phase 6: the shootout
 
