@@ -108,6 +108,34 @@ from_str!(
     std::net::SocketAddr,
 );
 
+/// Any [`FromStr`](std::str::FromStr) type as a value: the text is parsed with
+/// `str::parse`, and its error becomes the invalid value's cause.
+///
+/// For a type from another crate, which can implement neither [`FromArg`]
+/// here nor derive [`ValueEnum`](crate::ValueEnum) (a `strum` enum, say).
+///
+/// ```
+/// use winnow_args::FromArg;
+/// use winnow_args::value::Parsed;
+///
+/// let Parsed(ip) = Parsed::<std::net::Ipv4Addr>::from_arg("127.0.0.1".into())?;
+/// assert!(ip.is_loopback());
+/// assert!(Parsed::<std::net::Ipv4Addr>::from_arg("localhost".into()).is_err());
+/// # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct Parsed<T>(pub T);
+
+impl<T> FromArg for Parsed<T>
+where
+    T: std::str::FromStr,
+    T::Err: Into<BoxError>,
+{
+    fn from_arg(value: &BStr) -> Result<Self, BoxError> {
+        to_str(value)?.parse().map(Parsed).map_err(Into::into)
+    }
+}
+
 /// An integer in C syntax, as linkers and assemblers read one: `0x`/`0X` hex,
 /// a leading `0` for octal, otherwise decimal, with a sign for signed types.
 /// `--image-base=0x400000`, `-z max-page-size=0x1000`, `-Ttext=010000`.
