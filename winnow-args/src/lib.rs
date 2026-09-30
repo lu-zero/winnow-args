@@ -79,6 +79,7 @@ pub trait Args: Sized {
         subcommands: &[],
         subcommand_required: false,
         help_flag: false,
+        help_short: false,
         version: None,
     };
 

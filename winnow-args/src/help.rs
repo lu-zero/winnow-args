@@ -29,8 +29,10 @@ pub struct Command {
     pub subcommands: &'static [Sub],
     /// Whether a subcommand must be given.
     pub subcommand_required: bool,
-    /// Whether `-h`/`--help` are supplied (not declared or disabled).
+    /// Whether `--help` is supplied (not declared or disabled).
     pub help_flag: bool,
+    /// Whether the supplied help flag has `-h` as well as `--help`.
+    pub help_short: bool,
     /// The version, when `-V`/`--version` are supplied.
     pub version: Option<&'static str>,
 }
@@ -389,7 +391,20 @@ pub fn render_styled(
                 } else {
                     "Print help (see more with '--help')"
                 };
-                rows.push((builtin("-h", "--help"), what.into()));
+                let cell = if command.help_short {
+                    builtin("-h", "--help")
+                } else {
+                    let mut cell = Cell::default();
+                    cell.push(Ink::NONE, "    ");
+                    cell.push(style.flag(), "--help");
+                    cell
+                };
+                let what = if command.help_short {
+                    what
+                } else {
+                    "Print help"
+                };
+                rows.push((cell, what.into()));
             }
             if command.version.is_some() {
                 rows.push((builtin("-V", "--version"), "Print version".into()));
