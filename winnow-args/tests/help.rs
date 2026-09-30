@@ -574,3 +574,29 @@ fn a_rich_theme_falls_back_by_depth() {
     });
     assert!(text.contains("\u{1b}[1;33mUsage:"), "{text:?}");
 }
+
+/// bash's builtins: help is `--help`, and `-h` is an unknown flag.
+#[derive(Args, Debug)]
+#[arg(disable_help_short)]
+struct LongHelpOnly {
+    /// Print physical directory.
+    #[arg(short = 'P')]
+    physical: bool,
+}
+
+#[test]
+fn disable_help_short_keeps_only_the_long_help_flag() {
+    assert!(parse::<LongHelpOnly>(&["-P"]).unwrap().physical);
+    assert_eq!(
+        parse::<LongHelpOnly>(&["-h"]).unwrap_err().kind(),
+        ErrorKind::UnknownFlag
+    );
+    let e = parse::<LongHelpOnly>(&["--help"]).unwrap_err();
+    assert_eq!(e.kind(), ErrorKind::HelpRequested);
+    let text = e.render_help("pwd").unwrap();
+    assert!(
+        text.contains("      --help\n          Print help\n"),
+        "{text}"
+    );
+    assert!(!text.contains("-h,"), "{text}");
+}

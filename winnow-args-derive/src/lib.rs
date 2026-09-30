@@ -72,6 +72,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     subcommands: &[],
                     subcommand_required: false,
                     help_flag: true,
+                    help_short: true,
                     version: ::core::option::Option::None,
                 })
             }
@@ -156,6 +157,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 subcommands: &[#(#subs),*],
                 subcommand_required: true,
                 help_flag: true,
+                help_short: true,
                 version: ::core::option::Option::None,
             };
 
@@ -1251,6 +1253,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         after_help,
         after_long_help,
         disable_help_flag,
+        disable_help_short,
         disable_version_flag,
         disable_help_subcommand,
         unknown_flags_value,
@@ -1765,7 +1768,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let help_long = (!disable_help_flag && !declares_long("help")).then(
         || quote!(b"help" => return ::core::result::Result::Err(__wa::Error::help(#help, true)),),
     );
-    let help_short = (!disable_help_flag && !declares_short('h')).then(
+    let help_short = (!disable_help_flag && !disable_help_short && !declares_short('h')).then(
         || quote!('h' => return ::core::result::Result::Err(__wa::Error::help(#help, false)),),
     );
     let with_version = version.is_some() && !disable_version_flag;
@@ -1775,6 +1778,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let version_short = (with_version && !declares_short('V'))
         .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
     let help_flag = help_long.is_some() || help_short.is_some();
+    let help_short_flag = help_short.is_some();
 
     // `long_only`: `-name` is `--name` for the long names that may take one
     // dash, tried before the word is read as short letters.
@@ -1990,6 +1994,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 subcommands: #help_subcommands,
                 subcommand_required: #subcommand_required,
                 help_flag: #help_flag,
+                help_short: #help_short_flag,
                 version: #help_version,
             };
 
@@ -2072,6 +2077,8 @@ struct StructOptions {
     after_help: String,
     after_long_help: String,
     disable_help_flag: bool,
+    /// Help is `--help` alone, `-h` left undeclared (bash's builtins).
+    disable_help_short: bool,
     disable_version_flag: bool,
     disable_help_subcommand: bool,
     /// An unknown flag-like word is a positional value, as usage's default.
@@ -2163,6 +2170,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             for (key, slot) in [
                 ("disable_help_flag", &mut texts.disable_help_flag),
+                ("disable_help_short", &mut texts.disable_help_short),
                 ("disable_version_flag", &mut texts.disable_version_flag),
                 (
                     "disable_help_subcommand",
@@ -2214,6 +2222,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     options.after_help = texts.after_help;
     options.after_long_help = texts.after_long_help;
     options.disable_help_flag = texts.disable_help_flag;
+    options.disable_help_short = texts.disable_help_short;
     options.disable_version_flag = texts.disable_version_flag;
     options.disable_help_subcommand = texts.disable_help_subcommand;
     options.unknown_flags_value = texts.unknown_flags_value;
