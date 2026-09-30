@@ -202,14 +202,26 @@ included: `[ a = a ]` 9.1 → 7.3 µs, `test -n x` 7.4 → 6.0, `getopts ab o -a
 - [ ] brush's getopt on winnow-args' lexer (bundles, `-ovalue`, `--`, a lone
       `-`): it works as it is, so only if it pays.
 - [x] `help -s`: bash's `name: usage` line, identical to bash for every ported
-      builtin. `help -d`: `name - about`, the text brush's (bash words it
-      differently in all engines).
+      builtin. `help -d`: `name - about`, the text brush's: help need not
+      match bash's wording.
       (`help: "Topic-specific help"`)
 - [ ] `help -m`: man-page layout, unimplemented in every engine.
 
 ## Phase 6: the shootout
 
-- [ ] `benchmarks/three-way.py` with a fourth binary built with
-      `--features basic,reedline,minimal,parser-winnow`, oracle parity held.
-- [ ] Every compat case the clap baseline passes, passing.
-- [ ] Binary size of `brush` reported beside the other engines'.
+Done on brush branch `winnow-args-engine` (local, `10119107`, results in
+`benchmarks/results/winnow-phase6-fe1019ba`): every builtin has a winnow-args
+port (`bg`, `fg`, `cd`, `umask`, `type`, `shopt`, `suspend`, `unset`, `bind`,
+`unimp` last).
+
+- [x] `benchmarks/three-way.py`, bash / clap / winnow, 15 samples pinned:
+      startup 4.39 / 4.48 ms (noise), interp-loop 286 → 246 ms,
+      config-lint-500 103 → 59 ms (0.57×), deploy-sim 54 → 51 ms,
+      wordops 115 → 114 ms.
+- [x] Every compat case the clap baseline passes, passing: 1971 of 2442, 0
+      failed, in both engines.
+- [x] Binary size: clap 6 535 448, winnow 6 468 584 bytes (−65 KiB). clap
+      stays linked: brush-shell's own command line and brush-builtins' direct
+      dependency.
+- [ ] A clap-free build: brush-shell's CLI on winnow-args and clap made
+      optional in brush-builtins.

@@ -166,7 +166,7 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 - [x] `-v`/`--version` and `-V` are the linker's switches
       (`disable_help_flag` for its own `--help`); printing and whether to go on
       linking are its choice. (`mold: version`, `help`)
-- [ ] `--help` in GNU ld's layout.
+- [x] `--help` in winnow-args' layout: matching GNU ld's is not a goal.
 - [x] The flavour from `argv[0]` and a first pass over the arguments (wild
       decides ELF/Mach-O/Wasm before parsing): the linker's, before it picks
       which `Args` type parses the line; nothing in the parser. (wild
