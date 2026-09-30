@@ -104,26 +104,52 @@ fn the_callback_answers_per_shell() {
         ("--color\n", "--color\n")
     };
     assert_eq!(
-        Tool::completion_request(&args(&["__complete_word__", "fish", "--co"])).as_deref(),
+        Tool::completion_request(&args(&[
+            "__complete_word__",
+            "--shell",
+            "fish",
+            "--line",
+            "tool --co"
+        ]))
+        .as_deref(),
         Some(fish)
     );
     assert_eq!(
-        Tool::completion_request(&args(&["__complete_word__", "zsh", "--co"])).as_deref(),
+        Tool::completion_request(&args(&[
+            "__complete_word__",
+            "--shell",
+            "zsh",
+            "--line",
+            "tool --co"
+        ]))
+        .as_deref(),
         Some(zsh)
     );
-    // bash hands over the line and the word after its last `=`.
+    // bash hands over the word after its last `=` too.
     assert_eq!(
         Tool::completion_request(&args(&[
             "__complete_word__",
+            "--shell",
             "bash",
+            "--line",
             "tool --color=al",
-            "al"
+            "--bash-word",
+            "al",
         ]))
         .as_deref(),
         Some("always\n")
     );
     assert_eq!(
-        Tool::completion_request(&args(&["__complete_word__", "bash", "tool -o ", ""])).as_deref(),
+        Tool::completion_request(&args(&[
+            "__complete_word__",
+            "--shell",
+            "bash",
+            "--line",
+            "tool -o ",
+            "--bash-word",
+            "",
+        ]))
+        .as_deref(),
         Some("\u{1}files\n")
     );
 }
