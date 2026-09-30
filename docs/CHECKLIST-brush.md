@@ -225,3 +225,31 @@ port (`bg`, `fg`, `cd`, `umask`, `type`, `shopt`, `suspend`, `unset`, `bind`,
       dependency.
 - [ ] A clap-free build: brush-shell's CLI on winnow-args and clap made
       optional in brush-builtins.
+
+## Phase 7: on brush's engine-neutral contracts
+
+brush's `usage-port` branch (`../brush-upstream`) has brush-core's
+engine-neutral `FromArgs`/`HelpContent` and a usage-rs adapter. Local branch
+`winnow-port` (`../brush-winnow-port`, off `usage-port`) replaces usage-rs
+with winnow-args throughout: `2364dbf0` (builtins, the `brush-builtin-winnow`
+adapter), `38972f2f` (brush's own command line, brushctl, `save`, gen; the
+usage adapter removed). usage-rs is gone from the lockfile; clap remains only
+under uucore (`printf`'s formatter).
+
+- [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
+      `declarations = f`, as `usage_builtin!`; bash-shaped errors.
+- [x] Every builtin; `-x`/`+x` pairs are `Option<bool>` fields
+      (`usage_minus_or_plus_flag_arg!` removed); `complete`/`compgen` share
+      their options through a declarative macro (no `flatten` yet).
+- [x] brush's command line: `+o`/`+O` native (the pre-parse rewrite gone),
+      `--help` without `-h` (`disable_help_short`), `#[cfg]` fields.
+- [x] Completion scripts (bash, zsh, fish, elvish, PowerShell) answered by
+      `brush __complete_word__ --shell S --line L` from the help data
+      (`winnow_args::complete`); bash and zsh checked end to end.
+- [x] gen: man page and markdown from `CommandLineArgs::HELP`.
+- [x] Compat suite 2106 of 2572, 0 failed (as usage-port); integration 48/48.
+- [x] Release binary 6 472 000 bytes against usage-port's 6 733 808 (−256 KiB).
+      three-way.py (15 samples) level with usage-port within noise; per call
+      winnow is 0.1–0.6 µs faster, and `set -f +f` 77.8 → 5.0 µs.
+- [ ] `flatten`, to share option groups without a macro.
+- [ ] fish, elvish and PowerShell scripts run in their shells.
