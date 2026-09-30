@@ -963,3 +963,29 @@ unchanged (3417, 4691, 3032, 2945 under `release-lto`), stripped sizes are
 unchanged, and `parse-n-wa`'s `.text` is byte-identical. mise's `.text`
 differs only in symbol names (the impl blocks of `value` renumbered) and a
 few `.rodata` addresses that moved with them.
+
+## 40. `+` options (brush phase 3)
+
+`#[arg(plus_options)]` lexes `+abc` as a bundle (`token::arg_plus`), letters
+reported with `ShortFlag::plus`; `#[arg(plus = 'x')]` gives a field its `+x`
+spelling: on an `Option<bool>` with the same `short`, `-x` is `Some(true)` and
+`+x` `Some(false)`, last wins; on a value flag, `+o NAME`. `#[arg(skip)]`
+leaves a field at its default (declaration builtins fill theirs afterwards).
+
+First cut: a `PlusBundle` stream mode. `take_word`, run for every word, then
+tested two modes, and the default path paid for it: +15–25 warm instructions
+a parse (`-v --path /tmp/x` 1087 → 1111, mise `use -g` 3417 → 3442) and 19.5 KB
+on mise. Final: the `+` bit lives in `Argv`'s padding (still 32 bytes, now a
+compile-time assertion), the mode stays `Bundle`, and only a bundle's start
+writes the bit:
+
+| | before | first cut | final |
+|---|---:|---:|---:|
+| `-v --path /tmp/x` | 1087 | 1111 | 1088 |
+| `… a b c` | 1791 | 1812 | 1792 |
+| `-vvv -p x` | 1178 | 1200 | 1180 |
+| mise `use -g node@20` | 3417 | 3442 | 3420 |
+| mise `settings set color false` | 2945 | 2964 | 2955 |
+| `parse-n-mise-wa` stripped | 1 629 104 | 1 648 672 | 1 636 336 |
+
+`release-lto`, warm instructions per parse.

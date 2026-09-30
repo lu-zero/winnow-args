@@ -84,6 +84,9 @@ pub struct LongFlag<'i> {
 pub struct ShortFlag {
     /// The letter.
     pub letter: char,
+    /// Spelled `+c` rather than `-c` ([`arg_plus`]); fits in padding, so `Arg`
+    /// does not grow.
+    pub plus: bool,
     /// Where the letter is.
     pub offset: usize,
 }
@@ -104,7 +107,7 @@ impl<'i> Arg<'i> {
     pub fn spelling(&self) -> String {
         match self {
             Arg::Long(f) => format!("--{}", BStr::new(f.name)),
-            Arg::Short(f) => format!("-{}", f.letter),
+            Arg::Short(f) => format!("{}{}", if f.plus { '+' } else { '-' }, f.letter),
             Arg::Word(w) => w.value.to_string(),
             Arg::Separator { .. } => "--".to_owned(),
         }
@@ -528,11 +531,16 @@ pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
         }
         Kind::Short => {
             // A bundle's first letter is reported at its `-`, later ones at themselves.
-            if input.mode() == Mode::Word {
+            let plus = if input.mode() == Mode::Word {
                 input.take_bytes(1);
-            }
+                input.set_plus(false);
+                false
+            } else {
+                input.plus()
+            };
             Arg::Short(ShortFlag {
                 letter: letter(input),
+                plus,
                 offset,
             })
         }
@@ -571,6 +579,27 @@ pub fn flag_word<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
         value: input.take_word(),
         offset,
     })
+}
+
+/// [`arg`] for a command that also takes `+` options (`set +e`,
+/// `declare +x`): a word `+abc` is a bundle like `-abc`, its letters reported
+/// with [`ShortFlag::plus`] set. A lone `+` is a word.
+#[inline(always)]
+pub fn arg_plus<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
+    if input.mode() == Mode::Word && !input.is_empty() {
+        let front = input.front();
+        if front.len() > 1 && front[0] == b'+' {
+            let offset = input.offset();
+            input.take_bytes(1);
+            input.set_plus(true);
+            return Ok(Arg::Short(ShortFlag {
+                letter: letter(input),
+                plus: true,
+                offset,
+            }));
+        }
+    }
+    arg(input)
 }
 
 /// GNU's `getopt_long_only`: a single-dash word whose name (up to the first
