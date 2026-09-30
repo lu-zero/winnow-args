@@ -989,3 +989,12 @@ writes the bit:
 | `parse-n-mise-wa` stripped | 1 629 104 | 1 648 672 | 1 636 336 |
 
 `release-lto`, warm instructions per parse.
+
+## 41. `-z` keywords (ld phase 3)
+
+`#[arg(keywords)]` on a field whose type derives `Args`: the flag's values are
+collected as they come, and at the end parsed as that type's `--WORD` flags,
+in order, so `now`/`lazy` (`negate = "lazy"`) resolve last-wins and a
+lenient keyword type gathers unknown keywords for a warning. Errors become an
+invalid value of `-z` naming the keyword. Nothing changes for fields without
+it; the keyword parse runs once per command line, after the main loop.

@@ -536,6 +536,9 @@ struct Field {
     /// An `Option<bool>` with `short` and the same `plus` letter: `-c` is
     /// `Some(true)`, `+c` is `Some(false)`.
     tristate: bool,
+    /// Its values are words of a vocabulary of their own, the field's type
+    /// (`Args`): `-z now -z max-page-size=4096` (ld).
+    keywords: bool,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -569,9 +572,11 @@ impl Field {
         // A field spelled only `+c` has no `-`/`--` row to show.
         let hide =
             self.hide || matches!(self.role, Role::Flag { .. }) && short_none_long_none(self);
-        let required =
-            matches!(self.kind, Kind::Required(_)) && self.default.is_none() && self.env.is_none()
-                || self.required;
+        let required = matches!(self.kind, Kind::Required(_))
+            && self.default.is_none()
+            && self.env.is_none()
+            && !self.keywords
+            || self.required;
         let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
         let default = opt_str(self.default.as_deref());
         let env = opt_str(self.env.as_deref());
@@ -579,6 +584,7 @@ impl Field {
         let choices = match (&self.choices, &self.kind, &self.role) {
             (Some(choices), _, _) => quote!(&[#(#choices),*]),
             (None, _, Role::Subcommand) | (None, Kind::Switch | Kind::Count(_), _) => quote!(&[]),
+            (None, _, _) if self.keywords || self.tristate => quote!(&[]),
             (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), _) => {
                 quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
             }
@@ -680,6 +686,9 @@ impl Field {
     /// (command line or environment); after them it is "has a value".
     fn has(&self) -> TokenStream2 {
         let slot = slot(&self.ident);
+        if self.keywords {
+            return quote!((!#slot.is_empty()));
+        }
         match &self.kind {
             Kind::Switch if self.negate.is_some() => {
                 quote!((#slot == ::core::option::Option::Some(true)))
@@ -939,6 +948,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let slots = fields.iter().map(|f| {
         let ident = slot(&f.ident);
+        if f.keywords {
+            return quote!(let mut #ident: ::std::vec::Vec<&__wa::BStr> = ::std::vec::Vec::new(););
+        }
         match &f.kind {
             Kind::Switch if f.negate.is_some() => {
                 quote!(let mut #ident: ::core::option::Option<bool> = ::core::option::Option::None;)
@@ -959,6 +971,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         let displace = rules.displace(&fields, f);
         let stored = match &f.kind {
+            _ if f.keywords => {
+                let read = f.read();
+                quote! {
+                    let __value = #read;
+                    #ident.push(__value);
+                }
+            }
             _ if f.tristate => quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(true);
@@ -1531,6 +1550,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = &f.ident;
         let slot = slot(ident);
         match &f.kind {
+            Kind::Required(ty) if f.keywords => {
+                let display = LitStr::new(&f.display(), Span::call_site());
+                quote!(#ident: __wa::keywords::<#ty>(&#slot, #display, __input.offset())?)
+            }
             Kind::Switch if f.negate.is_some() => quote!(#ident: #slot.unwrap_or(false)),
             Kind::Switch | Kind::Count(_) | Kind::Optional(_) | Kind::Many(_) => {
                 quote!(#ident: #slot)
@@ -1920,6 +1943,7 @@ impl Rules {
             let slot = slot(&other.ident);
             let displaced = format_ident!("__displaced_{}", other.ident);
             let clear = match &other.kind {
+                _ if other.keywords => quote!(#slot.clear();),
                 Kind::Switch if other.negate.is_some() => {
                     quote!(#slot = ::core::option::Option::None;)
                 }
@@ -2077,6 +2101,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut values = 1;
     let mut stop_flags = false;
     let mut plus: Option<char> = None;
+    let mut keywords = false;
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -2130,6 +2155,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     None
                 });
+            } else if meta.path.is_ident("keywords") {
+                keywords = true;
             } else if meta.path.is_ident("plus") {
                 plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {
@@ -2202,7 +2229,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -2244,6 +2271,22 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error(
             "`plus` is for a flag taking a value, or an `Option<bool>` with the same `short` letter".into(),
+        );
+    }
+    if keywords
+        && (positional
+            || subcommand
+            || !matches!(kind, Kind::Required(_))
+            || env.is_some()
+            || default.is_some()
+            || default_missing.is_some()
+            || choices.is_some()
+            || delimiter.is_some())
+    {
+        return error(
+            "`keywords` is for a flag whose type derives `Args`, without `env`, `default`, \
+             `default_missing`, `choices` or `delimiter`"
+                .into(),
         );
     }
     if stop_flags && !positional {
@@ -2383,6 +2426,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         stop_flags,
         plus,
         tristate,
+        keywords,
     })
 }
 
