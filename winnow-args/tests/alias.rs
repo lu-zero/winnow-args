@@ -144,3 +144,28 @@ fn a_repeated_long_adds_a_spelling() {
         );
     }
 }
+
+/// A second `short` is another letter: `kill -l` and `kill -L`.
+#[derive(Args, Debug, PartialEq, Default)]
+#[arg(unknown_flags = "value")]
+struct Kill {
+    #[arg(short = 'l', short = 'L')]
+    list: bool,
+    #[arg(positional, allow_negative_numbers)]
+    args: Vec<String>,
+}
+
+#[test]
+fn short_aliases_are_letters_too() {
+    let parse = |line: &[&str]| {
+        let words: Vec<&BStr> = line.iter().map(BStr::new).collect();
+        Kill::parse_from(&words).unwrap()
+    };
+    assert!(parse(&["-l"]).list);
+    assert!(parse(&["-L"]).list);
+    // In a lenient bundle check, the alias counts as known.
+    let k = parse(&["-Ll", "9"]);
+    assert!(k.list);
+    assert_eq!(k.args, ["9"]);
+    assert_eq!(parse(&["-LX"]).args, ["-LX"]);
+}

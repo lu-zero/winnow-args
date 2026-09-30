@@ -779,6 +779,8 @@ struct Field {
     /// Its values are words of a vocabulary of their own, the field's type
     /// (`Args`): `-z now -z max-page-size=4096` (ld).
     keywords: bool,
+    /// More letters it answers to, from a second `short` (`kill -l`/`-L`).
+    short_aliases: Vec<char>,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -1061,6 +1063,23 @@ impl Field {
         }
     }
 
+    /// The pattern of every letter it answers to: `'l' | 'L'`.
+    fn short_pattern(&self) -> Option<TokenStream2> {
+        let first = self.short()?;
+        let letters = std::iter::once(first)
+            .chain(self.short_aliases.iter().copied())
+            .map(|c| LitChar::new(c, Span::call_site()));
+        Some(quote!(#(#letters)|*))
+    }
+
+    /// Every letter it answers to.
+    fn shorts(&self) -> Vec<char> {
+        self.short()
+            .into_iter()
+            .chain(self.short_aliases.iter().copied())
+            .collect()
+    }
+
     fn short(&self) -> Option<char> {
         match self.role {
             Role::Flag { short, .. } => short,
@@ -1324,7 +1343,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     });
     let long_arms = long_arms.chain(negated_arms);
     let short_arms = fields.iter().filter_map(|f| {
-        let pattern = LitChar::new(f.short()?, Span::call_site());
+        let pattern = f.short_pattern()?;
         let body = store(f);
         Some(quote!(#pattern => { #body }))
     });
@@ -1468,16 +1487,18 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
         let global_longs = global_longs.chain(global_negated);
         let global_shorts = fields.iter().filter(is_global).filter_map(|f| {
-            let pattern = LitChar::new(f.short()?, Span::call_site());
+            let pattern = f.short_pattern()?;
             let body = store(f);
             Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
         });
         // The subcommand sees this struct's globals first, then its ancestors'.
         let (inherit, handler) = if fields.iter().any(|f| is_global(&f)) {
-            let shorts = fields.iter().filter(is_global).filter_map(|f| {
-                let c = LitChar::new(f.short()?, Span::call_site());
+            let shorts = fields.iter().filter(is_global).flat_map(|f| {
                 let takes_value = f.takes_value();
-                Some(quote!((#c, #takes_value)))
+                f.shorts().into_iter().map(move |c| {
+                    let c = LitChar::new(c, Span::call_site());
+                    quote!((#c, #takes_value))
+                })
             });
             let setup = quote! {
                 let mut __inherit = __wa::inherit(&[#(#shorts),*], __globals, |__arg, __input, __parent| {
@@ -1694,7 +1715,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // `-h`/`--help` and `-V`/`--version`, unless declared or disabled: arms after
     // the struct's own, so a CLI naming its own `--help` keeps it.
     let declares_long = |name: &str| fields.iter().any(|f| f.longs().contains(&name));
-    let declares_short = |c: char| fields.iter().any(|f| f.short() == Some(c));
+    let declares_short = |c: char| fields.iter().any(|f| f.shorts().contains(&c));
     let help = quote!(<Self as ::winnow_args::Args>::HELP);
     let help_long = (!disable_help_flag && !declares_long("help")).then(
         || quote!(b"help" => return ::core::result::Result::Err(__wa::Error::help(#help, true)),),
@@ -1781,9 +1802,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         // With nothing to take a word, `positional_match` always returns.
         let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
         let own = fields.iter().filter_map(|f| {
-            let c = LitChar::new(f.short()?, Span::call_site());
+            let letters = f.short_pattern()?;
             let takes_value = f.takes_value();
-            Some(quote!(#c => ::core::option::Option::Some(#takes_value),))
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
         });
         let builtin = help_short
             .is_some()
@@ -2412,6 +2433,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut stop_flags = false;
     let mut plus: Option<char> = None;
     let mut keywords = false;
+    let mut short_aliases = Vec::new();
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -2421,13 +2443,18 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     for attr in f.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("short") {
-                short = Some(if meta.input.peek(syn::Token![=]) {
+                let c = if meta.input.peek(syn::Token![=]) {
                     meta.value()?.parse::<LitChar>()?.value()
                 } else {
                     bare.chars()
                         .next()
                         .ok_or_else(|| meta.error("cannot infer a short name"))?
-                });
+                };
+                // A second `short` is another letter, as `long` is another name.
+                match short {
+                    None => short = Some(c),
+                    Some(_) => short_aliases.push(c),
+                }
             } else if meta.path.is_ident("long") {
                 let name = if meta.input.peek(syn::Token![=]) {
                     meta.value()?.parse::<LitStr>()?.value()
@@ -2737,6 +2764,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         plus,
         tristate,
         keywords,
+        short_aliases,
     })
 }
 
@@ -2750,17 +2778,19 @@ fn spellings(f: &Field) -> Vec<&str> {
 fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
     for (i, a) in fields.iter().enumerate() {
         for b in &fields[..i] {
-            let clash = match (a.short(), b.short()) {
-                (Some(x), Some(y)) if x == y => Some(format!("-{x}")),
-                _ => None,
-            }
-            .or_else(|| {
-                let longs = spellings(b);
-                spellings(a)
-                    .into_iter()
-                    .find(|l| longs.contains(l))
-                    .map(|l| format!("--{l}"))
-            });
+            let theirs = b.shorts();
+            let clash = a
+                .shorts()
+                .into_iter()
+                .find(|c| theirs.contains(c))
+                .map(|c| format!("-{c}"))
+                .or_else(|| {
+                    let longs = spellings(b);
+                    spellings(a)
+                        .into_iter()
+                        .find(|l| longs.contains(l))
+                        .map(|l| format!("--{l}"))
+                });
             if let Some(name) = clash {
                 return Err(syn::Error::new(
                     a.ident.span(),
