@@ -154,22 +154,34 @@ Done on brush branch `winnow-args-engine` (local, `c499caf0`, `fe431505`):
 
 ## Phase 4: numeric and signal operands
 
+Done on brush branch `winnow-args-engine` (local, `fa5bc249`): `kill`,
+`ulimit`, `dirs`, `pushd`, `popd`, `trap`, `history`, `fc`, `exit`, `return`,
+`shift`, `break`, `continue`. Compat suite unchanged (1971 passing). Per call:
+`ulimit -n` 20.0 → 8.4 µs, `kill -0` 10.4 → 7.6, `trap -p` 8.6 → 5.6,
+`shift 0` 5.6 → 4.4.
+
 - [x] Negative numbers as operands: `exit -1`, `return -2`, `shift -1`.
       (`allow_negative_numbers`; `exit: "Exit with i64 min"`)
 - [x] Negative numbers as option values: `history -d -1`, `fc -l -3`.
       (`fc: "fc -l with negative indices"`, `"fc -s with negative offset"`)
 - [ ] `+N`/`-N` directory-stack indices: `dirs +1`, `dirs -0`, `pushd +2`,
-      `popd -1`. (`pushd_popd_dirs`; brush has TODOs for these in all engines)
-- [ ] Signal specs as options: `kill -9 pid`, `kill -TERM pid`,
+      `popd -1`. The parsing is there (`+1` is a word, `-1` a negative number
+      where `allow_negative_numbers`); brush implements the stack indices in
+      none of its engines (TODOs in `dirs`, `pushd`, `popd`).
+- [x] Signal specs as options: `kill -9 pid`, `kill -TERM pid`,
       `kill -SIGTERM pid`, beside `-s TERM`, `-n 9`, `-l`. A dash word naming a
-      signal wins over the bundle `-s IGTERM`.
+      signal wins over the bundle `-s IGTERM`: `kill` is lenient, so a word
+      with a letter it lacks is an operand kill.rs reads as a signal;
+      `-l`/`-L` are short aliases.
       (`kill: "kill -sigspec"`, `"kill -sigspec (numeric)"`,
       `"kill -sigspec (numeric, full name resolution)"`, `"kill -sigspec (numeric, invalid)"`)
-- [ ] `ulimit`: resource letters with optional values that are numbers or
+- [x] `ulimit`: resource letters with optional values that are numbers or
       `unlimited`/`hard`/`soft`, combined with `-S`/`-H`: `ulimit -Sn 1024`.
       (`ulimit: "ulimit -n"`, `"ulimit -d unlimited"`)
-- [ ] `trap`: `trap -- 'cmd' SIG`, `trap - SIG`, `trap -p`, `trap -l`.
+- [x] `trap`: `trap -- 'cmd' SIG`, `trap - SIG`, `trap -p`, `trap -l`.
       (`trap: "trap -l - lists all signal names"`, `"trap unregistering"`)
+- [ ] Where bash's messages come from the builtins' own code, not parsing:
+      `shift -1`/`continue -1` "out of range", `kill`'s "No such process".
 
 ## Phase 5: not an option grammar
 
