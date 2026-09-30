@@ -1012,3 +1012,13 @@ the ordered version costs 4 465 warm instructions against 4 180 for the same
 options as plain fields (+7 %), which lose which inputs each state applies to:
 enum values pushed into one `Vec`, and flags reaching the enum only after the
 struct's `match`. Nothing is generated without a `sequence` field.
+
+## 43. Response files (ld phase 5)
+
+`response::expand` replaces `@file` words with the file's words, as GNU's
+`buildargv` splits them (whitespace, `'…'`, `"…"`, `\`), recursing up to 10
+files deep as mold does. The files are read into a `ResponseFiles` that the
+returned words borrow from, so a word is copied only when quotes or
+backslashes were removed; the words feed `Argv::new` unchanged. A 4 MB file of
+200 000 words (a tenth of them quoted) expands in 9.2 ms, read included:
+46 ns per word. Nothing else changes: parsing never sees the `@`.
