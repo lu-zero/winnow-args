@@ -1022,3 +1022,18 @@ returned words borrow from, so a word is copied only when quotes or
 backslashes were removed; the words feed `Argv::new` unchanged. A 4 MB file of
 200 000 words (a tenth of them quoted) expands in 9.2 ms, read included:
 46 ns per word. Nothing else changes: parsing never sees the `@`.
+
+## 44. Unknown and ignored options (ld phase 6)
+
+`#[arg(unknown)] unknown: Vec<T>` collects the flag-like words no field
+declares, whole and in order, apart from the positionals; the linker warns
+about those on its ignore list and reports the rest together (wild's
+`unrecognized_options`). Silently ignored flags are the aliases of one unread
+switch. `long_only` now combines with it and with `unknown_flags = "value"`:
+the unknown-bundle check runs only once no single-dash long name matched, and
+an `Occurrence` enum's short letters (`Occurrence::short`) count as known.
+
+On the 15-word ld line, 4 832 warm instructions with an `unknown` field
+against 4 681 without (+3 %): the bundle check reads each multi-letter
+single-dash word (`-lc`, `-lpthread`) once more. Nothing is generated without
+the field or `unknown_flags = "value"`.
