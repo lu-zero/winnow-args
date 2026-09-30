@@ -74,26 +74,41 @@ Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
 
 ## Phase 2: option zone, then verbatim operands
 
+Done on brush branch `winnow-args-engine` (local, `402dfeb7`): `echo`,
+`printf`, `exec`, `eval`, `let`, `.`/`source`. `command` and `builtin` move to
+phase 3: brush parses them as declaration builtins, like `declare`.
+
 - [x] Options stop at the first operand: `echo hi -n` prints `hi -n`.
       (`double_dash = "automatic"`)
 - [x] A word is an option only if every letter is the builtin's:
       `echo -nx hi` prints `-nx hi`. (`unknown_flags = "value"`, whole-bundle check)
+- [x] `echo`'s mix: a leading `--` kept as data and the first operand ending
+      the options. (`double_dash = "preserve", stop_flags`)
 - [x] `--` kept as data where bash keeps it. (`double_dash = "preserve"`;
       `echo: "echo with only --"`, `"echo with -- and args"`)
 - [x] One leading `--` dropped, later ones data: `printf -- --`.
       (`printf: "printf format string starting with hyphen via --"`,
       `"printf with -- among format arguments"`)
-- [ ] `printf` accepts only `-v` before the format; anything else leading is
-      an invalid option. (`printf: "printf with -v as a format arg"`,
+- [x] `printf` accepts only `-v` before the format; anything else leading is
+      an invalid option; no arguments prints the usage line alone. brush's
+      other engines scan this by hand; winnow-args needs no special code. (`printf: "printf with -v as a format arg"`,
       `"printf with hyphen-prefixed format string (invalid option)"`,
       `"printf with option-like format arguments and attached values"`)
-- [ ] Everything after the option zone verbatim: `command`, `builtin`,
-      `exec`, `eval`, `.`/`source`, `let`.
+- [x] Everything after the option zone verbatim: `exec`, `eval`,
+      `.`/`source`, `let` (no options at all: `let -x=1` is an expression).
+- [ ] …and `command`, `builtin`, parsed by brush as declaration builtins.
+- [x] `--help` is data for `echo` (and will be for `true`, `test`):
+      `impl_winnow_args!(…, no_help)`.
       (`builtin: "valid builtin with hyphen args"`, `command: "command with --"`,
       `"command -v with multiple operands"`, `exec: "exec -a"`, `"exec -c"`)
 - [x] Last one wins: `command -v`/`-V`. (`overrides`; `command: "command -V"`)
 - [x] A lone `-` is an operand: `cd -`, `trap - SIG`.
-- [ ] Measure: wordops and config-lint-500 against the shootout.
+- [x] Measure: compat suite unchanged (2442 cases, 1971 passing, as with
+      clap); `three-way.py` within noise (−1 % to +3 %). The workloads spend
+      little of their time in argument parsing, so per-call loops tell the
+      difference: `printf -v x %s y` 9.9 → 7.2 µs, `echo -n` 7.2 → 4.5,
+      `pwd -P` 11.8 → 9.4, `read -r x <<< a` 18.2 → 11.7, `:` 3.1 → 3.1 (the
+      control). winnow-args saves 2.4–6.5 µs a call over clap.
 
 ## Phase 3: `+` options
 
