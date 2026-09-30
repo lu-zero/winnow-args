@@ -399,6 +399,38 @@ fn kebab_case(ident: &str) -> String {
     out
 }
 
+/// A flag with neither a short nor a long spelling (only `plus`).
+fn short_none_long_none(f: &Field) -> bool {
+    f.short().is_none() && f.longs().is_empty()
+}
+
+/// Whether `ty` is `bool`.
+fn is_bool(ty: &Type) -> bool {
+    last_segment(ty).is_some_and(|s| s.ident == "bool" && s.arguments.is_none())
+}
+
+/// Whether a field is `#[arg(skip)]`: left at its default, not parsed.
+fn is_skipped(f: &syn::Field) -> bool {
+    f.attrs
+        .iter()
+        .filter(|a| a.path().is_ident("arg"))
+        .any(|a| {
+            let mut skip = false;
+            let _ = a.parse_nested_meta(|meta| {
+                if meta.path.is_ident("skip") {
+                    skip = true;
+                } else if meta.input.peek(syn::Token![=]) {
+                    meta.value()?.parse::<syn::Expr>()?;
+                } else if meta.input.peek(syn::token::Paren) {
+                    let _content;
+                    syn::parenthesized!(_content in meta.input);
+                }
+                Ok(())
+            });
+            skip
+        })
+}
+
 /// `T` in `Box<T>`.
 fn boxed(ty: &Type) -> Option<&Type> {
     let last = last_segment(ty)?;
@@ -499,6 +531,11 @@ struct Field {
     values: usize,
     /// Once this positional has a value, flags stop (whatever its `double_dash`).
     stop_flags: bool,
+    /// The letter of its `+c` spelling, in a `plus_options` struct.
+    plus: Option<char>,
+    /// An `Option<bool>` with `short` and the same `plus` letter: `-c` is
+    /// `Some(true)`, `+c` is `Some(false)`.
+    tristate: bool,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -529,7 +566,9 @@ impl Field {
         };
         let (help, long_help) = (text(&self.help), text(&self.long_help));
         let heading = opt_str(self.heading.as_deref());
-        let hide = self.hide;
+        // A field spelled only `+c` has no `-`/`--` row to show.
+        let hide =
+            self.hide || matches!(self.role, Role::Flag { .. }) && short_none_long_none(self);
         let required =
             matches!(self.kind, Kind::Required(_)) && self.default.is_none() && self.env.is_none()
                 || self.required;
@@ -764,7 +803,10 @@ impl Field {
         match &self.role {
             Role::Flag { long: Some(l), .. } => format!("--{l}"),
             Role::Flag { short: Some(c), .. } => format!("-{c}"),
-            Role::Flag { .. } => unreachable!("every flag has a name"),
+            Role::Flag { .. } => match self.plus {
+                Some(c) => format!("+{c}"),
+                None => unreachable!("every flag has a name"),
+            },
             Role::Positional { name, .. } => name.clone(),
             Role::Subcommand => "<COMMAND>".to_owned(),
         }
@@ -822,8 +864,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let fields = named
         .named
         .iter()
+        .filter(|f| !is_skipped(f))
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
+    let skipped: Vec<&Ident> = named
+        .named
+        .iter()
+        .filter(|f| is_skipped(f))
+        .filter_map(|f| f.ident.as_ref())
+        .collect();
     check_duplicates(&fields)?;
     let dd = |f: &Field| match f.role {
         Role::Positional { double_dash, .. } => double_dash,
@@ -876,6 +925,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         disable_help_subcommand,
         unknown_flags_value,
         long_only,
+        plus_options,
     } = struct_options(input)?;
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
@@ -909,6 +959,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         let displace = rules.displace(&fields, f);
         let stored = match &f.kind {
+            _ if f.tristate => quote! {
+                __arg.check_switch()?;
+                #ident = ::core::option::Option::Some(true);
+            },
             Kind::Switch if f.negate.is_some() => quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(true);
@@ -1259,8 +1313,40 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .filter(|(_, f)| f.negative_numbers)
         .map(|(i, _)| i)
         .collect();
+    let lexer = if plus_options {
+        quote!(__wa::arg_plus)
+    } else {
+        quote!(__wa::arg)
+    };
+    if !plus_options {
+        if let Some(f) = fields.iter().find(|f| f.plus.is_some()) {
+            return Err(syn::Error::new(
+                f.ident.span(),
+                "`plus` needs `#[arg(plus_options)]` on the struct",
+            ));
+        }
+    }
+    let plus_arms = fields.iter().filter_map(|f| {
+        let letter = LitChar::new(f.plus?, Span::call_site());
+        let ident = slot(&f.ident);
+        let displace = rules.displace(&fields, f);
+        let body = if f.tristate {
+            quote!(#ident = ::core::option::Option::Some(false); #displace)
+        } else {
+            store(f)
+        };
+        Some(quote!(#letter => { #body }))
+    });
+    let plus_match = plus_options.then(|| {
+        quote! {
+            __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
+                #(#plus_arms)*
+                _ => { #unexpected; }
+            },
+        }
+    });
     let lex = if opted.is_empty() {
-        quote!(__wa::arg(__input)?)
+        quote!(#lexer(__input)?)
     } else {
         let digits: Vec<LitByteStr> = fields
             .iter()
@@ -1273,9 +1359,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             match matches!(__position, #(#opted)|*) #not_a_short {
                 true => match __wa::number(__input) {
                     ::core::result::Result::Ok(__word) => __wa::Arg::Word(__word),
-                    ::core::result::Result::Err(_) => __wa::arg(__input)?,
+                    ::core::result::Result::Err(_) => #lexer(__input)?,
                 },
-                false => __wa::arg(__input)?,
+                false => #lexer(__input)?,
             }
         }
     };
@@ -1509,6 +1595,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #version_long
                             _ => if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
+                        #plus_match
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             #help_short
@@ -1524,7 +1611,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #supplied
                 #(#default_fallbacks)*
                 #required
-                ::core::result::Result::Ok(Self { #(#build),* })
+                ::core::result::Result::Ok(Self {
+                    #(#build,)*
+                    #(#skipped: ::core::default::Default::default(),)*
+                })
             }
         }
     })
@@ -1564,6 +1654,8 @@ struct StructOptions {
     unknown_flags_value: bool,
     /// GNU's `getopt_long_only`: a long name may be spelled with one dash.
     long_only: bool,
+    /// `+abc` is a bundle of `+` options (`set +eu`), for fields with `plus`.
+    plus_options: bool,
 }
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
@@ -1591,6 +1683,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("long_only") {
                 texts.long_only = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("plus_options") {
+                texts.plus_options = true;
                 return Ok(());
             }
             if meta.path.is_ident("unknown_flags") {
@@ -1657,7 +1753,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `arg_required_else_help`, `unknown_flags`, `long_only`, `name`, `version`, `about`, \
+                     `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `name`, `version`, `about`, \
                      `long_about`, `after_help`, `after_long_help` or a `disable_*` option",
                 ));
             }
@@ -1698,6 +1794,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     options.disable_help_subcommand = texts.disable_help_subcommand;
     options.unknown_flags_value = texts.unknown_flags_value;
     options.long_only = texts.long_only;
+    options.plus_options = texts.plus_options;
     Ok(options)
 }
 
@@ -1979,6 +2076,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (mut two_dashes, mut prefix) = (false, false);
     let mut values = 1;
     let mut stop_flags = false;
+    let mut plus: Option<char> = None;
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -2032,6 +2130,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     None
                 });
+            } else if meta.path.is_ident("plus") {
+                plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {
                 stop_flags = true;
             } else if meta.path.is_ident("values") {
@@ -2102,7 +2202,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -2136,6 +2236,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
         return error("`allow_negative_numbers` is for fields that take a value".into());
+    }
+    let tristate =
+        plus.is_some() && plus == short && matches!(&kind, Kind::Optional(ty) if is_bool(ty));
+    if plus.is_some()
+        && (positional || subcommand || !tristate && matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error(
+            "`plus` is for a flag taking a value, or an `Option<bool>` with the same `short` letter".into(),
+        );
     }
     if stop_flags && !positional {
         return error("`stop_flags` is for positional fields".into());
@@ -2188,8 +2297,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             name: value_name.unwrap_or_else(|| bare.to_uppercase()),
         }
     } else {
-        // Like bpaf: a flag with no names is `--field-name`.
-        if short.is_none() && long.is_none() {
+        // Like bpaf: a flag with no names is `--field-name` (unless it is
+        // spelled only `+c`).
+        if short.is_none() && long.is_none() && plus.is_none() {
             long = Some(bare.replace('_', "-"));
         }
         for l in long.iter().chain(&alias) {
@@ -2262,7 +2372,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         help: help.unwrap_or(doc_help),
         heading,
         hide,
-        value_name: flag_value_name,
+        value_name: if tristate { None } else { flag_value_name },
         negative_numbers,
         hyphen_values,
         require_equals,
@@ -2271,6 +2381,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         prefix,
         values,
         stop_flags,
+        plus,
+        tristate,
     })
 }
 

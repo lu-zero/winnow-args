@@ -50,7 +50,14 @@ pub struct Argv<'i> {
     remaining: u32,
     total: u32,
     mode: Mode,
+    /// The bundle being read is a `+` bundle (`set +eu`); meaningful only in
+    /// [`Mode::Bundle`]. Sits in padding: `Argv` stays 32 bytes.
+    plus: bool,
 }
+
+// The checkpoint is the whole `Argv`, copied on every `alt` branch: kept at
+// two 16-byte moves (docs/PERF.md, step 5).
+const _: () = assert!(std::mem::size_of::<Argv<'static>>() == 32);
 
 impl<'i> Argv<'i> {
     /// Parse `words`, which should not include the program name.
@@ -64,6 +71,7 @@ impl<'i> Argv<'i> {
             remaining: total,
             total,
             mode: Mode::Word,
+            plus: false,
         }
     }
 
@@ -100,6 +108,17 @@ impl<'i> Argv<'i> {
     #[inline(always)]
     pub(crate) fn set_mode(&mut self, mode: Mode) {
         self.mode = mode;
+    }
+
+    /// Whether the bundle being read is a `+` bundle.
+    #[inline(always)]
+    pub(crate) fn plus(&self) -> bool {
+        self.plus
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_plus(&mut self, plus: bool) {
+        self.plus = plus;
     }
 
     /// Byte offset from the start of the command line, one separator counted per word.

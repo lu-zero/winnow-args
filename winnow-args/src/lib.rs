@@ -359,7 +359,7 @@ pub mod __private {
         Ok(())
     }
     pub use crate::env;
-    pub use crate::token::{Arg, ValueOptions, Word, arg, long_only, number, split};
+    pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
     pub use crate::value::{ChoiceError, FromArg};
     pub use winnow::stream::BStr;
     pub type BoxError = crate::error::BoxError;
