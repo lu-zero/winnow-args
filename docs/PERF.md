@@ -998,3 +998,17 @@ in order, so `now`/`lazy` (`negate = "lazy"`) resolve last-wins and a
 lenient keyword type gathers unknown keywords for a warning. Errors become an
 invalid value of `-z` naming the keyword. Nothing changes for fields without
 it; the keyword parse runs once per command line, after the main loop.
+
+## 42. Order as meaning: `Occurrence` and `sequence` (ld phase 4)
+
+`#[derive(Occurrence)]` on an enum makes each variant a flag (a unit variant a
+switch, a one-field variant a value) or the positional; an `Args` struct's
+`#[arg(sequence)] items: Vec<Item>` field collects them in command-line order.
+The struct's own arms come first; a flag they miss is offered to the enum
+before globals and "unknown", a word before the struct's positionals.
+
+On a 15-word ld-shaped line (`--as-needed`, `-lm`, `--whole-archive`, inputs),
+the ordered version costs 4 465 warm instructions against 4 180 for the same
+options as plain fields (+7 %), which lose which inputs each state applies to:
+enum values pushed into one `Vec`, and flags reaching the enum only after the
+struct's `match`. Nothing is generated without a `sequence` field.

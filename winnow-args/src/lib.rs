@@ -51,7 +51,7 @@ pub use token::Arg;
 pub use value::{ChoiceError, FromArg};
 
 #[cfg(feature = "derive")]
-pub use winnow_args_derive::{Args, Subcommand, ValueEnum};
+pub use winnow_args_derive::{Args, Occurrence, Subcommand, ValueEnum};
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
@@ -150,6 +150,30 @@ pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
     }
     eprintln!("{}", error.render(stderr()));
     2
+}
+
+/// Flags and words kept in command-line order: an enum deriving `Occurrence`,
+/// one variant per flag or positional, collected by an `#[arg(sequence)]`
+/// `Vec` field of an [`Args`] struct.
+///
+/// For command lines where position is meaning, as `ld`'s: `--as-needed` and
+/// `--whole-archive` apply to the inputs after them, so the linker folds the
+/// sequence rather than reading fields.
+pub trait Occurrence: Sized {
+    /// Letters that always take the rest of their word (`-lfoo`), for a
+    /// `long_only` parent: no single-dash long name starting with one is tried.
+    const PREFIXES: &'static [u8] = &[];
+
+    /// `arg` as one of the variants, its value read from `input`; `None` when
+    /// no variant is spelled so.
+    fn from_arg<'i>(arg: &Arg<'i>, input: &mut Argv<'i>) -> Result<Option<Self>, Error>;
+
+    /// A word as the positional variant; `None` if there is none.
+    fn from_word(word: &token::Word<'_>) -> Result<Option<Self>, Error>;
+
+    /// Whether `name` is a variant's long name that may be spelled with one
+    /// dash, for a `long_only` parent.
+    fn is_long(name: &[u8]) -> bool;
 }
 
 /// An enum of subcommands, selected by a word.
