@@ -40,6 +40,7 @@ pub mod combinator;
 pub mod env;
 pub mod error;
 pub mod help;
+pub mod response;
 pub mod stream;
 pub mod token;
 pub mod value;

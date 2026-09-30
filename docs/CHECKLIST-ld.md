@@ -134,13 +134,17 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 
 ## Phase 5: response files
 
-- [ ] `@file` expands to the file's words, recursively (mold caps nesting at
+`response::expand(&args, &mut ResponseFiles)` (`tests/response.rs`).
+
+- [x] `@file` expands to the file's words, recursively (mold caps nesting at
       10), with quotes and backslashes; `@` is not a flag character.
       (`mold: response-file`, `response-file2`, `response-file-quoting`;
       wild `test_parse_recursive_file_option`, `test_arguments_from_string`,
       `test_parse_overlapping_file_and_inline_options`)
-- [ ] Words borrow from the mapped file where they need no unquoting (mold);
-      `Argv` over `&[&BStr]` fits if the expansion owns the storage.
+- [x] Words borrow from the file where they need no unquoting (mold);
+      `ResponseFiles` owns the contents (read, not mapped) and the copies.
+- [ ] GNU ld keeps an `@file` it cannot open as a literal word; mold and wild
+      fail, and so does `expand`.
 
 ## Phase 6: unknown, ignored, compatibility
 
