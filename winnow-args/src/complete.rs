@@ -41,18 +41,30 @@ pub enum Shell {
     Zsh,
     /// fish.
     Fish,
+    /// Elvish.
+    Elvish,
+    /// PowerShell.
+    PowerShell,
 }
 
 impl Shell {
     /// Every shell a script can be written for.
-    pub const ALL: &'static [Shell] = &[Shell::Bash, Shell::Zsh, Shell::Fish];
+    pub const ALL: &'static [Shell] = &[
+        Shell::Bash,
+        Shell::Zsh,
+        Shell::Fish,
+        Shell::Elvish,
+        Shell::PowerShell,
+    ];
 
-    /// The shell's name: `bash`, `zsh`, `fish`.
+    /// The shell's name: `bash`, `zsh`, `fish`, `elvish`, `powershell`.
     pub const fn as_str(self) -> &'static str {
         match self {
             Shell::Bash => "bash",
             Shell::Zsh => "zsh",
             Shell::Fish => "fish",
+            Shell::Elvish => "elvish",
+            Shell::PowerShell => "powershell",
         }
     }
 
@@ -313,7 +325,7 @@ pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
 }
 
 /// The answer as `shell`'s script reads it: one candidate a line, a
-/// description after a tab (fish) or a colon (zsh), and a line asking for
+/// description after a colon (zsh) or a tab (the others), and a line asking for
 /// file names when they fit.
 pub fn render(completions: &Completions, shell: Shell) -> String {
     let mut out = String::new();
@@ -326,7 +338,7 @@ pub fn render(completions: &Completions, shell: Shell) -> String {
                     let _ = write!(out, ":{}", first_line(c.help));
                 }
             }
-            Shell::Fish => {
+            Shell::Fish | Shell::Elvish | Shell::PowerShell => {
                 out.push_str(&c.value);
                 if !c.help.is_empty() {
                     let _ = write!(out, "\t{}", first_line(c.help));
@@ -478,6 +490,53 @@ function __{function}_complete
     end
 end
 complete -c {bin} -f -a '(__{function}_complete)'
+"#
+        ),
+        Shell::Elvish => format!(
+            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+use str
+
+set edit:completion:arg-completer[{bin}] = {{|@words|
+    var line = (str:join ' ' $words)
+    for answer [(e:{bin} {REQUEST} --shell elvish --line $line 2>/dev/null | from-lines)] {{
+        if (eq $answer "\x01files") {{
+            edit:complete-filename $words[-1]
+        }} elif (not-eq $answer '') {{
+            var parts = [(str:split "\t" $answer)]
+            var display = $parts[0]
+            if (> (count $parts) 1) {{
+                set display = (str:join '  -- ' $parts)
+            }}
+            edit:complex-candidate $parts[0] &display=$display
+        }}
+    }}
+}}
+"#
+        ),
+        Shell::PowerShell => format!(
+            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+Register-ArgumentCompleter -Native -CommandName '{bin}' -ScriptBlock {{
+    param($wordToComplete, $commandAst, $cursorPosition)
+
+    # The command's text up to the cursor: `$cursorPosition` counts from the
+    # start of the whole input, the extent from its own start.
+    $extent = $commandAst.Extent
+    $offset = [Math]::Min([Math]::Max($cursorPosition - $extent.StartOffset, 0), $extent.Text.Length)
+    $line = $extent.Text.Substring(0, $offset)
+    $answers = @(& '{bin}' {REQUEST} --shell powershell --line $line 2>$null)
+
+    foreach ($answer in $answers) {{
+        if ([string]::IsNullOrEmpty($answer)) {{ continue }}
+        if ($answer -eq ([char]1 + 'files')) {{
+            [System.Management.Automation.CompletionCompleters]::CompleteFilename($wordToComplete)
+            continue
+        }}
+        $parts = $answer -split "`t", 2
+        $help = if ($parts.Count -gt 1 -and $parts[1]) {{ $parts[1] }} else {{ $parts[0] }}
+        [System.Management.Automation.CompletionResult]::new(
+            $parts[0], $parts[0], 'ParameterValue', $help)
+    }}
+}}
 "#
         ),
     }
