@@ -66,7 +66,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] Negative numbers vs digit shorts: a declared `-0` stays a flag
 - [ ] A negative number routed into a default subcommand whose positional opts in
       (corpus `default-takes-an-opted-negative-number`)
-- [ ] Several short names
+- [x] Several short names: a second `short` on a field (`kill -l`/`-L`)
 
 ## 3. Occurrence semantics (post-binding)
 
@@ -171,7 +171,9 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       `LS_COLORS`), under a variable the application names
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)
-- [ ] Shell completions; emit a usage KDL spec
+- [x] Shell completions: `complete::script` for bash, zsh, fish, elvish,
+      PowerShell, answered by the program (`Args::completion_request`)
+- [ ] Emit a usage KDL spec
 
 ## 9. Derive (`winnow-args-derive`)
 
@@ -184,7 +186,10 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       flag lookup is a compiled string match
 - [x] Positionals: `#[arg(positional, value_name = "…")]`, `T` / `Option<T>` / `Vec<T>`
 - [x] Subcommands: `#[arg(subcommand)]`, `#[derive(Subcommand)]`, `#[arg(name = "…")]`
-- [ ] Flattening, doc-comment help
+- [x] Flattening: `#[arg(flatten)]`, flags-only structs, nested; doc-comment help
+- [x] `#[cfg]` on flag fields
+- [x] Every built field read once, as clap and usage do, so a flag accepted
+      and ignored is not dead code in the user's crate
 
 ## 10. Conformance and performance
 

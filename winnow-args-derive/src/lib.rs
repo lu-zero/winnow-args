@@ -2060,6 +2060,28 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote!(#cfg #value)
     });
     let build: Vec<TokenStream2> = build.collect();
+    // Every field read once after building, as clap's and usage's derives do:
+    // a flag accepted and ignored on purpose (`pwd -L`) is the derive's field,
+    // not dead code in the user's crate. No runtime work after optimization.
+    let field_reads: Vec<TokenStream2> = fields
+        .iter()
+        .map(|f| {
+            let (cfg, ident) = (&f.cfg, &f.ident);
+            quote!(#cfg let _ = &__built.#ident;)
+        })
+        .chain(skipped.iter().map(|ident| quote!(let _ = &__built.#ident;)))
+        .chain(
+            sequence
+                .iter()
+                .chain(unknown.iter())
+                .map(|(ident, _)| quote!(let _ = &__built.#ident;)),
+        )
+        .chain(
+            flattens
+                .iter()
+                .map(|(ident, _)| quote!(let _ = &__built.#ident;)),
+        )
+        .collect();
     let flatten_build: Vec<TokenStream2> = flatten_build.collect();
     // Flags only: no positionals, subcommand, `sequence`, `unknown`,
     // keywords, `global` flags or generics.
@@ -2252,11 +2274,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #supplied
                     #(#default_fallbacks)*
                     #required
-                    ::core::result::Result::Ok(Self {
+                    let __built = Self {
                         #(#build,)*
                         #(#skipped: ::core::default::Default::default(),)*
                         #(#flatten_build)*
-                    })
+                    };
+                    #(#field_reads)*
+                    ::core::result::Result::Ok(__built)
                 }
             }
         }
@@ -2333,13 +2357,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #supplied
                 #(#default_fallbacks)*
                 #required
-                ::core::result::Result::Ok(Self {
+                let __built = Self {
                     #(#build,)*
                     #(#skipped: ::core::default::Default::default(),)*
                     #sequence_build
                     #unknown_build
                     #(#flatten_build)*
-                })
+                };
+                #(#field_reads)*
+                ::core::result::Result::Ok(__built)
             }
         }
 

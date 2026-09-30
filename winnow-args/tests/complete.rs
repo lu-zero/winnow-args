@@ -15,7 +15,6 @@ enum When {
 
 #[derive(Args, Debug)]
 #[arg(name = "tool")]
-#[expect(dead_code, reason = "only the help data is completed")]
 struct Tool {
     /// Talk more.
     #[arg(short, long)]
@@ -43,7 +42,6 @@ enum Command {
 }
 
 #[derive(Args, Debug)]
-#[expect(dead_code, reason = "only the help data is completed")]
 struct Build {
     /// Release mode.
     #[arg(long)]

@@ -18,10 +18,6 @@ use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_en
     version = "2026.9.0",
     after_help = "Examples:\n    $ mise use -g node@20"
 )]
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its help"
-)]
 struct Cli {
     /// Show extra output (repeat for more)
     #[arg(short, long, count, global)]
@@ -73,10 +69,6 @@ enum When {
 /// Installs a tool and adds the version to mise.toml.
 #[derive(Args, Debug)]
 #[arg(arg_required_else_help)]
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its help"
-)]
 struct UseArgs {
     /// Use the global config file
     #[arg(short, long)]
@@ -419,7 +411,6 @@ fn quoted_spans_in_descriptions_are_code() {
     // `help` example's "as `name@version`" is checked where it is written.
     assert!(!text.contains("\u{1b}[1m`"), "{text:?}");
     #[derive(Args, Debug)]
-    #[expect(dead_code, reason = "the help is what is checked")]
     struct Quoted {
         /// Tools as `name@version`, or `name` alone, `unpaired
         #[arg(positional)]

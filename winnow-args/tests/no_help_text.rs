@@ -8,7 +8,6 @@ use winnow_args::{Args, ErrorKind, Subcommand, ValueEnum, with_env};
 /// Dev tools, env vars, and tasks in one CLI
 #[derive(Args, Debug)]
 #[arg(name = "mise", version = "2026.9.0", after_help = "Examples: mise use")]
-#[expect(dead_code, reason = "these tests assert on the help")]
 struct Cli {
     /// Show extra output
     #[arg(short, long, count)]

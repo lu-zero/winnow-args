@@ -34,7 +34,6 @@ struct Ld {
         alias("end-group", "nostdlib", "fatal-warnings", "sort-common", "stats"),
         short = '('
     )]
-    #[expect(dead_code, reason = "accepted and ignored")]
     ignored: bool,
     #[arg(unknown)]
     unknown: Vec<String>,
