@@ -329,6 +329,40 @@ pub mod __private {
     pub use crate::stream::Argv;
     pub use crate::{Globals, Subcommand, globals, inherit};
 
+    /// The flags of a struct that another flattens (`#[arg(flatten)]`):
+    /// derived for every `Args` struct that has flags only (no positionals,
+    /// subcommand, `sequence`, `unknown` or `global` flags).
+    ///
+    /// The parent keeps a [`Flatten::Slots`], offers it each flag its own
+    /// arms do not take, and builds the value at the end.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` cannot be flattened",
+        note = "a flattened struct derives `Args` and has only flags: no positionals, \
+                subcommand, `sequence`, `unknown`, `global` flags or generics"
+    )]
+    pub trait Flatten: Sized {
+        /// What has been parsed so far.
+        type Slots: Default;
+
+        /// Bind `arg` if it is one of these flags; `Ok(false)` if not.
+        fn bind<'i>(
+            slots: &mut Self::Slots,
+            arg: &crate::Arg<'i>,
+            input: &mut Argv<'i>,
+        ) -> Result<bool, Error>;
+
+        /// Whether `-letter` is one of these flags, and whether it takes a value.
+        fn short(letter: char) -> Option<bool>;
+
+        /// Whether `name` is a long name that may take one dash (`long_only`).
+        fn is_long(name: &[u8]) -> bool;
+
+        /// Apply environment variables, defaults and rules, and build the value.
+        fn finish(slots: Self::Slots, input: &Argv<'_>) -> Result<Self, Error>;
+    }
+
+    pub use crate::help::concat_items;
+
     /// `help a b …`: the long help of the command the words name, below `root`.
     pub fn help_word(root: &'static crate::help::Command, input: &mut Argv<'_>) -> Error {
         let mut words = Vec::new();

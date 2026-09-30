@@ -38,7 +38,7 @@ pub struct Command {
 }
 
 /// A flag or positional.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Item {
     /// `-c`.
     pub short: Option<char>,
@@ -70,6 +70,52 @@ pub struct Item {
     pub env: Option<&'static str>,
     /// The only values accepted.
     pub choices: &'static [&'static str],
+}
+
+impl Item {
+    /// No flag at all: what [`concat_items`]'s array starts from.
+    const EMPTY: Item = Item {
+        short: None,
+        long: None,
+        negate: None,
+        value_name: None,
+        help: "",
+        long_help: "",
+        heading: None,
+        hide: false,
+        positional: false,
+        required: false,
+        multiple: false,
+        trailing: false,
+        default: None,
+        env: None,
+        choices: &[],
+    };
+}
+
+/// `parts`, one after another, as one array: a struct's own items and those
+/// of the structs it flattens, joined at compile time. `N` is their total
+/// length.
+///
+/// # Panics
+///
+/// At compile time, if `N` is not the total length.
+#[doc(hidden)]
+pub const fn concat_items<const N: usize>(parts: &[&[Item]]) -> [Item; N] {
+    let mut out = [Item::EMPTY; N];
+    let (mut n, mut p) = (0, 0);
+    while p < parts.len() {
+        let part = parts[p];
+        let mut i = 0;
+        while i < part.len() {
+            out[n] = part[i];
+            n += 1;
+            i += 1;
+        }
+        p += 1;
+    }
+    assert!(n == N, "concat_items: the length is not the parts' total");
+    out
 }
 
 /// A subcommand as its parent lists it.
