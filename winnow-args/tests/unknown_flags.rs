@@ -170,3 +170,50 @@ fn the_combinator_takes_whole_words() {
         assert_eq!(a, parse::<Wrap>(line).unwrap(), "{line:?}");
     }
 }
+
+/// `long_only` and `unknown_flags = "value"` together: a known single-dash
+/// long option is itself, an unknown one is a positional.
+#[derive(Args, Debug, PartialEq)]
+#[arg(long_only, unknown_flags = "value")]
+struct LongOnlyLenient {
+    #[arg(long)]
+    shared: bool,
+    #[arg(short = 's')]
+    strip: bool,
+    #[arg(positional)]
+    args: Vec<String>,
+}
+
+#[test]
+fn long_only_lenient() {
+    let parsed = LongOnlyLenient::try_parse_from(["-shared", "-sQ", "-bogus", "x"]).unwrap();
+    assert!(parsed.shared);
+    assert!(!parsed.strip);
+    assert_eq!(parsed.args, ["-sQ", "-bogus", "x"]);
+}
+
+/// An `unknown` field outside `long_only`: unknown flags apart from the
+/// positionals, a known bundle still bound.
+#[derive(Args, Debug, PartialEq)]
+struct Collect {
+    #[arg(short)]
+    verbose: bool,
+    #[arg(short, long)]
+    jobs: Option<u32>,
+    #[arg(unknown)]
+    unknown: Vec<String>,
+    #[arg(positional)]
+    args: Vec<String>,
+}
+
+#[test]
+fn unknown_field_collects_apart_from_positionals() {
+    let parsed = Collect::try_parse_from([
+        "-v", "--nope", "a", "-j2", "-vx", "--jobs=3", "-Z", "--", "-q",
+    ])
+    .unwrap();
+    assert!(parsed.verbose);
+    assert_eq!(parsed.jobs, Some(3));
+    assert_eq!(parsed.unknown, ["--nope", "-vx", "-Z"]);
+    assert_eq!(parsed.args, ["a", "-q"]);
+}

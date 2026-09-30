@@ -58,7 +58,8 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 - [ ] Errors spell a single-dash long option with two dashes (`--entry`), which
       ld also accepts: `LongFlag` does not record the dashes, to keep `Arg`
       small.
-- [ ] `long_only` with `unknown_flags = "value"` (rejected at compile time).
+- [x] `long_only` with `unknown_flags = "value"` or an `unknown` field
+      (`tests/unknown_flags.rs`, `tests/ignored.rs`).
 - [ ] GNU ld also accepts unambiguous abbreviations (`--whole-arch`); mold and
       wild do not.
 - [x] Long names are case-sensitive and may be capitalized: `-Map`,
@@ -148,19 +149,28 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 
 ## Phase 6: unknown, ignored, compatibility
 
-- [ ] A list of options accepted and ignored with a warning.
-      (wild `test_ignored_flags`)
-- [ ] Unknown options collected and reported together (wild) or fatal at once
-      (mold). (`mold: no-object-file`)
+`tests/ignored.rs`.
+
+- [x] Options accepted and silently ignored: aliases of one unread switch.
+      (wild `SILENTLY_IGNORED_FLAGS`, `test_ignored_flags`)
+- [x] Options ignored with a warning, and unknown options collected and
+      reported together (wild) or fatal at once (mold, the default):
+      `#[arg(unknown)] unknown: Vec<String>` holds each unknown flag whole and
+      in order, for the linker to split by its ignore list.
+      (`mold: no-object-file`)
 - [x] `--x`/`--no-x` pairs. (`negate`; `mold: gc-sections`,
       `no-eh-frame-header`, `no-quick-exit`, `warn-once`)
-- [ ] `-plugin`, `-plugin-opt=…`, `--lto-*`/`--thinlto-*` forwarded as text,
-      some renamed (mold `read_lto_option`). (`mold: lto-*`)
-- [ ] `-v` prints the version and keeps linking, `-V` adds the emulations,
-      `--version` prints and exits; `--help` in GNU ld's layout.
-      (`mold: version`, `help`)
-- [ ] The flavour from `argv[0]` and a first pass over the arguments (wild
-      decides ELF/Mach-O/Wasm before parsing). (wild `test_flavor`)
+- [x] `-plugin`, `-plugin-opt=…` taken as text (`allow_hyphen_values`),
+      `--lto-*`/`--thinlto-*` declared or left in `unknown` for the linker to
+      forward by prefix and rename (mold `read_lto_option`). (`mold: lto-*`)
+- [x] `-v`/`--version` and `-V` are the linker's switches
+      (`disable_help_flag` for its own `--help`); printing and whether to go on
+      linking are its choice. (`mold: version`, `help`)
+- [ ] `--help` in GNU ld's layout.
+- [x] The flavour from `argv[0]` and a first pass over the arguments (wild
+      decides ELF/Mach-O/Wasm before parsing): the linker's, before it picks
+      which `Args` type parses the line; nothing in the parser. (wild
+      `test_flavor`)
 - [x] Environment variables: `MOLD_JOBS`, `WILD_*`. (`env`)
 
 ## Phase 7: the linkers

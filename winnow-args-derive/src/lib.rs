@@ -224,6 +224,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let (mut long_arms, mut short_arms) = (Vec::new(), Vec::new());
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
+    let mut letters = Vec::new();
     let mut word = None;
     for variant in &data.variants {
         let ident = &variant.ident;
@@ -321,6 +322,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 prefixes.push(c as u8);
             }
             let letter = LitChar::new(c, Span::call_site());
+            let takes_value = takes.is_some();
+            letters.push(quote!(#letter => ::core::option::Option::Some(#takes_value),));
             short_arms.push(quote!(#letter => { #body }));
         }
     }
@@ -365,6 +368,13 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
             fn is_long(__name: &[u8]) -> bool {
                 #is_long
+            }
+
+            fn short(__letter: char) -> ::core::option::Option<bool> {
+                match __letter {
+                    #(#letters)*
+                    _ => ::core::option::Option::None,
+                }
             }
         }
     })
@@ -645,6 +655,11 @@ fn is_bool(ty: &Type) -> bool {
 /// Whether a field is `#[arg(sequence)]`: occurrences of an `Occurrence` enum.
 fn is_sequence(f: &syn::Field) -> bool {
     has_flag(f, "sequence")
+}
+
+/// Whether a field is `#[arg(unknown)]`: the flags no one declared, whole.
+fn is_unknown(f: &syn::Field) -> bool {
+    has_flag(f, "unknown")
 }
 
 /// Whether a field is `#[arg(skip)]`: left at its default, not parsed.
@@ -1132,13 +1147,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let fields = named
         .named
         .iter()
-        .filter(|f| !is_skipped(f) && !is_sequence(f))
+        .filter(|f| !is_skipped(f) && !is_sequence(f) && !is_unknown(f))
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
     let skipped: Vec<&Ident> = named
         .named
         .iter()
-        .filter(|f| is_skipped(f) && !is_sequence(f))
+        .filter(|f| is_skipped(f) && !is_sequence(f) && !is_unknown(f))
         .filter_map(|f| f.ident.as_ref())
         .collect();
     // `#[arg(sequence)] items: Vec<T>`: occurrences of `T`'s flags and
@@ -1159,6 +1174,29 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 return Err(syn::Error::new(
                     f.ty.span(),
                     "a `sequence` field is a `Vec<T>` of an `Occurrence` enum",
+                ));
+            };
+            Some((f.ident.clone().expect("named field"), ty.clone()))
+        }
+        None => None,
+    };
+    // `#[arg(unknown)] unknown: Vec<T>`: flag-like words naming no flag.
+    let unknowns: Vec<&syn::Field> = named.named.iter().filter(|f| is_unknown(f)).collect();
+    if let Some(extra) = unknowns.get(1) {
+        return Err(syn::Error::new(
+            extra.span(),
+            "a struct has at most one `unknown` field",
+        ));
+    }
+    let unknown = match unknowns.first() {
+        Some(f) => {
+            let Some(ty) = last_segment(&f.ty)
+                .filter(|s| s.ident == "Vec")
+                .and_then(inner)
+            else {
+                return Err(syn::Error::new(
+                    f.ty.span(),
+                    "an `unknown` field is a `Vec<T>`",
                 ));
             };
             Some((f.ident.clone().expect("named field"), ty.clone()))
@@ -1628,6 +1666,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .filter(|(_, f)| f.negative_numbers)
         .map(|(i, _)| i)
         .collect();
+    let (unknown_slot, unknown_build) = match &unknown {
+        Some((ident, ty)) => (
+            quote!(let mut __unknown: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();),
+            quote!(#ident: __unknown,),
+        ),
+        None => (quote!(), quote!()),
+    };
     let (sequence_slot, sequence_arg, sequence_build) = match &sequence {
         Some((ident, ty)) => (
             quote!(let mut __sequence: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();),
@@ -1733,12 +1778,74 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     // `long_only`: `-name` is `--name` for the long names that may take one
     // dash, tried before the word is read as short letters.
-    if long_only && unknown_flags_value {
-        return Err(syn::Error::new(
-            input.ident.span(),
-            "`long_only` and `unknown_flags = \"value\"` together are not supported yet",
-        ));
-    }
+    // `unknown_flags = "value"`: a flag-like word naming no flag goes to the
+    // positionals whole, never to a subcommand. A bundle of several letters is
+    // checked before any binds; a long word or a single letter once no arm or
+    // global took it.
+    // An `unknown` field takes those words instead of the positionals.
+    let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value || unknown.is_some() {
+        // With nothing to take a word, `positional_match` always returns.
+        let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
+        let (sink, sink_next) = match &unknown {
+            Some((_, ty)) => (
+                quote!(__unknown.push(__word.convert::<#ty>("<UNKNOWN>")?);),
+                quote!(continue;),
+            ),
+            None => (
+                quote! {
+                    let __arg = __wa::Arg::Word(__word);
+                    #positional_match
+                },
+                quote!(#next),
+            ),
+        };
+        let theirs = match sequence.as_ref().map(|(_, ty)| ty) {
+            Some(ty) => quote! {
+                __c => match <#ty as ::winnow_args::Occurrence>::short(__c) {
+                    ::core::option::Option::None => __globals.short(__c),
+                    __known => __known,
+                },
+            },
+            None => quote!(_ => __globals.short(__c),),
+        };
+        let own = fields.iter().filter_map(|f| {
+            let letters = f.short_pattern()?;
+            let takes_value = f.takes_value();
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
+        });
+        let builtin = help_short
+            .is_some()
+            .then(|| quote!('h' => ::core::option::Option::Some(false),))
+            .into_iter()
+            .chain(
+                version_short
+                    .is_some()
+                    .then(|| quote!('V' => ::core::option::Option::Some(false),)),
+            );
+        (
+            quote! {
+                if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
+                    #(#own)*
+                    #(#builtin)*
+                    #theirs
+                }) {
+                    #sink
+                    #sink_next
+                }
+            },
+            quote!(let __token = __input.front();),
+            quote! {
+                let __word = __wa::Word {
+                    value: __wa::BStr::new(__token),
+                    offset: __flag.offset,
+                    after_separator: false,
+                };
+                #sink
+            },
+        )
+    } else {
+        (quote!(), quote!(), quote!(#unexpected;))
+    };
     let single_dash_longs = |fields: &[Field]| -> Vec<String> {
         let mut names: Vec<String> = fields
             .iter()
@@ -1787,60 +1894,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #not_prefixed (#own #their_names) #their_prefixes
             }) {
                 ::core::option::Option::Some(__arg) => __arg,
-                ::core::option::Option::None => #lex,
+                ::core::option::Option::None => {
+                    #lenient_bundle
+                    #lex
+                }
             }
         }
     } else {
         lex
     };
-
-    // `unknown_flags = "value"`: a flag-like word naming no flag goes to the
-    // positionals whole, never to a subcommand. A bundle of several letters is
-    // checked before any binds; a long word or a single letter once no arm or
-    // global took it.
-    let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value {
-        // With nothing to take a word, `positional_match` always returns.
-        let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
-        let own = fields.iter().filter_map(|f| {
-            let letters = f.short_pattern()?;
-            let takes_value = f.takes_value();
-            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
-        });
-        let builtin = help_short
-            .is_some()
-            .then(|| quote!('h' => ::core::option::Option::Some(false),))
-            .into_iter()
-            .chain(
-                version_short
-                    .is_some()
-                    .then(|| quote!('V' => ::core::option::Option::Some(false),)),
-            );
-        (
-            quote! {
-                if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
-                    #(#own)*
-                    #(#builtin)*
-                    _ => __globals.short(__c),
-                }) {
-                    let __arg = __wa::Arg::Word(__word);
-                    #positional_match
-                    #next
-                }
-            },
-            quote!(let __token = __input.front();),
-            quote! {
-                let __word = __wa::Word {
-                    value: __wa::BStr::new(__token),
-                    offset: __flag.offset,
-                    after_separator: false,
-                };
-                let __arg = __wa::Arg::Word(__word);
-                #positional_match
-            },
-        )
+    let lenient_bundle = if long_only && (!names.is_empty() || sequence_ty.is_some()) {
+        quote!()
     } else {
-        (quote!(), quote!(), quote!(#unexpected;))
+        lenient_bundle
     };
+
     // Only the first letter of a word can be unknown here: the bundle check
     // vouched for the letters of a longer one.
     let unknown_short = unknown_flag.clone();
@@ -1932,6 +2000,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 use ::winnow_args::__private as __wa;
                 #(#slots)*
                 #sequence_slot
+                #unknown_slot
                 #(#displaced)*
                 #position
                 #filled_slot
@@ -1968,6 +2037,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #(#build,)*
                     #(#skipped: ::core::default::Default::default(),)*
                     #sequence_build
+                    #unknown_build
                 })
             }
         }

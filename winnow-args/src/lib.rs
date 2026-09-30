@@ -175,6 +175,13 @@ pub trait Occurrence: Sized {
     /// Whether `name` is a variant's long name that may be spelled with one
     /// dash, for a `long_only` parent.
     fn is_long(name: &[u8]) -> bool;
+
+    /// Whether `letter` is a variant's short flag, and whether it takes a
+    /// value: how a parent with an `unknown` field tells an unknown bundle.
+    fn short(letter: char) -> Option<bool> {
+        let _ = letter;
+        None
+    }
 }
 
 /// An enum of subcommands, selected by a word.
