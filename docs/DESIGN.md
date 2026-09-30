@@ -144,8 +144,11 @@ typed and cyans/teals for structure and values, with no yellow: in 16 colors
 bold cyan headings, bold green flags and subcommands, cyan value names; in 256
 colors the tamer teal 73, green 71 and slate teal 109, with red 167, rose 174
 and sage 108 for errors (chosen for contrast on dark and light backgrounds,
-docs/PERF.md step 34). It follows usage's layout rules: the program plain, and
-only the name painted in `[NAME]`. `Palette::CLAP` has clap 4's codes.
+docs/PERF.md step 34). Default and possible values take a `value` role (plain
+green, green 71), each value painted on its own; wrapping skips escape
+sequences when counting columns. It follows usage's layout rules: the program
+plain, and only the name painted in `[NAME]`. `Palette::CLAP` has clap 4's
+codes and leaves values plain, as clap does.
 
 Terminals differ in how many colors they show, so a `help::Style` is a
 `color::Palette` plus a `color::Depth` (none, 16, 256, 24-bit). `Depth::detect`
