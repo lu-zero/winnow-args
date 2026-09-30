@@ -95,16 +95,22 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 
 ## Phase 3: `-z` keywords
 
-- [ ] `-z keyword` and `-zkeyword`: `-z now`, `-z relro`, `-z noexecstack`.
+`#[arg(short = 'z', keywords)]` on a field whose type derives `Args`: each
+`-z WORD` is `--WORD` of that type, parsed in order at the end
+(`tests/keywords.rs`).
+
+- [x] `-z keyword` and `-zkeyword`: `-z now`, `-z relro`, `-z noexecstack`.
       (`mold: z-now`, `z-defs`, `z-origin`, `z-nodump`, `z-rodynamic`)
-- [ ] `-z key=value`: `-z max-page-size=4096`, `-z stack-size=…`,
+- [x] `-z key=value`: `-z max-page-size=4096`, `-z stack-size=…`,
       `-z cet-report=error`. (`mold: z-max-page-size`, `z-stack-size`,
       `z-cet-report`)
-- [ ] Keyword pairs as switches (`now`/`lazy`, `relro`/`norelro`,
+- [x] Keyword pairs as switches (`negate = "lazy"` on `now`) (`now`/`lazy`, `relro`/`norelro`,
       `sectionheader`/`nosectionheader`). (`mold: z-sectionheader`,
       `z-separate-code`)
-- [ ] Unknown keywords warn rather than fail, in both linkers. A second
-      vocabulary: `-z` is a sub-parser over its value.
+- [x] Unknown keywords warn rather than fail, in both linkers: the keyword
+      type is lenient (`unknown_flags = "value"`) and collects them for the
+      linker to warn about (as `--keyword`, the spelling it was parsed with).
+- [x] A bad keyword value is an invalid value of `-z` naming the keyword.
 
 ## Phase 4: order is meaning
 

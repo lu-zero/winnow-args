@@ -346,6 +346,23 @@ pub mod __private {
         word.len() > 1 && word[0] == b'-'
     }
 
+    /// A `#[arg(keywords)]` field: each value `flag` took (`-z now`) parsed as
+    /// the `--now` flag of `T`, in order; an error is an invalid value of `flag`
+    /// naming the keyword.
+    pub fn keywords<T: crate::Args>(values: &[&BStr], flag: &str, at: usize) -> Result<T, Error> {
+        let spelled: Vec<Vec<u8>> = values
+            .iter()
+            .map(|v| [b"--".as_slice(), v].concat())
+            .collect();
+        let words: Vec<&BStr> = spelled.iter().map(|w| BStr::new(w.as_slice())).collect();
+        T::parse_from(&words).map_err(|e| {
+            let keyword = e.token().map_or_else(String::new, |t| {
+                t.strip_prefix("--").unwrap_or(t).to_owned()
+            });
+            Error::invalid_value(at, flag, keyword.as_bytes(), e)
+        })
+    }
+
     /// The end of a unit subcommand: only inherited global flags may follow.
     pub fn finish_with(input: &mut Argv<'_>, globals: &mut dyn Globals) -> Result<(), Error> {
         while !input.is_empty() {
