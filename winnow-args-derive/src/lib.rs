@@ -801,6 +801,9 @@ struct Field {
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
+    /// The field's `#[cfg(…)]` attributes, repeated on everything generated
+    /// for it.
+    cfg: TokenStream2,
 }
 
 impl Field {
@@ -1272,10 +1275,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let slots = fields.iter().map(|f| {
         let ident = slot(&f.ident);
+        let cfg = &f.cfg;
         if f.keywords {
-            return quote!(let mut #ident: ::std::vec::Vec<&__wa::BStr> = ::std::vec::Vec::new(););
+            return quote!(#cfg let mut #ident: ::std::vec::Vec<&__wa::BStr> = ::std::vec::Vec::new(););
         }
-        match &f.kind {
+        let decl = match &f.kind {
             Kind::Switch if f.negate.is_some() => {
                 quote!(let mut #ident: ::core::option::Option<bool> = ::core::option::Option::None;)
             }
@@ -1287,7 +1291,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             Kind::Many(ty) => {
                 quote!(let mut #ident: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();)
             }
-        }
+        };
+        quote!(#cfg #decl)
     });
 
     // What storing one flag occurrence looks like; the same for both spellings.
@@ -1363,7 +1368,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let long_arms = fields.iter().filter_map(|f| {
         let pattern = f.long_pattern()?;
         let body = store(f);
-        Some(quote!(#pattern => { #body }))
+        let cfg = &f.cfg;
+        Some(quote!(#cfg #pattern => { #body }))
     });
     let negated = |f: &Field| {
         let no = LitByteStr::new(f.negate.as_ref()?.as_bytes(), Span::call_site());
@@ -1380,13 +1386,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let negated_arms = fields.iter().filter_map(|f| {
         let (pattern, body) = negated(f)?;
-        Some(quote!(#pattern => { #body }))
+        let cfg = &f.cfg;
+        Some(quote!(#cfg #pattern => { #body }))
     });
     let long_arms = long_arms.chain(negated_arms);
     let short_arms = fields.iter().filter_map(|f| {
         let pattern = f.short_pattern()?;
         let body = store(f);
-        Some(quote!(#pattern => { #body }))
+        let cfg = &f.cfg;
+        Some(quote!(#cfg #pattern => { #body }))
     });
 
     let unexpected = quote!(return ::core::result::Result::Err(__arg.unexpected()));
@@ -1712,7 +1720,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } else {
             store(f)
         };
-        Some(quote!(#letter => { #body }))
+        let cfg = &f.cfg;
+        Some(quote!(#cfg #letter => { #body }))
     });
     let plus_match = plus_options.then(|| {
         quote! {
@@ -1815,7 +1824,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let own = fields.iter().filter_map(|f| {
             let letters = f.short_pattern()?;
             let takes_value = f.takes_value();
-            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
+            let cfg = &f.cfg;
+            Some(quote!(#cfg #letters => ::core::option::Option::Some(#takes_value),))
         });
         let builtin = help_short
             .is_some()
@@ -1923,7 +1933,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let help_items = fields
         .iter()
         .filter(|f| !matches!(f.role, Role::Subcommand))
-        .map(Field::help_item);
+        .map(|f| {
+            let (cfg, item) = (&f.cfg, f.help_item());
+            quote!(#cfg #item)
+        });
     let (help_subcommands, subcommand_required) = match subcommand {
         Some(f) => {
             let ty = match &f.kind {
@@ -1938,19 +1951,28 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         None => (quote!(&[]), false),
     };
     let displaced = rules.displaced_slots(&fields);
+    let with_cfg = |f: &Field, code: TokenStream2| {
+        if f.cfg.is_empty() || code.is_empty() {
+            code
+        } else {
+            let cfg = &f.cfg;
+            quote!(#cfg { #code })
+        }
+    };
     let env_fallbacks = fields
         .iter()
-        .map(|f| f.fallback(true, rules.is_displaced(&fields, f)));
+        .map(|f| with_cfg(f, f.fallback(true, rules.is_displaced(&fields, f))));
     let default_fallbacks = fields
         .iter()
-        .map(|f| f.fallback(false, rules.is_displaced(&fields, f)));
+        .map(|f| with_cfg(f, f.fallback(false, rules.is_displaced(&fields, f))));
     let exclusive = rules.exclusive(&fields, &groups);
     let supplied = rules.supplied(&fields);
     let required = rules.required(&fields, &groups);
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
-        match &f.kind {
+        let cfg = &f.cfg;
+        let value = match &f.kind {
             Kind::Required(ty) if f.keywords => {
                 let display = LitStr::new(&f.display(), Span::call_site());
                 quote!(#ident: __wa::keywords::<#ty>(&#slot, #display, __input.offset())?)
@@ -1979,7 +2001,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
             }
-        }
+        };
+        quote!(#cfg #value)
     });
 
     Ok(quote! {
@@ -2812,7 +2835,29 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         _ => {}
     }
+    let cfg: TokenStream2 = f
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("cfg"))
+        .map(|a| quote!(#a))
+        .collect();
+    if !cfg.is_empty() {
+        let plain_flag = matches!(role, Role::Flag { .. })
+            && !global
+            && group.is_none()
+            && conflicts.is_empty()
+            && overrides.is_empty()
+            && requires.is_empty()
+            && required_unless.is_empty()
+            && !required;
+        if !plain_flag {
+            return error(
+                "`#[cfg]` is supported on flags that no rule, group or `global` names".into(),
+            );
+        }
+    }
     Ok(Field {
+        cfg,
         ident,
         kind,
         role,
@@ -2857,6 +2902,10 @@ fn spellings(f: &Field) -> Vec<&str> {
 fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
     for (i, a) in fields.iter().enumerate() {
         for b in &fields[..i] {
+            if !a.cfg.is_empty() && !b.cfg.is_empty() {
+                // Alternatives for different configurations, as a rule.
+                continue;
+            }
             let theirs = b.shorts();
             let clash = a
                 .shorts()
