@@ -351,12 +351,17 @@ fn color_defaults_to_greens_and_cyans() {
         text.contains("\u{1b}[1;38;5;71m--cd\u{1b}[0m \u{1b}[38;5;109m<DIR>\u{1b}[0m"),
         "{text:?}"
     );
-    // Default and possible values are painted one by one, never their labels.
+    // Annotations paint their values one by one, never their labels: the
+    // environment variable cyan, the default green, possible values bright green.
     let text = styled_as(Style::COLORED, &["-h"], &[]);
+    assert!(
+        text.contains("[env: \u{1b}[36mMISE_CD\u{1b}[0m]"),
+        "{text:?}"
+    );
     assert!(text.contains("[default: \u{1b}[32m4\u{1b}[0m]"), "{text:?}");
     let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
     assert!(
-        text.contains("[possible values: \u{1b}[32mjson\u{1b}[0m, \u{1b}[32mtoml\u{1b}[0m]"),
+        text.contains("[possible values: \u{1b}[92mjson\u{1b}[0m, \u{1b}[92mtoml\u{1b}[0m]"),
         "{text:?}"
     );
     let text = styled_as(
@@ -366,6 +371,19 @@ fn color_defaults_to_greens_and_cyans() {
     );
     assert!(
         text.contains("[possible values: \u{1b}[38;5;71mauto\u{1b}[0m, "),
+        "{text:?}"
+    );
+    let text = styled_as(
+        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
+        &["-h"],
+        &[],
+    );
+    assert!(
+        text.contains("[env: \u{1b}[38;5;37mMISE_CD\u{1b}[0m]"),
+        "{text:?}"
+    );
+    assert!(
+        text.contains("[default: \u{1b}[38;5;72m4\u{1b}[0m]"),
         "{text:?}"
     );
     // clap leaves them plain.
