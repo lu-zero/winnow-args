@@ -914,3 +914,21 @@ The `value` role splits into `env` (cyan; teal 37 `#00afaf`, 5.59/2.34),
 `default` (green; sea green 72 `#5faf87`, 5.74/2.27) and `choice` (bright
 green; green 71 `#5faf5f`, 5.61/2.33), contrast against `#262626`/`#eeeeee`.
 Unpainted in `Palette::CLAP`. Rendering only.
+
+## 37. Palette roles: flag/command, dim, code
+
+13 roles now: `header`, `program`, `flag` and `command` (split from `literal`,
+as usage separates `option` and `command`; both bold green by default),
+`placeholder`, `env`, `default`, `choice`, `dim`, `code`, `error`, `invalid`,
+`valid`. `dim` frames the rest — the `[env: `, `[default: `,
+`[possible values: ` labels and their `]`, the brackets of an optional
+`[NAME]`, `...` — with the dim attribute in 16 colors and gray 245 in 256.
+`code` paints `` `quoted` `` spans in descriptions and subcommand summaries,
+bold, backticks kept so the strip-equals-plain test still holds; each word of a
+span is painted on its own, and an unpaired backtick is left alone. In the
+usage line the trailing positional's `[--` is now a dim `[` and a flag `--`.
+
+Correction to steps 29–30: clap 4's default styles use no color in help, only
+bold and underline; color appears only in errors (red, yellow, green), and only
+with clap's `color` feature. `Palette::CLAP` always reproduced that, but the
+docs called it "clap's colors". Rendering only.

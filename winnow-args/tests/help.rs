@@ -312,83 +312,97 @@ fn color_paints_without_moving_anything() {
     }
 }
 
+/// `text` in the SGR parameters `sgr`, reset after.
+fn sgr(sgr: &str, text: &str) -> String {
+    format!("\u{1b}[{sgr}m{text}\u{1b}[0m")
+}
+
 #[test]
 fn color_defaults_to_greens_and_cyans() {
-    // 16 colors: bold cyan headings, bold green flags, cyan value names.
+    // 16 colors: bold cyan headings, bold green flags and commands, cyan value
+    // names, dim brackets and labels.
+    let dim = |t| sgr("2", t);
     let text = styled_as(Style::COLORED, &["-h"], &[]);
-    // The program stays plain; in `[NAME]` only the name is painted.
+    // The program stays plain; in `[NAME]` only the name is colored.
+    let usage = format!(
+        "{} mise {}{}{} {}{}{}",
+        sgr("1;36", "Usage:"),
+        dim("["),
+        sgr("36", "OPTIONS"),
+        dim("]"),
+        dim("["),
+        sgr("36", "COMMAND"),
+        dim("]"),
+    );
+    assert!(text.contains(&usage), "{text:?}");
     assert!(
-        text.contains("\u{1b}[1;36mUsage:\u{1b}[0m mise [\u{1b}[36mOPTIONS\u{1b}[0m] [\u{1b}[36mCOMMAND\u{1b}[0m]"),
+        text.contains(&format!("{}\n", sgr("1;36", "Options:"))),
         "{text:?}"
     );
-    assert!(text.contains("\u{1b}[1;36mOptions:\u{1b}[0m\n"), "{text:?}");
-    assert!(
-        text.contains(
-            "  \u{1b}[1;32m-C\u{1b}[0m, \u{1b}[1;32m--cd\u{1b}[0m \u{1b}[36m<DIR>\u{1b}[0m"
-        ),
-        "{text:?}"
+    let cd = format!(
+        "  {}, {} {}",
+        sgr("1;32", "-C"),
+        sgr("1;32", "--cd"),
+        sgr("36", "<DIR>")
     );
-    assert!(
-        text.contains("  \u{1b}[1;32muse\u{1b}[0m, \u{1b}[1;32mu\u{1b}[0m    Installs"),
-        "{text:?}"
+    assert!(text.contains(&cd), "{text:?}");
+    let verbose = format!(
+        "{}, {}{}",
+        sgr("1;32", "-v"),
+        sgr("1;32", "--verbose"),
+        dim("...")
     );
+    assert!(text.contains(&verbose), "{text:?}");
+    let commands = format!("  {}, {}    Installs", sgr("1;32", "use"), sgr("1;32", "u"));
+    assert!(text.contains(&commands), "{text:?}");
+    // Annotations: dim labels, the environment variable cyan, the default
+    // green, possible values bright green.
+    let env = format!("{}{}{}", dim("[env: "), sgr("36", "MISE_CD"), dim("]"));
+    assert!(text.contains(&env), "{text:?}");
+    let default = format!("{}{}{}", dim("[default: "), sgr("32", "4"), dim("]"));
+    assert!(text.contains(&default), "{text:?}");
     let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
-    assert!(
-        text.contains("  [\u{1b}[36mTOOL@VERSION\u{1b}[0m]...  Tool(s) to add"),
-        "{text:?}"
+    let tools = format!(
+        "  {}{}{}{}  Tool(s) to add",
+        dim("["),
+        sgr("36", "TOOL@VERSION"),
+        dim("]"),
+        dim("...")
     );
-    // 256 colors: teal 73, green 71, slate teal 109.
-    let text = styled_as(
-        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
-        &["-h"],
-        &[],
+    assert!(text.contains(&tools), "{text:?}");
+    let choices = format!(
+        "{}{}, {}{}",
+        dim("[possible values: "),
+        sgr("92", "json"),
+        sgr("92", "toml"),
+        dim("]")
     );
-    assert!(
-        text.contains("\u{1b}[1;38;5;73mUsage:\u{1b}[0m mise [\u{1b}[38;5;109mOPTIONS\u{1b}[0m]"),
-        "{text:?}"
+    assert!(text.contains(&choices), "{text:?}");
+
+    // 256 colors: teal 73, green 71, slate teal 109, gray 245 frames.
+    let at256 = Style::at(Palette::DEFAULT_256, Depth::Ansi256);
+    let text = styled_as(at256, &["-h"], &[]);
+    let usage = format!(
+        "{} mise {}{}{}",
+        sgr("1;38;5;73", "Usage:"),
+        sgr("38;5;245", "["),
+        sgr("38;5;109", "OPTIONS"),
+        sgr("38;5;245", "]")
     );
-    assert!(
-        text.contains("\u{1b}[1;38;5;71m--cd\u{1b}[0m \u{1b}[38;5;109m<DIR>\u{1b}[0m"),
-        "{text:?}"
-    );
-    // Annotations paint their values one by one, never their labels: the
-    // environment variable cyan, the default green, possible values bright green.
-    let text = styled_as(Style::COLORED, &["-h"], &[]);
-    assert!(
-        text.contains("[env: \u{1b}[36mMISE_CD\u{1b}[0m]"),
-        "{text:?}"
-    );
-    assert!(text.contains("[default: \u{1b}[32m4\u{1b}[0m]"), "{text:?}");
-    let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
-    assert!(
-        text.contains("[possible values: \u{1b}[92mjson\u{1b}[0m, \u{1b}[92mtoml\u{1b}[0m]"),
-        "{text:?}"
-    );
-    let text = styled_as(
-        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
-        &["use", "-h"],
-        &[],
-    );
-    assert!(
-        text.contains("[possible values: \u{1b}[38;5;71mauto\u{1b}[0m, "),
-        "{text:?}"
-    );
-    let text = styled_as(
-        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
-        &["-h"],
-        &[],
-    );
-    assert!(
-        text.contains("[env: \u{1b}[38;5;37mMISE_CD\u{1b}[0m]"),
-        "{text:?}"
-    );
-    assert!(
-        text.contains("[default: \u{1b}[38;5;72m4\u{1b}[0m]"),
-        "{text:?}"
-    );
-    // clap leaves them plain.
+    assert!(text.contains(&usage), "{text:?}");
+    let cd = format!("{} {}", sgr("1;38;5;71", "--cd"), sgr("38;5;109", "<DIR>"));
+    assert!(text.contains(&cd), "{text:?}");
+    let env = format!("{}{}", sgr("38;5;245", "[env: "), sgr("38;5;37", "MISE_CD"));
+    assert!(text.contains(&env), "{text:?}");
+    let default = format!("{}{}", sgr("38;5;245", "[default: "), sgr("38;5;72", "4"));
+    assert!(text.contains(&default), "{text:?}");
+    let text = styled_as(at256, &["use", "-h"], &[]);
+    assert!(text.contains(&sgr("38;5;71", "auto")), "{text:?}");
+
+    // clap leaves annotations plain.
     let text = styled_as(Style::CLAP, &["use", "-h"], &[]);
     assert!(text.contains("[possible values: json, toml]"), "{text:?}");
+
     // No yellow anywhere in either default.
     for palette in [Palette::DEFAULT, Palette::DEFAULT_256] {
         let e = parse::<Cli>(&["--fore"]).unwrap_err();
@@ -399,8 +413,34 @@ fn color_defaults_to_greens_and_cyans() {
 }
 
 #[test]
+fn quoted_spans_in_descriptions_are_code() {
+    let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
+    // "Installs a tool and adds the version to mise.toml." has none; the
+    // `help` example's "as `name@version`" is checked where it is written.
+    assert!(!text.contains("\u{1b}[1m`"), "{text:?}");
+    #[derive(Args, Debug)]
+    #[expect(dead_code, reason = "the help is what is checked")]
+    struct Quoted {
+        /// Tools as `name@version`, or `name` alone, `unpaired
+        #[arg(positional)]
+        tools: Vec<String>,
+    }
+    let e = parse::<Quoted>(&["-h"]).unwrap_err();
+    let text = with_env(&[], || e.render_help_styled("q", Style::COLORED).unwrap());
+    let quoted = format!(
+        "Tools as {}, or {} alone, `unpaired",
+        sgr("1", "`name@version`"),
+        sgr("1", "`name`")
+    );
+    assert!(text.contains(&quoted), "{text:?}");
+    let plain = with_env(&[], || e.render_help("q").unwrap());
+    assert!(plain.contains("Tools as `name@version`, or `name` alone, `unpaired"));
+}
+
+#[test]
 fn color_uses_clap_codes() {
-    // clap 4's codes for the bench CLI, with each paint written as one
+    // clap 4's default styles for the bench CLI (bold and underline in help,
+    // color only in errors), with each paint written as one
     // sequence (`1;4` where clap writes `1` then `4`): the same on screen.
     let text = styled(&["-h"], &[]);
     assert!(

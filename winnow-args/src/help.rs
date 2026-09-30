@@ -170,7 +170,8 @@ impl Style {
     /// [`Palette::DEFAULT`] in the 16 basic colors.
     pub const COLORED: Style = Style::at(Palette::DEFAULT, Depth::Ansi16);
 
-    /// [`Palette::CLAP`], clap 4's colors.
+    /// [`Palette::CLAP`]: clap 4's default styles (bold and underline in
+    /// help, color only in errors).
     pub const CLAP: Style = Style::at(Palette::CLAP, Depth::Ansi16);
 
     /// `palette` on a terminal of `depth`.
@@ -218,8 +219,20 @@ impl Style {
         self.ink(self.palette.program)
     }
 
-    pub(crate) fn literal(self) -> Ink {
-        self.ink(self.palette.literal)
+    pub(crate) fn flag(self) -> Ink {
+        self.ink(self.palette.flag)
+    }
+
+    pub(crate) fn command(self) -> Ink {
+        self.ink(self.palette.command)
+    }
+
+    pub(crate) fn dim(self) -> Ink {
+        self.ink(self.palette.dim)
+    }
+
+    pub(crate) fn code(self) -> Ink {
+        self.ink(self.palette.code)
     }
 
     pub(crate) fn placeholder(self) -> Ink {
@@ -282,9 +295,9 @@ impl Cell {
         if required {
             self.push(style.placeholder(), &format!("<{name}>"));
         } else {
-            self.push(Ink::NONE, "[");
+            self.push(style.dim(), "[");
             self.push(style.placeholder(), name);
-            self.push(Ink::NONE, "]");
+            self.push(style.dim(), "]");
         }
     }
 }
@@ -327,12 +340,12 @@ pub fn render_styled(
             .iter()
             .map(|s| {
                 let mut name = Cell::default();
-                name.push(style.literal(), s.name);
+                name.push(style.command(), s.name);
                 for alias in s.aliases {
                     name.push(Ink::NONE, ", ");
-                    name.push(style.literal(), alias);
+                    name.push(style.command(), alias);
                 }
-                (name, s.about.to_owned())
+                (name, painted_code(s.about, style))
             })
             .collect();
         section(&mut out, "Commands", &rows, false, width, style);
@@ -358,9 +371,9 @@ pub fn render_styled(
     }
     let builtin = |short: &str, long_name: &str| {
         let mut cell = Cell::default();
-        cell.push(style.literal(), short);
+        cell.push(style.flag(), short);
         cell.push(Ink::NONE, ", ");
-        cell.push(style.literal(), long_name);
+        cell.push(style.flag(), long_name);
         cell
     };
     for heading in headings {
@@ -435,10 +448,11 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
         // clap paints the brackets and `--` as literals: they are typed.
         let mut cell = Cell::default();
         cell.push(Ink::NONE, " ");
-        cell.push(style.literal(), "[--");
+        cell.push(style.dim(), "[");
+        cell.push(style.flag(), "--");
         cell.push(Ink::NONE, " ");
         push_item_placeholder(&mut cell, style, item);
-        cell.push(style.literal(), "]");
+        cell.push(style.dim(), "]");
         line.push_str(&cell.text);
     }
     line
@@ -448,7 +462,7 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
 fn push_item_placeholder(cell: &mut Cell, style: Style, item: &Item) {
     cell.push_placeholder(style, item.required, item.value_name.unwrap_or("VALUE"));
     if item.multiple {
-        cell.push(Ink::NONE, "...");
+        cell.push(style.dim(), "...");
     }
 }
 
@@ -456,28 +470,28 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
     let mut spec = Cell::default();
     match (item.short, item.long) {
         (Some(s), long) => {
-            spec.push(style.literal(), &format!("-{s}"));
+            spec.push(style.flag(), &format!("-{s}"));
             if let Some(l) = long {
                 spec.push(Ink::NONE, ", ");
-                spec.push(style.literal(), &format!("--{l}"));
+                spec.push(style.flag(), &format!("--{l}"));
             }
         }
         (None, Some(l)) => {
             spec.push(Ink::NONE, "    ");
-            spec.push(style.literal(), &format!("--{l}"));
+            spec.push(style.flag(), &format!("--{l}"));
         }
         (None, None) => {}
     }
     if let Some(no) = item.negate {
         spec.push(Ink::NONE, " / ");
-        spec.push(style.literal(), &format!("--{no}"));
+        spec.push(style.flag(), &format!("--{no}"));
     }
     if let Some(value) = item.value_name {
         spec.push(Ink::NONE, " ");
         spec.push(style.placeholder(), &format!("<{value}>"));
     }
     if item.multiple {
-        spec.push(Ink::NONE, "...");
+        spec.push(style.dim(), "...");
     }
     spec
 }
@@ -486,25 +500,27 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
 /// `[possible values: …]`, each value painted on its own (so a line never
 /// breaks inside a painted span).
 fn describe(item: &Item, long: bool, style: Style) -> String {
-    let mut text = if long && !item.long_help.is_empty() {
-        item.long_help.to_owned()
+    let help = if long && !item.long_help.is_empty() {
+        item.long_help
     } else {
-        item.help.to_owned()
+        item.help
     };
+    let mut text = painted_code(help, style);
     let mut add = |extra: String| {
         if !text.is_empty() {
             text.push(if long { '\n' } else { ' ' });
         }
         text.push_str(&extra);
     };
+    let label = |label: &str| Style::paint(style.dim(), label);
+    let close = || Style::paint(style.dim(), "]");
     if let Some(env) = item.env {
-        add(format!("[env: {}]", Style::paint(style.env(), env)));
+        let env = Style::paint(style.env(), env);
+        add(format!("{}{env}{}", label("[env: "), close()));
     }
     if let Some(default) = item.default {
-        add(format!(
-            "[default: {}]",
-            Style::paint(style.default(), default)
-        ));
+        let default = Style::paint(style.default(), default);
+        add(format!("{}{default}{}", label("[default: "), close()));
     }
     if !item.choices.is_empty() {
         let choices: Vec<String> = item
@@ -512,9 +528,48 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
             .iter()
             .map(|c| Style::paint(style.choice(), c))
             .collect();
-        add(format!("[possible values: {}]", choices.join(", ")));
+        add(format!(
+            "{}{}{}",
+            label("[possible values: "),
+            choices.join(", "),
+            close()
+        ));
     }
     text
+}
+
+/// `text` with each `` `quoted` `` span painted as code, backticks kept (so
+/// the painted page is the plain one plus escapes). Each word of a span is
+/// painted on its own, so wrapping never breaks inside a painted run; an
+/// unpaired backtick is left alone.
+fn painted_code(text: &str, style: Style) -> String {
+    let ink = style.code();
+    if ink.paint == Paint::NONE || ink.depth == Depth::None || !text.contains('`') {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len() + 16);
+    for (n, line) in text.split('\n').enumerate() {
+        if n > 0 {
+            out.push('\n');
+        }
+        let mut rest = line;
+        while let Some(open) = rest.find('`') {
+            let Some(len) = rest[open + 1..].find('`') else {
+                break;
+            };
+            let close = open + 1 + len;
+            out.push_str(&rest[..open]);
+            for (i, word) in rest[open..=close].split(' ').enumerate() {
+                if i > 0 {
+                    out.push(' ');
+                }
+                push_painted(&mut out, ink, word);
+            }
+            rest = &rest[close + 1..];
+        }
+        out.push_str(rest);
+    }
+    out
 }
 
 /// A titled two-column list; long help puts each description under its item.

@@ -345,7 +345,7 @@ impl Error {
             "{} {}\n\nFor more information, try '{}'.",
             Style::paint(style.error(), "error:"),
             self.message(style),
-            Style::paint(style.literal(), "--help"),
+            Style::paint(style.flag(), "--help"),
         )
     }
 

@@ -161,7 +161,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [ ] A subcommand's help lists the global flags it inherits (clap does;
       `tool use -h` in `examples/help.rs` omits `-v`)
 - [x] Color: `help::Style` (`PLAIN`, `COLORED` — greens and cyans, no yellow, env, default
-      and possible values highlighted — and `CLAP`), chosen by `NO_COLOR`, `CLICOLOR_FORCE` and whether the stream is a terminal
+      and possible values highlighted, dim frames, bold `code` — and `CLAP`), chosen by `NO_COLOR`, `CLICOLOR_FORCE` and whether the stream is a terminal
 - [x] Color depth: `color::Depth::detect` (16, 256, 24-bit from `COLORTERM`, `TERM`,
       `TERM_PROGRAM`, `FORCE_COLOR`, `CLICOLOR`); a `Theme` has a palette per
       depth, and deeper colors map to the nearest one; `report_with`
