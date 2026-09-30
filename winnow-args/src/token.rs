@@ -166,6 +166,16 @@ impl<'i> Arg<'i> {
         self.read_value_with(input, ValueOptions::DEFAULT)
     }
 
+    /// One more value for a flag that takes several (`-platform_version macos
+    /// 11.0 12.0`): the next word, whatever it looks like.
+    #[inline]
+    pub fn read_next(&self, input: &mut Argv<'i>) -> Result<&'i BStr, Error> {
+        if input.is_empty() {
+            return Err(self.missing_value());
+        }
+        Ok(input.take_word())
+    }
+
     /// [`Arg::read_value`] under `options`: which detached words it may take.
     #[inline(always)]
     pub fn read_value_with(

@@ -107,3 +107,132 @@ from_str!(
     std::net::Ipv6Addr,
     std::net::SocketAddr,
 );
+
+/// An integer in C syntax, as linkers and assemblers read one: `0x`/`0X` hex,
+/// a leading `0` for octal, otherwise decimal, with a sign for signed types.
+/// `--image-base=0x400000`, `-z max-page-size=0x1000`, `-Ttext=010000`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct CInt<T>(pub T);
+
+/// The error of a malformed [`CInt`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CIntError(&'static str);
+
+impl std::fmt::Display for CIntError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for CIntError {}
+
+/// The sign, radix and digits of a C integer.
+fn c_digits(text: &str) -> Result<(bool, u32, &str), CIntError> {
+    let (negative, rest) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text.strip_prefix('+').unwrap_or(text)),
+    };
+    let (radix, digits) =
+        if let Some(hex) = rest.strip_prefix("0x").or_else(|| rest.strip_prefix("0X")) {
+            (16, hex)
+        } else if rest.len() > 1 && rest.starts_with('0') {
+            (8, &rest[1..])
+        } else {
+            (10, rest)
+        };
+    if digits.is_empty() || !digits.chars().all(|c| c.is_digit(radix)) {
+        return Err(CIntError("expected a number: decimal, 0x hex or 0 octal"));
+    }
+    Ok((negative, radix, digits))
+}
+
+macro_rules! c_int {
+    ($($ty:ty),* $(,)?) => {$(
+        impl FromArg for CInt<$ty> {
+            fn from_arg(value: &BStr) -> Result<Self, BoxError> {
+                let (negative, radix, digits) = c_digits(to_str(value)?)?;
+                let magnitude = u128::from_str_radix(digits, radix)?;
+                let n = if negative {
+                    0i128.checked_sub_unsigned(magnitude).and_then(|n| <$ty>::try_from(n).ok())
+                } else {
+                    <$ty>::try_from(magnitude).ok()
+                };
+                n.map(CInt).ok_or_else(|| CIntError("number out of range").into())
+            }
+        }
+    )*};
+}
+
+c_int!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
+
+/// `key=value`, split at the first `=`: `--defsym=sym=expr`,
+/// `-z max-page-size=4096`, `--section-start=.text=0x1000`. The value may hold
+/// more `=`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyValue<K, V> {
+    /// Before the first `=`.
+    pub key: K,
+    /// After it.
+    pub value: V,
+}
+
+/// The error of a [`KeyValue`] with no `=`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MissingEquals;
+
+impl std::fmt::Display for MissingEquals {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("expected `key=value`")
+    }
+}
+
+impl std::error::Error for MissingEquals {}
+
+impl<K: FromArg, V: FromArg> FromArg for KeyValue<K, V> {
+    fn from_arg(value: &BStr) -> Result<Self, BoxError> {
+        let eq = value.iter().position(|&b| b == b'=').ok_or(MissingEquals)?;
+        Ok(KeyValue {
+            key: K::from_arg(BStr::new(&value[..eq]))?,
+            value: V::from_arg(BStr::new(&value[eq + 1..]))?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn c<T>(text: &str) -> Result<T, String>
+    where
+        CInt<T>: FromArg,
+    {
+        CInt::<T>::from_arg(BStr::new(text))
+            .map(|CInt(n)| n)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn c_integers() {
+        assert_eq!(c::<u64>("0x400000"), Ok(0x40_0000));
+        assert_eq!(c::<u64>("0X1f"), Ok(31));
+        assert_eq!(c::<u64>("010"), Ok(8));
+        assert_eq!(c::<u64>("0"), Ok(0));
+        assert_eq!(c::<u64>("4096"), Ok(4096));
+        assert_eq!(c::<i64>("-0x10"), Ok(-16));
+        assert_eq!(c::<i8>("-128"), Ok(-128));
+        assert!(c::<u8>("256").is_err());
+        assert!(c::<u64>("-1").is_err());
+        assert!(c::<u64>("08").is_err());
+        assert!(c::<u64>("0x").is_err());
+        assert!(c::<u64>("").is_err());
+    }
+
+    #[test]
+    fn key_values() {
+        let kv = KeyValue::<String, String>::from_arg(BStr::new("sym=a=b")).unwrap();
+        assert_eq!((kv.key.as_str(), kv.value.as_str()), ("sym", "a=b"));
+        let kv = KeyValue::<String, CInt<u64>>::from_arg(BStr::new(".text=0x1000")).unwrap();
+        assert_eq!((kv.key.as_str(), kv.value.0), (".text", 0x1000));
+        assert!(KeyValue::<String, String>::from_arg(BStr::new("nothing")).is_err());
+    }
+}
