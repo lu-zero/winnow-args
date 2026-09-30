@@ -113,9 +113,9 @@ phase 3: brush parses them as declaration builtins, like `declare`.
 
 ## Phase 3: `+` options
 
-Done on brush branch `winnow-args-engine` (local, `c499caf0`): `set`,
-`declare` (also `local`, `readonly`, `typeset`), `export`, `command`,
-`builtin`. Left: `complete`/`compgen`.
+Done on brush branch `winnow-args-engine` (local, `c499caf0`, `fe431505`):
+`set`, `declare` (also `local`, `readonly`, `typeset`), `export`, `command`,
+`builtin`, `complete`, `compgen`, `compopt`.
 
 - [x] Lex `+x` bundles natively beside `-x` ones (`#[arg(plus_options)]`;
       a tri-state `Option<bool>` field with `short = 'x', plus = 'x'`): `set +e`, `set +o pipefail`,
@@ -136,7 +136,12 @@ Done on brush branch `winnow-args-engine` (local, `c499caf0`): `set`,
       them off before parsing; `#[arg(skip)]` holds them, and
       `impl_winnow_args!(…, declarations = field)` stores them): `declare -i n=3`,
       `export A=1 B`, `local x=`. (the 129 `declare` cases, `local`, `export`)
-- [ ] `complete`/`compgen` `-o`/`+o` option names.
+- [x] `complete`/`compgen`/`compopt` `-o`/`+o` option names: brush-core's
+      completion enums derive `winnow_args::ValueEnum` under a
+      `parser-winnow` feature, spelled `#[winnow_args(rename_all = "lowercase")]`
+      because clap's derive on the same enums claims `#[arg]`. Per call:
+      `compgen -W "a b" a` 26.2 → 10.6 µs, `complete -o nospace -W x cmd`
+      29.8 → 8.4 µs.
 - [x] Each name of a shared builtin gets its own bash usage line
       (`local: usage: local [option] name[=value] ...`).
 - [x] Measure: compat suite unchanged (1971 passing, as with clap).
