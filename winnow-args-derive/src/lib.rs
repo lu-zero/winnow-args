@@ -497,6 +497,8 @@ struct Field {
     two_dashes: bool,
     /// Words each occurrence takes (a `Vec` flag): `-platform_version macos 11.0 12.0`.
     values: usize,
+    /// Once this positional has a value, flags stop (whatever its `double_dash`).
+    stop_flags: bool,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -1025,7 +1027,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let arms = positionals.iter().enumerate().map(|(i, f)| {
             let ident = slot(&f.ident);
             let display = LitStr::new(&f.display(), Span::call_site());
-            let stop = (dd(f) == DoubleDash::Automatic).then(|| quote!(__input.stop_flags();));
+            let stop = (dd(f) == DoubleDash::Automatic || f.stop_flags)
+                .then(|| quote!(__input.stop_flags();));
             match &f.kind {
                 Kind::Optional(ty) | Kind::Required(ty) => {
                     let value = f.word_value(ty, quote!(__word), &display);
@@ -1975,6 +1978,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut require_equals = false;
     let (mut two_dashes, mut prefix) = (false, false);
     let mut values = 1;
+    let mut stop_flags = false;
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -2028,6 +2032,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     None
                 });
+            } else if meta.path.is_ident("stop_flags") {
+                stop_flags = true;
             } else if meta.path.is_ident("values") {
                 let n = meta.value()?.parse::<syn::LitInt>()?;
                 values = n.base10_parse::<usize>()?;
@@ -2096,7 +2102,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -2130,6 +2136,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
         return error("`allow_negative_numbers` is for fields that take a value".into());
+    }
+    if stop_flags && !positional {
+        return error("`stop_flags` is for positional fields".into());
     }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
@@ -2261,6 +2270,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         two_dashes,
         prefix,
         values,
+        stop_flags,
     })
 }
 

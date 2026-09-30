@@ -74,3 +74,35 @@ fn before_the_preserving_positional_it_is_a_separator() {
     assert_eq!(w.tool.as_deref(), Some("-v"));
     assert_eq!(w.args, strings(&["x"]));
 }
+
+/// bash's `echo`: a leading `--` is data (`preserve`), and the first operand
+/// ends the options (`stop_flags`); a word with a letter echo lacks is data.
+#[derive(Args, Debug, PartialEq, Default)]
+#[arg(unknown_flags = "value")]
+struct Echo {
+    #[arg(short)]
+    n: bool,
+    #[arg(short)]
+    e: bool,
+    #[arg(positional, double_dash = "preserve", stop_flags)]
+    args: Vec<String>,
+}
+
+#[test]
+fn preserve_with_stop_flags_is_bash_echo() {
+    let echo = |line: &[&str]| {
+        let words: Vec<&BStr> = line.iter().map(BStr::new).collect();
+        Echo::parse_from(&words).unwrap()
+    };
+    let e = echo(&["--", "-n"]);
+    assert_eq!((e.n, e.args), (false, strings(&["--", "-n"])));
+    let e = echo(&["-n", "--", "x"]);
+    assert_eq!((e.n, e.args), (true, strings(&["--", "x"])));
+    let e = echo(&["hi", "-n"]);
+    assert_eq!((e.n, e.args), (false, strings(&["hi", "-n"])));
+    let e = echo(&["-nx", "hi"]);
+    assert_eq!((e.n, e.args), (false, strings(&["-nx", "hi"])));
+    let e = echo(&["-e", "-n", "a"]);
+    assert_eq!((e.e, e.n, e.args), (true, true, strings(&["a"])));
+    assert_eq!(echo(&["-"]).args, strings(&["-"]));
+}
