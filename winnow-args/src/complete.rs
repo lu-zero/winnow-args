@@ -1,0 +1,526 @@
+//! Shell completion, answered by the program itself.
+//!
+//! A generated script ([`script`]) registers a completion function with the
+//! shell; on Tab it runs the program as `PROG __complete_word__ SHELL …` with
+//! the words typed so far, and the program answers from its own help data
+//! ([`help::Command`](crate::help::Command)): flag names, a flag's choices, subcommand names, or a
+//! request for the shell's own file completion. The script stays a few lines
+//! and never goes stale: what can be typed is whatever the binary parses.
+//!
+//! [`Args::completion_request`](crate::Args::completion_request) answers the
+//! callback before the command line is parsed, and
+//! [`Args::completion_script`](crate::Args::completion_script) writes the
+//! script.
+//!
+//! What is completed:
+//!
+//! - after `-` or `--`, the visible flags of the command reached so far, with
+//!   their descriptions;
+//! - a flag's value (`--color <TAB>`, `--color=<TAB>`), from its choices, or
+//!   files when it has none;
+//! - elsewhere, subcommand names and a positional's choices, or files.
+
+use std::ffi::OsString;
+use std::fmt::Write as _;
+
+use crate::help::{Command, Item};
+
+/// The word a completion script calls the program with.
+pub const REQUEST: &str = "__complete_word__";
+
+/// A line in an answer that asks the shell to complete file names itself.
+const FILES: &str = "\u{1}files";
+
+/// The shells a script can be written for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Shell {
+    /// GNU bash, with its `complete -F`.
+    Bash,
+    /// zsh's completion system (`compinit`).
+    Zsh,
+    /// fish.
+    Fish,
+}
+
+impl Shell {
+    /// Every shell a script can be written for.
+    pub const ALL: &'static [Shell] = &[Shell::Bash, Shell::Zsh, Shell::Fish];
+
+    /// The shell's name: `bash`, `zsh`, `fish`.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Shell::Bash => "bash",
+            Shell::Zsh => "zsh",
+            Shell::Fish => "fish",
+        }
+    }
+
+    /// The shell named `name`, if a script can be written for it.
+    pub fn from_name(name: &str) -> Option<Shell> {
+        Shell::ALL.iter().copied().find(|s| s.as_str() == name)
+    }
+}
+
+impl std::fmt::Display for Shell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One thing that can be typed at the cursor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Candidate {
+    /// The whole word, as it replaces the one being typed.
+    pub value: String,
+    /// What it is, for shells that show descriptions.
+    pub help: &'static str,
+}
+
+/// What can be typed at the cursor.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Completions {
+    /// The candidates, in help order.
+    pub candidates: Vec<Candidate>,
+    /// Whether a file name fits here too: the shell completes those itself.
+    pub files: bool,
+}
+
+/// What can be typed as the last of `words`, the command line after the
+/// program's name up to the cursor. The last word is the one being typed,
+/// empty after a space.
+pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
+    let (current, before) = match words.split_last() {
+        Some((current, before)) => (*current, before),
+        None => ("", words),
+    };
+    let mut state = Walk {
+        command: root,
+        pending: None,
+        stopped: false,
+        position: 0,
+    };
+    for word in before {
+        state.step(word);
+    }
+    state.complete(current)
+}
+
+/// Where a command line stands after the words before the cursor.
+struct Walk {
+    command: &'static Command,
+    /// A flag waiting for its value in the next word.
+    pending: Option<&'static Item>,
+    /// Past a `--`.
+    stopped: bool,
+    /// How many positionals were given.
+    position: usize,
+}
+
+impl Walk {
+    fn flags(&self) -> impl Iterator<Item = &'static Item> + use<> {
+        self.command.items.iter().filter(|i| !i.positional)
+    }
+
+    fn long(&self, name: &str) -> Option<&'static Item> {
+        self.flags()
+            .find(|i| i.long == Some(name) || i.negate == Some(name))
+    }
+
+    fn short(&self, letter: char) -> Option<&'static Item> {
+        self.flags().find(|i| i.short == Some(letter))
+    }
+
+    fn step(&mut self, word: &str) {
+        if self.pending.take().is_some() {
+            return;
+        }
+        if self.stopped {
+            self.position += 1;
+            return;
+        }
+        if word == "--" {
+            self.stopped = true;
+        } else if let Some(body) = word.strip_prefix("--") {
+            let (name, value) = match body.split_once('=') {
+                Some((name, value)) => (name, Some(value)),
+                None => (body, None),
+            };
+            self.pending = self
+                .long(name)
+                .filter(|i| i.value_name.is_some() && value.is_none());
+        } else if let Some(letters) = word.strip_prefix('-').filter(|l| !l.is_empty()) {
+            for (at, letter) in letters.char_indices() {
+                let Some(item) = self.short(letter) else {
+                    break;
+                };
+                if item.value_name.is_some() {
+                    // The value is the rest of the word, or the next word.
+                    if at + letter.len_utf8() == letters.len() {
+                        self.pending = Some(item);
+                    }
+                    break;
+                }
+            }
+        } else if let Some(sub) = self
+            .command
+            .subcommands
+            .iter()
+            .find(|s| s.names.contains(&word))
+        {
+            self.command = sub.command;
+            self.position = 0;
+        } else {
+            self.position += 1;
+        }
+    }
+
+    fn complete(&self, current: &str) -> Completions {
+        let mut out = Completions::default();
+        if let Some(item) = self.pending {
+            values(item, "", current, &mut out);
+            return out;
+        }
+        if !self.stopped && current.starts_with('-') {
+            if let Some((name, value)) = current
+                .strip_prefix("--")
+                .and_then(|body| body.split_once('='))
+            {
+                if let Some(item) = self.long(name).filter(|i| i.value_name.is_some()) {
+                    values(
+                        item,
+                        &current[..current.len() - value.len()],
+                        value,
+                        &mut out,
+                    );
+                }
+                return out;
+            }
+            self.flag_names(current, &mut out);
+            return out;
+        }
+        if !self.stopped {
+            for sub in self.command.subcommands.iter().filter(|s| !s.hide) {
+                push(&mut out, sub.name, sub.about, current);
+            }
+        }
+        let mut positionals = self.command.items.iter().filter(|i| i.positional);
+        let positional = positionals
+            .clone()
+            .nth(self.position)
+            .or_else(|| positionals.rfind(|i| i.multiple));
+        if let Some(item) = positional {
+            values(item, "", current, &mut out);
+        }
+        out
+    }
+
+    fn flag_names(&self, current: &str, out: &mut Completions) {
+        for item in self.flags().filter(|i| !i.hide) {
+            if let Some(long) = item.long {
+                push(out, &format!("--{long}"), item.help, current);
+            }
+            if let Some(negate) = item.negate {
+                push(out, &format!("--{negate}"), item.help, current);
+            }
+            if let Some(short) = item.short
+                && !current.starts_with("--")
+            {
+                push(out, &format!("-{short}"), item.help, current);
+            }
+        }
+        let command = self.command;
+        if command.help_flag {
+            if command.help_short && !current.starts_with("--") {
+                push(out, "-h", "Print help", current);
+            }
+            push(out, "--help", "Print help", current);
+        }
+        if command.version.is_some() {
+            if !current.starts_with("--") {
+                push(out, "-V", "Print version", current);
+            }
+            push(out, "--version", "Print version", current);
+        }
+    }
+}
+
+/// A value for `item`: one of its choices, else a file name.
+fn values(item: &'static Item, prefix: &str, typed: &str, out: &mut Completions) {
+    if item.choices.is_empty() {
+        out.files = true;
+        return;
+    }
+    for choice in item.choices {
+        if choice.starts_with(typed) {
+            out.candidates.push(Candidate {
+                value: format!("{prefix}{choice}"),
+                help: "",
+            });
+        }
+    }
+}
+
+fn push(out: &mut Completions, value: &str, help: &'static str, typed: &str) {
+    if value.starts_with(typed) {
+        out.candidates.push(Candidate {
+            value: value.to_owned(),
+            help,
+        });
+    }
+}
+
+/// Answer a completion script's callback: `args` is the command line after
+/// the program's name. `None` when it is not a callback, so the program goes
+/// on to parse it.
+///
+/// The callbacks the scripts make:
+///
+/// - `__complete_word__ bash LINE WORD`: the line up to the cursor, and the
+///   word bash will replace (bash splits words at `=` and `:` too);
+/// - `__complete_word__ zsh WORD…` and `__complete_word__ fish WORD…`: the
+///   words after the program's name, the last one being typed.
+pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
+    let (first, rest) = args.split_first()?;
+    if first.to_str()? != REQUEST {
+        return None;
+    }
+    let rest: Vec<String> = rest
+        .iter()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    let (shell, rest) = rest.split_first()?;
+    let shell = Shell::from_name(shell)?;
+    Some(match shell {
+        Shell::Bash => {
+            let line = rest.first().map_or("", String::as_str);
+            let replaced = rest.get(1).map_or("", String::as_str);
+            let mut words = split_line(line);
+            if !words.is_empty() {
+                words.remove(0);
+            }
+            if words.is_empty() {
+                words.push(String::new());
+            }
+            let words: Vec<&str> = words.iter().map(String::as_str).collect();
+            let typed = words.last().copied().unwrap_or("");
+            render_bash(&complete(root, &words), typed, replaced)
+        }
+        Shell::Zsh | Shell::Fish => {
+            let mut words: Vec<&str> = rest.iter().map(String::as_str).collect();
+            if words.is_empty() {
+                words.push("");
+            }
+            render(&complete(root, &words), shell)
+        }
+    })
+}
+
+/// The answer as `shell`'s script reads it: one candidate a line, a
+/// description after a tab (fish) or a colon (zsh), and a line asking for
+/// file names when they fit.
+pub fn render(completions: &Completions, shell: Shell) -> String {
+    let mut out = String::new();
+    for c in &completions.candidates {
+        match shell {
+            Shell::Bash => out.push_str(&c.value),
+            Shell::Zsh => {
+                out.push_str(&c.value.replace(':', "\\:"));
+                if !c.help.is_empty() {
+                    let _ = write!(out, ":{}", first_line(c.help));
+                }
+            }
+            Shell::Fish => {
+                out.push_str(&c.value);
+                if !c.help.is_empty() {
+                    let _ = write!(out, "\t{}", first_line(c.help));
+                }
+            }
+        }
+        out.push('\n');
+    }
+    if completions.files {
+        out.push_str(FILES);
+        out.push('\n');
+    }
+    out
+}
+
+/// bash replaces only the part of the word after its last `=` or `:`: the
+/// candidates lose what came before it.
+fn render_bash(completions: &Completions, typed: &str, replaced: &str) -> String {
+    let cut = typed
+        .strip_suffix(replaced)
+        .map_or(0, |before| before.len());
+    let mut out = String::new();
+    for c in &completions.candidates {
+        out.push_str(c.value.get(cut..).unwrap_or(&c.value));
+        out.push('\n');
+    }
+    if completions.files {
+        out.push_str(FILES);
+        out.push('\n');
+    }
+    out
+}
+
+fn first_line(text: &str) -> &str {
+    text.lines().next().unwrap_or("")
+}
+
+/// Split a command line as a shell would into words: whitespace between,
+/// `'…'`, `"…"` and `\` quoting. A trailing space starts an empty word.
+fn split_line(line: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word: Option<String> = None;
+    let mut quote = None;
+    let mut chars = line.chars();
+    while let Some(c) = chars.next() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (Some('"'), '\\') => {
+                if let Some(next) = chars.next() {
+                    word.get_or_insert_default().push(next);
+                }
+            }
+            (Some(_), c) => word.get_or_insert_default().push(c),
+            (None, '\'' | '"') => {
+                quote = Some(c);
+                word.get_or_insert_default();
+            }
+            (None, '\\') => {
+                if let Some(next) = chars.next() {
+                    word.get_or_insert_default().push(next);
+                }
+            }
+            (None, c) if c.is_whitespace() => words.extend(word.take()),
+            (None, c) => word.get_or_insert_default().push(c),
+        }
+    }
+    match word {
+        Some(word) => words.push(word),
+        None => words.push(String::new()),
+    }
+    words
+}
+
+/// The completion script for `bin` in `shell`, ready to be sourced or
+/// installed where the shell looks for completions.
+///
+/// # Panics
+///
+/// If `bin` is not one plain word (letters, digits, `-`, `_`, `.`, `+`): the
+/// scripts name it unquoted where no shell allows quotes.
+pub fn script(bin: &str, shell: Shell) -> String {
+    assert!(
+        !bin.is_empty()
+            && bin
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+')),
+        "a completion script needs a plain program name, not {bin:?}"
+    );
+    let function: String = bin
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    match shell {
+        Shell::Bash => format!(
+            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+_{function}_complete() {{
+    local line files=
+    COMPREPLY=()
+    while IFS= read -r line; do
+        if [[ $line == $'\001files' ]]; then
+            files=1
+        elif [[ -n $line ]]; then
+            COMPREPLY+=("$line")
+        fi
+    done < <(command {bin} {REQUEST} bash "${{COMP_LINE:0:COMP_POINT}}" "${{COMP_WORDS[COMP_CWORD]}}" 2>/dev/null)
+    if [[ -n $files ]]; then
+        compopt -o filenames 2>/dev/null
+        local IFS=$'\n'
+        COMPREPLY+=($(compgen -f -- "${{COMP_WORDS[COMP_CWORD]}}"))
+    fi
+}}
+complete -F _{function}_complete {bin}
+"#
+        ),
+        Shell::Zsh => format!(
+            r#"#compdef {bin}
+# Completion for {bin}, answered by `{bin} {REQUEST}`.
+_{function}() {{
+    local -a candidates
+    local line files=
+    while IFS= read -r line; do
+        if [[ $line == $'\001files' ]]; then
+            files=1
+        elif [[ -n $line ]]; then
+            candidates+=("$line")
+        fi
+    done < <(command {bin} {REQUEST} zsh "${{(@)words[2,CURRENT]}}" 2>/dev/null)
+    (( ${{#candidates}} )) && _describe -t values '{bin}' candidates
+    [[ -n $files ]] && _files
+    return 0
+}}
+if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
+    _{function} "$@"
+else
+    compdef _{function} {bin}
+fi
+"#
+        ),
+        Shell::Fish => format!(
+            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+function __{function}_complete
+    set -l words (commandline -opc)[2..-1] (commandline -ct)
+    for line in (command {bin} {REQUEST} fish $words 2>/dev/null)
+        if test "$line" = \u0001files
+            __fish_complete_path (commandline -ct)
+        else if test -n "$line"
+            echo $line
+        end
+    end
+end
+complete -c {bin} -f -a '(__{function}_complete)'
+"#
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lines_split_as_a_shell_splits_them() {
+        assert_eq!(
+            split_line("prog -o 'a b' c\\ d"),
+            ["prog", "-o", "a b", "c d"]
+        );
+        assert_eq!(split_line("prog --x="), ["prog", "--x="]);
+        assert_eq!(split_line("prog "), ["prog", ""]);
+        assert_eq!(split_line("prog \"q\\\"x"), ["prog", "q\"x"]);
+    }
+
+    #[test]
+    fn bash_gets_the_part_after_its_word_break() {
+        let c = Completions {
+            candidates: vec![Candidate {
+                value: "--color=always".into(),
+                help: "",
+            }],
+            files: false,
+        };
+        assert_eq!(render_bash(&c, "--color=al", "al"), "always\n");
+        assert_eq!(render_bash(&c, "--color=", "="), "=always\n");
+        assert_eq!(render_bash(&c, "--col", "--col"), "--color=always\n");
+    }
+
+    #[test]
+    fn scripts_call_back_the_program() {
+        for &shell in Shell::ALL {
+            let script = script("my-tool", shell);
+            assert!(script.contains("my-tool __complete_word__"), "{script}");
+        }
+    }
+}

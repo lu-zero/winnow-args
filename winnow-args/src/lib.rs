@@ -37,6 +37,7 @@
 
 pub mod color;
 pub mod combinator;
+pub mod complete;
 pub mod env;
 pub mod error;
 pub mod help;
@@ -82,6 +83,23 @@ pub trait Args: Sized {
         help_short: false,
         version: None,
     };
+
+    /// Answer a completion script's callback (`PROG __complete_word__ …`)
+    /// from this command's help data; `None` when `args` (the command line
+    /// after the program's name) is not one. See [`complete`].
+    fn completion_request(args: &[std::ffi::OsString]) -> Option<String> {
+        complete::answer(Self::HELP, args)
+    }
+
+    /// The completion script for `shell`, calling back the program named in
+    /// the help data (`#[arg(name = "…")]`).
+    ///
+    /// # Panics
+    ///
+    /// If the command has no name, or one that is not a plain word.
+    fn completion_script(shell: complete::Shell) -> String {
+        complete::script(Self::HELP.name, shell)
+    }
 
     /// Parse `words`, which should not include the program name.
     fn parse_from(words: &[&winnow::stream::BStr]) -> Result<Self, Error> {
