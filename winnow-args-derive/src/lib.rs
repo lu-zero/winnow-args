@@ -194,6 +194,16 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
+/// Derive `Occurrence` for an enum: one variant per flag or positional, kept
+/// in command-line order by an `#[arg(sequence)]` field of an `Args` struct.
+#[proc_macro_derive(Occurrence, attributes(arg, winnow_args))]
+pub fn derive_occurrence(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    expand_occurrence(&input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -203,6 +213,163 @@ pub fn derive_value_enum(input: TokenStream) -> TokenStream {
 }
 
 /// `FromArg` as one `match` on the value's bytes.
+/// `from_arg`: a `match` on the long name and one on the letter, each arm
+/// building its variant; `from_word`: the positional variant, if any.
+fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
+    let Data::Enum(data) = &input.data else {
+        return Err(syn::Error::new(
+            input.span(),
+            "`Occurrence` can only be derived for enums",
+        ));
+    };
+    let (mut long_arms, mut short_arms) = (Vec::new(), Vec::new());
+    let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
+    let mut word = None;
+    for variant in &data.variants {
+        let ident = &variant.ident;
+        let (mut short, mut longs, mut positional) = (None, Vec::new(), false);
+        let (mut two_dashes, mut prefix, mut value_name) = (false, false, None);
+        for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("short") {
+                    short = Some(meta.value()?.parse::<LitChar>()?.value());
+                } else if meta.path.is_ident("long") {
+                    longs.push(if meta.input.peek(syn::Token![=]) {
+                        meta.value()?.parse::<LitStr>()?.value()
+                    } else {
+                        kebab_case(&ident.to_string())
+                    });
+                } else if meta.path.is_ident("alias") {
+                    longs.extend(aliases(&meta)?);
+                } else if meta.path.is_ident("positional") {
+                    positional = true;
+                } else if meta.path.is_ident("two_dashes") {
+                    two_dashes = true;
+                } else if meta.path.is_ident("prefix") {
+                    prefix = true;
+                } else if meta.path.is_ident("value_name") {
+                    value_name = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else {
+                    return Err(meta.error(
+                        "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix` or `value_name`",
+                    ));
+                }
+                Ok(())
+            })?;
+        }
+        let takes = match &variant.fields {
+            Fields::Unit => None,
+            Fields::Unnamed(f) if f.unnamed.len() == 1 => Some(&f.unnamed[0].ty),
+            _ => {
+                return Err(syn::Error::new(
+                    variant.span(),
+                    "an `Occurrence` variant is a unit (a switch) or holds one value",
+                ));
+            }
+        };
+        if positional {
+            let Some(ty) = takes else {
+                return Err(syn::Error::new(
+                    variant.span(),
+                    "a positional variant holds its value",
+                ));
+            };
+            if word.is_some() {
+                return Err(syn::Error::new(
+                    variant.span(),
+                    "at most one positional variant",
+                ));
+            }
+            let name = value_name.unwrap_or_else(|| ident.to_string().to_uppercase());
+            word = Some(quote! {
+                ::core::result::Result::Ok(::core::option::Option::Some(
+                    Self::#ident(__word.convert::<#ty>(#name)?),
+                ))
+            });
+            continue;
+        }
+        if short.is_none() && longs.is_empty() {
+            longs.push(kebab_case(&ident.to_string()));
+        }
+        let body = match takes {
+            None => quote! {
+                __arg.check_switch()?;
+                ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident))
+            },
+            Some(ty) => quote! {
+                let __value = __arg.read_value(__input)?;
+                ::core::result::Result::Ok(::core::option::Option::Some(
+                    Self::#ident(__arg.convert::<#ty>(__value)?),
+                ))
+            },
+        };
+        if !longs.is_empty() {
+            let pattern = byte_patterns(&longs);
+            long_arms.push(quote!(#pattern => { #body }));
+            if !two_dashes {
+                single_dash.extend(longs.iter().cloned());
+            }
+        }
+        if let Some(c) = short {
+            if prefix {
+                if !c.is_ascii() || takes.is_none() {
+                    return Err(syn::Error::new(
+                        variant.span(),
+                        "`prefix` is for a value-taking variant with an ASCII `short` letter",
+                    ));
+                }
+                prefixes.push(c as u8);
+            }
+            let letter = LitChar::new(c, Span::call_site());
+            short_arms.push(quote!(#letter => { #body }));
+        }
+    }
+    let word =
+        word.unwrap_or_else(|| quote!(::core::result::Result::Ok(::core::option::Option::None)));
+    let is_long = if single_dash.is_empty() {
+        quote!(false)
+    } else {
+        let names = byte_patterns(&single_dash);
+        quote!(matches!(__name, #names))
+    };
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    Ok(quote! {
+        impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
+            const PREFIXES: &'static [u8] = &[#(#prefixes),*];
+
+            fn from_arg<'__i>(
+                __arg: &::winnow_args::Arg<'__i>,
+                __input: &mut ::winnow_args::Argv<'__i>,
+            ) -> ::core::result::Result<::core::option::Option<Self>, ::winnow_args::Error> {
+                let _ = &__input;
+                match __arg {
+                    ::winnow_args::Arg::Long(__flag) => match __flag.name {
+                        #(#long_arms)*
+                        _ => ::core::result::Result::Ok(::core::option::Option::None),
+                    },
+                    ::winnow_args::Arg::Short(__flag) if !__flag.plus => match __flag.letter {
+                        #(#short_arms)*
+                        _ => ::core::result::Result::Ok(::core::option::Option::None),
+                    },
+                    _ => ::core::result::Result::Ok(::core::option::Option::None),
+                }
+            }
+
+            fn from_word(
+                __word: &::winnow_args::token::Word<'_>,
+            ) -> ::core::result::Result<::core::option::Option<Self>, ::winnow_args::Error> {
+                let _ = __word;
+                #word
+            }
+
+            fn is_long(__name: &[u8]) -> bool {
+                #is_long
+            }
+        }
+    })
+}
+
 fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let Data::Enum(data) = &input.data else {
         return Err(syn::Error::new(
@@ -475,12 +642,22 @@ fn is_bool(ty: &Type) -> bool {
     last_segment(ty).is_some_and(|s| s.ident == "bool" && s.arguments.is_none())
 }
 
+/// Whether a field is `#[arg(sequence)]`: occurrences of an `Occurrence` enum.
+fn is_sequence(f: &syn::Field) -> bool {
+    has_flag(f, "sequence")
+}
+
 /// Whether a field is `#[arg(skip)]`: left at its default, not parsed.
 fn is_skipped(f: &syn::Field) -> bool {
+    has_flag(f, "skip")
+}
+
+/// Whether one of the field's attributes is the bare word `name`.
+fn has_flag(f: &syn::Field, name: &str) -> bool {
     f.attrs.iter().filter(|a| is_ours(a)).any(|a| {
         let mut skip = false;
         let _ = a.parse_nested_meta(|meta| {
-            if meta.path.is_ident("skip") {
+            if meta.path.is_ident(name) {
                 skip = true;
             } else if meta.input.peek(syn::Token![=]) {
                 meta.value()?.parse::<syn::Expr>()?;
@@ -936,15 +1113,39 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let fields = named
         .named
         .iter()
-        .filter(|f| !is_skipped(f))
+        .filter(|f| !is_skipped(f) && !is_sequence(f))
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
     let skipped: Vec<&Ident> = named
         .named
         .iter()
-        .filter(|f| is_skipped(f))
+        .filter(|f| is_skipped(f) && !is_sequence(f))
         .filter_map(|f| f.ident.as_ref())
         .collect();
+    // `#[arg(sequence)] items: Vec<T>`: occurrences of `T`'s flags and
+    // positional, in order.
+    let sequences: Vec<&syn::Field> = named.named.iter().filter(|f| is_sequence(f)).collect();
+    if let Some(extra) = sequences.get(1) {
+        return Err(syn::Error::new(
+            extra.span(),
+            "a struct has at most one `sequence` field",
+        ));
+    }
+    let sequence = match sequences.first() {
+        Some(f) => {
+            let Some(ty) = last_segment(&f.ty)
+                .filter(|s| s.ident == "Vec")
+                .and_then(inner)
+            else {
+                return Err(syn::Error::new(
+                    f.ty.span(),
+                    "a `sequence` field is a `Vec<T>` of an `Occurrence` enum",
+                ));
+            };
+            Some((f.ident.clone().expect("named field"), ty.clone()))
+        }
+        None => None,
+    };
     check_duplicates(&fields)?;
     let dd = |f: &Field| match f.role {
         Role::Positional { double_dash, .. } => double_dash,
@@ -1360,10 +1561,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     });
+    let sequence_word = sequence.as_ref().map(|(_, ty)| {
+        quote! {
+            if let ::core::option::Option::Some(__item) =
+                <#ty as ::winnow_args::Occurrence>::from_word(&__word)?
+            {
+                __sequence.push(__item);
+                continue;
+            }
+        }
+    });
     let word_arm = quote! {
         __wa::Arg::Word(__word) => {
             #restart
             #route
+            #sequence_word
             #positional_match
         }
     };
@@ -1395,6 +1607,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .filter(|(_, f)| f.negative_numbers)
         .map(|(i, _)| i)
         .collect();
+    let (sequence_slot, sequence_arg, sequence_build) = match &sequence {
+        Some((ident, ty)) => (
+            quote!(let mut __sequence: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();),
+            quote! {
+                if let ::core::option::Option::Some(__item) =
+                    <#ty as ::winnow_args::Occurrence>::from_arg(&__arg, __input)?
+                {
+                    __sequence.push(__item);
+                } else
+            },
+            quote!(#ident: __sequence,),
+        ),
+        None => (quote!(), quote!(), quote!()),
+    };
     let lexer = if plus_options {
         quote!(__wa::arg_plus)
     } else {
@@ -1507,19 +1733,38 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     } else {
         Vec::new()
     };
-    let lex = if !names.is_empty() {
+    let sequence_ty = sequence.as_ref().map(|(_, ty)| ty);
+    let lex = if long_only && (!names.is_empty() || sequence_ty.is_some()) {
         let prefixes: Vec<u8> = fields
             .iter()
             .filter(|f| f.prefix)
             .filter_map(|f| f.short().map(|c| c as u8))
             .collect();
-        let names = byte_patterns(&names);
+        let own = if names.is_empty() {
+            quote!(false)
+        } else {
+            let names = byte_patterns(&names);
+            quote!(matches!(__name, #names))
+        };
+        let (their_names, their_prefixes) = match sequence_ty {
+            Some(ty) => (
+                quote!(|| <#ty as ::winnow_args::Occurrence>::is_long(__name)),
+                quote! {
+                    && !__name.first().is_some_and(|__c| {
+                        <#ty as ::winnow_args::Occurrence>::PREFIXES.contains(__c)
+                    })
+                },
+            ),
+            None => (quote!(), quote!()),
+        };
         let not_prefixed = (!prefixes.is_empty()).then(|| {
             let prefixes = prefixes.iter().map(|b| quote!(#b));
             quote!(!matches!(__name.first(), ::core::option::Option::Some(#(#prefixes)|*)) &&)
         });
         quote! {
-            match __wa::long_only(__input, |__name| #not_prefixed matches!(__name, #names)) {
+            match __wa::long_only(__input, |__name| {
+                #not_prefixed (#own #their_names) #their_prefixes
+            }) {
                 ::core::option::Option::Some(__arg) => __arg,
                 ::core::option::Option::None => #lex,
             }
@@ -1665,6 +1910,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 #(#slots)*
+                #sequence_slot
                 #(#displaced)*
                 #position
                 #filled_slot
@@ -1679,14 +1925,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #(#long_arms)*
                             #help_long
                             #version_long
-                            _ => if !__globals.bind(&__arg, __input)? { #unknown_flag },
+                            _ => #sequence_arg if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
                         #plus_match
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             #help_short
                             #version_short
-                            _ => if !__globals.bind(&__arg, __input)? { #unknown_short },
+                            _ => #sequence_arg if !__globals.bind(&__arg, __input)? { #unknown_short },
                         },
                         #separator_arm
                         #word_arm
@@ -1700,6 +1946,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ::core::result::Result::Ok(Self {
                     #(#build,)*
                     #(#skipped: ::core::default::Default::default(),)*
+                    #sequence_build
                 })
             }
         }

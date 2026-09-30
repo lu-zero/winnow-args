@@ -114,16 +114,23 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 
 ## Phase 4: order is meaning
 
-- [ ] Inputs and position-dependent state interleave: `--as-needed`,
+- [x] Inputs and position-dependent state interleave: `--as-needed`,
       `--whole-archive`, `-Bstatic`/`-Bdynamic`, `--push-state`/`--pop-state`,
       `--start-group`/`--end-group`, `-(`/`-)`, `--start-lib`/`--end-lib`.
       Each input takes the state where it appears (wild's `modifier_stack`).
-      A derived struct of fields loses the order: this wants the combinator
-      layer, occurrences folded in order into a list of events.
+      A derived struct of fields loses the order, so `#[derive(Occurrence)]`
+      on an enum (one variant per flag or the input positional) and
+      `#[arg(sequence)] items: Vec<Item>` keep the occurrences in order for
+      the linker to fold; ordinary fields hold the rest. A `long_only` parent
+      also tries the enum's names with one dash, and its `prefix` letters
+      (`-lfoo`) win there too (`tests/sequence.rs`).
       (`mold: as-needed`, `as-needed-dso`, `whole-archive`, `push-pop-state`,
       `start-lib`, `static-archive`)
 - [x] Inputs are any word that is not an option, anywhere on the line.
-- [ ] A stray `--pop-state` or `--end-group` is an error at its position.
+- [ ] A stray `--pop-state` or `--end-group` is an error at its position: the
+      linker's check over the sequence, which needs each item's offset
+      (a `Spanned<T>` item, not there yet).
+- [ ] The sequence enum's flags in help, and its names in the duplicate check.
 
 ## Phase 5: response files
 
