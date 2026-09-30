@@ -388,6 +388,8 @@ pub struct Palette {
     pub invalid: Paint,
     /// What an error says is missing: something to type.
     pub valid: Paint,
+    /// A default value and each possible value, in help.
+    pub value: Paint,
 }
 
 impl Palette {
@@ -400,12 +402,14 @@ impl Palette {
         error: Paint::NONE,
         invalid: Paint::NONE,
         valid: Paint::NONE,
+        value: Paint::NONE,
     };
 
     /// The default in the 16 basic colors: greens for what is typed, cyans
     /// for structure and values, no yellow. Bold cyan headings, bold green
-    /// flags and subcommands, cyan value names, the program plain; bold red
-    /// `error:`, red for what was typed wrong, green for what is missing.
+    /// flags and subcommands, cyan value names, the program plain; green
+    /// default and possible values; bold red `error:`, red for what was typed
+    /// wrong, green for what is missing.
     pub const DEFAULT: Palette = Palette {
         header: Paint::ansi(Ansi::Cyan).bold(),
         program: Paint::NONE,
@@ -414,13 +418,15 @@ impl Palette {
         error: Paint::ansi(Ansi::Red).bold(),
         invalid: Paint::ansi(Ansi::Red),
         valid: Paint::ansi(Ansi::Green),
+        value: Paint::ansi(Ansi::Green),
     };
 
     /// [`Palette::DEFAULT`] in tamer tints of the 256-color palette, readable
     /// on dark and light backgrounds: bold teal 73 (`#5fafaf`) headings, bold
     /// green 71 (`#5faf5f`) flags and subcommands, slate teal 109 (`#87afaf`)
-    /// value names; bold red 167 (`#d75f5f`) `error:`, rose 174 (`#d78787`)
-    /// for what was typed wrong, sage 108 (`#87af87`) for what is missing.
+    /// value names, green 71 default and possible values; bold red 167
+    /// (`#d75f5f`) `error:`, rose 174 (`#d78787`) for what was typed wrong,
+    /// sage 108 (`#87af87`) for what is missing.
     pub const DEFAULT_256: Palette = Palette {
         header: Paint::fg(Color::Ansi256(73)).bold(),
         program: Paint::NONE,
@@ -429,11 +435,12 @@ impl Palette {
         error: Paint::fg(Color::Ansi256(167)).bold(),
         invalid: Paint::fg(Color::Ansi256(174)),
         valid: Paint::fg(Color::Ansi256(108)),
+        value: Paint::fg(Color::Ansi256(71)),
     };
 
     /// clap 4's colors: bold underlined headings, bold program and literals,
-    /// plain value names; bold red `error:`, yellow for what was typed wrong,
-    /// green for what is missing.
+    /// plain value names, plain default and possible values; bold red
+    /// `error:`, yellow for what was typed wrong, green for what is missing.
     pub const CLAP: Palette = Palette {
         header: Paint::NONE.bold().underline(),
         program: Paint::NONE.bold(),
@@ -442,6 +449,7 @@ impl Palette {
         error: Paint::ansi(Ansi::Red).bold(),
         invalid: Paint::ansi(Ansi::Yellow),
         valid: Paint::ansi(Ansi::Green),
+        value: Paint::NONE,
     };
 
     /// The deepest color any role uses.
@@ -454,6 +462,7 @@ impl Palette {
             self.error,
             self.invalid,
             self.valid,
+            self.value,
         ];
         let mut deepest = Depth::Ansi16;
         let mut i = 0;

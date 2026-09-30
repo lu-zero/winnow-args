@@ -238,6 +238,10 @@ impl Style {
         self.ink(self.palette.valid)
     }
 
+    pub(crate) fn value(self) -> Ink {
+        self.ink(self.palette.value)
+    }
+
     /// `text` in `ink`, reset after.
     pub(crate) fn paint(ink: Ink, text: &str) -> String {
         let mut out = String::new();
@@ -333,7 +337,7 @@ pub fn render_styled(
         .map(|i| {
             let mut cell = Cell::default();
             push_item_placeholder(&mut cell, style, i);
-            (cell, describe(i, long))
+            (cell, describe(i, long, style))
         })
         .collect();
     section(&mut out, "Arguments", &arguments, long, width, style);
@@ -355,7 +359,7 @@ pub fn render_styled(
         let mut rows: Vec<(Cell, String)> = visible
             .iter()
             .filter(|i| !i.positional && i.heading == heading)
-            .map(|i| (flag_spec(i, style), describe(i, long)))
+            .map(|i| (flag_spec(i, style), describe(i, long, style)))
             .collect();
         if heading.is_none() {
             if command.help_flag {
@@ -470,7 +474,10 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
     spec
 }
 
-fn describe(item: &Item, long: bool) -> String {
+/// An item's description, then `[env: …]`, `[default: …]` and
+/// `[possible values: …]`, each value painted on its own (so a line never
+/// breaks inside a painted span).
+fn describe(item: &Item, long: bool, style: Style) -> String {
     let mut text = if long && !item.long_help.is_empty() {
         item.long_help.to_owned()
     } else {
@@ -485,11 +492,13 @@ fn describe(item: &Item, long: bool) -> String {
     if let Some(env) = item.env {
         add(format!("[env: {env}]"));
     }
+    let value = |text: &str| Style::paint(style.value(), text);
     if let Some(default) = item.default {
-        add(format!("[default: {default}]"));
+        add(format!("[default: {}]", value(default)));
     }
     if !item.choices.is_empty() {
-        add(format!("[possible values: {}]", item.choices.join(", ")));
+        let choices: Vec<String> = item.choices.iter().map(|c| value(c)).collect();
+        add(format!("[possible values: {}]", choices.join(", ")));
     }
     text
 }
@@ -599,7 +608,17 @@ impl<'a> Iterator for Wrap<'a> {
         }
         // The byte after the last character that fits, and the last space before it.
         let (mut end, mut space, mut count, mut text) = (self.rest.len(), None, 0, false);
+        let mut escape = false;
         for (at, c) in self.rest.char_indices() {
+            // SGR sequences (`ESC [ … m`) take no columns.
+            if escape {
+                escape = c != 'm';
+                continue;
+            }
+            if c == '\u{1b}' {
+                escape = true;
+                continue;
+            }
             if count == self.width {
                 end = at;
                 break;
@@ -651,6 +670,20 @@ mod tests {
     #[test]
     fn indentation_stays_on_the_first_piece() {
         assert_eq!(wrap("    $ mise use node", 12), ["    $ mise", "use node"]);
+    }
+
+    #[test]
+    fn escapes_take_no_columns() {
+        let green = |s: &str| format!("\u{1b}[32m{s}\u{1b}[0m");
+        let line = format!("[possible values: {}, {}]", green("auto"), green("never"));
+        let pieces = wrap(&line, 24);
+        assert_eq!(
+            pieces,
+            [
+                format!("[possible values: {},", green("auto")),
+                format!("{}]", green("never"))
+            ]
+        );
     }
 
     #[test]

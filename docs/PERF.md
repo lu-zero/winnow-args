@@ -897,3 +897,13 @@ No mid-tone reaches 4.5 on both backgrounds, and the palette cannot know which
 one it is on; these read well on dark and far better than before on light. The
 16-color palette's look is the terminal theme's. `Palette::CLAP` keeps clap's
 own error colors, yellow included. Rendering only; parsing is untouched.
+
+## 35. Default and possible values highlighted
+
+A seventh palette role, `value`, paints the value in `[default: …]` and each
+value in `[possible values: …]` (plain green in 16 colors, green 71 in 256;
+unpainted in `Palette::CLAP`, as in clap). Values are painted one by one, so
+the spaces between them stay plain and a wrapped line never breaks inside a
+painted span; `Wrap` now skips SGR sequences when counting columns. The
+strip-equals-plain test covers wrapping with the new escapes at 50 and 100
+columns. Rendering only.

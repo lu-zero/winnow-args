@@ -351,6 +351,26 @@ fn color_defaults_to_greens_and_cyans() {
         text.contains("\u{1b}[1;38;5;71m--cd\u{1b}[0m \u{1b}[38;5;109m<DIR>\u{1b}[0m"),
         "{text:?}"
     );
+    // Default and possible values are painted one by one, never their labels.
+    let text = styled_as(Style::COLORED, &["-h"], &[]);
+    assert!(text.contains("[default: \u{1b}[32m4\u{1b}[0m]"), "{text:?}");
+    let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
+    assert!(
+        text.contains("[possible values: \u{1b}[32mjson\u{1b}[0m, \u{1b}[32mtoml\u{1b}[0m]"),
+        "{text:?}"
+    );
+    let text = styled_as(
+        Style::at(Palette::DEFAULT_256, Depth::Ansi256),
+        &["use", "-h"],
+        &[],
+    );
+    assert!(
+        text.contains("[possible values: \u{1b}[38;5;71mauto\u{1b}[0m, "),
+        "{text:?}"
+    );
+    // clap leaves them plain.
+    let text = styled_as(Style::CLAP, &["use", "-h"], &[]);
+    assert!(text.contains("[possible values: json, toml]"), "{text:?}");
     // No yellow anywhere in either default.
     for palette in [Palette::DEFAULT, Palette::DEFAULT_256] {
         let e = parse::<Cli>(&["--fore"]).unwrap_err();
