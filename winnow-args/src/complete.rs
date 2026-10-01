@@ -108,6 +108,7 @@ pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
     };
     let mut state = Walk {
         command: root,
+        globals: Vec::new(),
         pending: None,
         stopped: false,
         position: 0,
@@ -121,6 +122,8 @@ pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
 /// Where a command line stands after the words before the cursor.
 struct Walk {
     command: &'static Command,
+    /// The global flags of the commands above.
+    globals: Vec<&'static Item>,
     /// A flag waiting for its value in the next word.
     pending: Option<&'static Item>,
     /// Past a `--`.
@@ -130,13 +133,19 @@ struct Walk {
 }
 
 impl Walk {
-    fn flags(&self) -> impl Iterator<Item = &'static Item> + use<> {
-        self.command.items.iter().filter(|i| !i.positional)
+    fn flags(&self) -> impl Iterator<Item = &'static Item> + '_ {
+        let own = self.command.items.iter().filter(|i| !i.positional);
+        own.chain(self.globals.iter().copied())
     }
 
     fn long(&self, name: &str) -> Option<&'static Item> {
         self.flags()
-            .find(|i| i.long == Some(name) || i.negate == Some(name))
+            .find(|i| i.long == Some(name) || i.negate == Some(name) || i.aliases.contains(&name))
+    }
+
+    /// Whether `item` takes the next word as its value.
+    fn takes_next(item: &Item) -> bool {
+        item.value_name.is_some() && !item.require_equals
     }
 
     fn short(&self, letter: char) -> Option<&'static Item> {
@@ -160,7 +169,7 @@ impl Walk {
             };
             self.pending = self
                 .long(name)
-                .filter(|i| i.value_name.is_some() && value.is_none());
+                .filter(|i| Self::takes_next(i) && value.is_none());
         } else if let Some(letters) = word.strip_prefix('-').filter(|l| !l.is_empty()) {
             for (at, letter) in letters.char_indices() {
                 let Some(item) = self.short(letter) else {
@@ -168,7 +177,7 @@ impl Walk {
                 };
                 if item.value_name.is_some() {
                     // The value is the rest of the word, or the next word.
-                    if at + letter.len_utf8() == letters.len() {
+                    if at + letter.len_utf8() == letters.len() && Self::takes_next(item) {
                         self.pending = Some(item);
                     }
                     break;
@@ -180,6 +189,8 @@ impl Walk {
             .iter()
             .find(|s| s.names.contains(&word))
         {
+            let globals = self.command.items.iter().filter(|i| i.global);
+            self.globals.extend(globals);
             self.command = sub.command;
             self.position = 0;
         } else {
@@ -289,15 +300,22 @@ fn push(out: &mut Completions, value: &str, help: &'static str, typed: &str) {
 /// The callback is `__complete_word__ --shell SHELL --line LINE`, `LINE`
 /// being the command line up to the cursor; bash adds `--bash-word WORD`, the
 /// part of the current word it will replace (it breaks words at `=` and `:`
-/// too).
+/// too). A shell that hands over words already unquoted (elvish) ends with
+/// `--words WORD…` instead of `--line`.
 pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
     let (first, rest) = args.split_first()?;
     if first.to_str()? != REQUEST {
         return None;
     }
     let (mut shell, mut line, mut replaced) = (None, String::new(), None);
+    let mut given: Option<Vec<String>> = None;
     let mut rest = rest.iter().map(|a| a.to_string_lossy().into_owned());
     while let Some(option) = rest.next() {
+        if option == "--words" {
+            // Every later argument is a word, the program's name first.
+            given = Some(rest.by_ref().collect());
+            break;
+        }
         let value = rest.next().unwrap_or_default();
         match option.as_str() {
             "--shell" => shell = Shell::from_name(&value),
@@ -307,7 +325,7 @@ pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
         }
     }
     let shell = shell?;
-    let mut words = split_line(&line);
+    let mut words = given.unwrap_or_else(|| split_line(&line));
     if !words.is_empty() {
         words.remove(0);
     }
@@ -357,6 +375,8 @@ pub fn render(completions: &Completions, shell: Shell) -> String {
 /// bash replaces only the part of the word after its last `=` or `:`: the
 /// candidates lose what came before it.
 fn render_bash(completions: &Completions, typed: &str, replaced: &str) -> String {
+    // Right after `--name=`, bash's current word is the `=` itself.
+    let replaced = if replaced == "=" { "" } else { replaced };
     let cut = typed
         .strip_suffix(replaced)
         .map_or(0, |before| before.len());
@@ -435,7 +455,9 @@ pub fn script(bin: &str, shell: Shell) -> String {
         Shell::Bash => format!(
             r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
 _{function}_complete() {{
-    local line files=
+    local line files= cur="${{COMP_WORDS[COMP_CWORD]}}"
+    # Right after `--name=`, the current word is the `=` itself.
+    [[ $cur == = ]] && cur=
     COMPREPLY=()
     while IFS= read -r line; do
         if [[ $line == $'\001files' ]]; then
@@ -448,7 +470,7 @@ _{function}_complete() {{
     if [[ -n $files ]]; then
         compopt -o filenames 2>/dev/null
         local IFS=$'\n'
-        COMPREPLY+=($(compgen -f -- "${{COMP_WORDS[COMP_CWORD]}}"))
+        COMPREPLY+=($(compgen -f -- "$cur"))
     fi
 }}
 complete -F _{function}_complete {bin}
@@ -497,8 +519,7 @@ complete -c {bin} -f -a '(__{function}_complete)'
 use str
 
 set edit:completion:arg-completer[{bin}] = {{|@words|
-    var line = (str:join ' ' $words)
-    for answer [(e:{bin} {REQUEST} --shell elvish --line $line 2>/dev/null | from-lines)] {{
+    for answer [(e:{bin} {REQUEST} --shell elvish --words $@words 2>/dev/null | from-lines)] {{
         if (eq $answer "\x01files") {{
             edit:complete-filename $words[-1]
         }} elif (not-eq $answer '') {{
@@ -523,6 +544,8 @@ Register-ArgumentCompleter -Native -CommandName '{bin}' -ScriptBlock {{
     $extent = $commandAst.Extent
     $offset = [Math]::Min([Math]::Max($cursorPosition - $extent.StartOffset, 0), $extent.Text.Length)
     $line = $extent.Text.Substring(0, $offset)
+    # The extent ends at the last token: a word not yet typed needs its space.
+    if ($wordToComplete -eq '' -and -not $line.EndsWith(' ')) {{ $line += ' ' }}
     $answers = @(& '{bin}' {REQUEST} --shell powershell --line $line 2>$null)
 
     foreach ($answer in $answers) {{
@@ -567,7 +590,7 @@ mod tests {
             files: false,
         };
         assert_eq!(render_bash(&c, "--color=al", "al"), "always\n");
-        assert_eq!(render_bash(&c, "--color=", "="), "=always\n");
+        assert_eq!(render_bash(&c, "--color=", "="), "always\n");
         assert_eq!(render_bash(&c, "--col", "--col"), "--color=always\n");
     }
 

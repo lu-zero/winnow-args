@@ -102,7 +102,7 @@ fn skip_variants_are_not_spelled() {
         parse(&["--z-now"]).unwrap(),
         [Item::Unknown(spanned("--z-now", 0, false))]
     );
-    assert_ne!(parse(&["--z-now"]).unwrap()[0], built);
+    assert_eq!(built, Item::ZNow);
     // An `Occurrence` without an unknown variant still rejects.
     #[derive(Occurrence, Debug)]
     enum Strict {

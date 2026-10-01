@@ -37,6 +37,10 @@ use winnow::stream::BStr;
 /// line is at depth 1. mold's limit.
 pub const MAX_DEPTH: usize = 10;
 
+/// How many response files one command line may read in all: nesting fans
+/// out, and a file that names several others ten deep would never end.
+pub const MAX_FILES: usize = 4096;
+
 /// The storage [`expand`]'s words borrow from: the files' contents and the
 /// words that had to be unquoted.
 #[derive(Default, Debug)]
@@ -64,6 +68,8 @@ pub enum ResponseErrorKind {
     PrematureEnd,
     /// `@file` nested deeper than [`MAX_DEPTH`].
     TooDeep,
+    /// More than [`MAX_FILES`] response files.
+    TooMany,
 }
 
 impl fmt::Display for ResponseError {
@@ -73,6 +79,7 @@ impl fmt::Display for ResponseError {
             ResponseErrorKind::Io(error) => write!(f, "{path}: {error}"),
             ResponseErrorKind::PrematureEnd => write!(f, "{path}: premature end of input"),
             ResponseErrorKind::TooDeep => write!(f, "{path}: response file nesting too deep"),
+            ResponseErrorKind::TooMany => write!(f, "{path}: too many response files"),
         }
     }
 }
@@ -138,6 +145,9 @@ fn read(
     };
     if depth > MAX_DEPTH {
         return Err(error(ResponseErrorKind::TooDeep));
+    }
+    if files.files.len() >= MAX_FILES {
+        return Err(error(ResponseErrorKind::TooMany));
     }
     let data = std::fs::read(path).map_err(|e| error(ResponseErrorKind::Io(e)))?;
     let file = files.files.len();

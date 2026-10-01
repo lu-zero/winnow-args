@@ -122,3 +122,20 @@ fn parses_the_expanded_line() {
     assert_eq!(ld.output.as_deref(), Some("a b.so"));
     assert_eq!(ld.inputs, ["x.o", "y.o"]);
 }
+
+#[test]
+fn the_number_of_files_is_capped() {
+    // Each file names the next one twice, ten deep: 2^10 leaves would be read
+    // twice over without a cap on the total.
+    let dir = dir("fanout");
+    let name = |i: usize| dir.join(format!("f{i}.rsp"));
+    for i in 0..12 {
+        let next = at(&name(i + 1));
+        let body = (0..8).map(|_| next.clone()).collect::<Vec<_>>().join(" ");
+        std::fs::write(name(i), if i < 9 { body } else { "x".into() }).unwrap();
+    }
+    let args = [at(&name(0))];
+    let mut files = ResponseFiles::default();
+    let error = expand(&args, &mut files).unwrap_err();
+    assert!(matches!(error.kind, ResponseErrorKind::TooMany), "{error}");
+}
