@@ -5,7 +5,7 @@ right. Behaviour follows usage's argv grammar (`../usage/docs/spec/argv.md`),
 which is also what its conformance corpus (`../usage/corpus/`) tests, unless a
 line says otherwise.
 
-Legend: `[x]` done in phase 1 · `[ ]` not yet · **decision** marks a place
+Legend: `[x]` done and covered by a test · `[ ]` not yet · **decision** marks a place
 where the references disagree and we picked a side.
 
 Two downstream users have grammars of their own, tracked apart:
@@ -78,7 +78,8 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] Repeatable option into `Vec<T>`, one value per occurrence, in order
 - [x] Value delimiters: `delimiter = ','` on `Vec` flags and positionals, each
       piece converted alone; `Named::arguments_as`, `Arg::values_as`, `token::split`
-- [ ] Variadic option (`--include a b`); `dont_delimit_trailing_values`
+- [x] `values = N`: a `Vec` flag takes `N` words an occurrence
+- [ ] Variadic option taking any number of words (`--include a b`); `dont_delimit_trailing_values`
 - [x] `default = "…"` and `env = "VAR"` on flags and positionals: command line >
       environment > default; `with_env` for deterministic tests
 - [x] Value enums: `#[derive(ValueEnum)]` (a `FromArg` match on bytes; `name`, `alias`)
@@ -117,13 +118,16 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] Nested subcommands
 - [x] `command(name, inner)` and `Word::after_separator` for the combinators
 - [x] Global flags (`#[arg(global)]`): accepted after the subcommand word at
-      any depth, bundles included; a subcommand's own declaration wins
+      any depth, bundles included, and before the word of a nested subcommand
+      enum; a subcommand's own declaration wins
+- [x] A unit subcommand accepts `--help`, `-h` and the inherited global flags
 - [x] `Globals` trait / `globals(closure)` for the combinators
 - [x] Subcommand aliases: `#[arg(alias = "…")]` on a variant; `command(["name", "alias"], …)`
 - [x] Struct-level `default_subcommand` (corpus 09) and `arg_required_else_help`
-      (`ErrorKind::HelpRequested` until help exists)
+      (`ErrorKind::HelpRequested`, which `report` prints on stderr)
+- [x] Hidden aliases: `alias_hidden` on a variant
 - [ ] `default_subcommand_on_empty`, `default_subcommand_flags`; external
-      subcommands; hidden aliases (help only)
+      subcommands
 - [ ] Multicall (argv[0] selects)
 
 ## 6. Values
@@ -132,6 +136,8 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] `FromArg` conversion: `String`, `PathBuf`, `OsString`, integers, floats, `char`
 - [x] `PathBuf`/`OsString` are lossless for non-UTF-8 on Unix
 - [ ] Lossless non-UTF-8 on Windows (WTF-8) without `unsafe`
+- [x] `value::Parsed<T>` for any `FromStr` type, `CInt<T>` (C-syntax integers),
+      `KeyValue<K, V>` (`key=value`), `Spanned<T>` (a value with its offset)
 - [ ] Custom value parsers in the derive (`parse_with = ...`)
 
 ## 7. Errors
@@ -172,7 +178,9 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)
 - [x] Shell completions: `complete::script` for bash, zsh, fish, elvish,
-      PowerShell, answered by the program (`Args::completion_request`)
+      PowerShell, answered by the program (`Args::completion_request`); bash and
+      zsh run end to end
+- [ ] The fish, elvish and PowerShell scripts run in their shells
 - [ ] Emit a usage KDL spec
 
 ## 9. Derive (`winnow-args-derive`)
@@ -186,9 +194,8 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       flag lookup is a compiled string match
 - [x] Positionals: `#[arg(positional, value_name = "…")]`, `T` / `Option<T>` / `Vec<T>`
 - [x] Subcommands: `#[arg(subcommand)]`, `#[derive(Subcommand)]`, `#[arg(name = "…")]`
-- [x] Flattening: `#[arg(flatten)]`, flags-only structs, nested; doc-comment help
-- [x] `#[cfg]` on fields: rustc strips a field compiled out before the derive
-      sees it, so nothing is needed
+- [x] Flattening: `#[arg(flatten)]`, flags-only structs, nested; a flag declared
+      in both the parent and a flattened struct is a compile error
 - [x] Every built field read once, as clap and usage do, so a flag accepted
       and ignored is not dead code in the user's crate
 
@@ -212,10 +219,10 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 
 ## Audit: usage's mise shadow (45 attribute keys)
 
-Parsing semantics still missing, by use count: ~~`conflicts` 77, `overrides` 37,
-`requires` 23, `group` 20~~, ~~`double_dash` 13~~, ~~`required` 10, `required_unless` 7~~,
-~~`value_optional`/`default_missing` 3, `restart_token` 2~~, ~~`default_subcommand` 1,
-`arg_required_else_help` 1~~; plus `-h/--help` and `-V/--version` everywhere
+Parsing semantics, all done, by use count: `conflicts` 77, `overrides` 37,
+`requires` 23, `group` 20, `double_dash` 13, `required` 10, `required_unless` 7,
+`value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
+`arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).
 
 Help and metadata only, needed for help output but not for parsing: `help`,

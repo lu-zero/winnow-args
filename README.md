@@ -30,11 +30,12 @@ fn main() {
 ## What it covers
 
 - **Three layers**: a lexer (`token`), bpaf-style combinators (`combinator`),
-  and the derives (`Args`, `Subcommand`, `ValueEnum`, `Occurrence`).
+  and the derives (`Args`, `Subcommand`, `ValueEnum`, `Occurrence`), whose rustdoc
+  lists every `#[arg(...)]` attribute.
 - **The usual**: short and long flags, bundles, aliases, counts, repeated and
   delimited values, optional values, `--no-x` pairs, positionals and the ways
   `--` treats them, subcommands with global flags, conflicts, requirements
-  and groups, environment variables and defaults, `flatten`, `#[cfg]` fields.
+  and groups, environment variables and defaults, `flatten`.
 - **Help and completion**: clap-like help with colour and wrapping; completion
   scripts for bash, zsh, fish, elvish and PowerShell that ask the program
   itself (`complete`).

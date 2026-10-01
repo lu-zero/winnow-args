@@ -1,11 +1,12 @@
 //! Shell completion, answered by the program itself.
 //!
 //! A generated script ([`script`]) registers a completion function with the
-//! shell; on Tab it runs the program as `PROG __complete_word__ SHELL …` with
-//! the words typed so far, and the program answers from its own help data
-//! ([`help::Command`](crate::help::Command)): flag names, a flag's choices, subcommand names, or a
-//! request for the shell's own file completion. The script stays a few lines
-//! and never goes stale: what can be typed is whatever the binary parses.
+//! shell; on Tab it runs the program as `PROG __complete_word__ --shell SHELL
+//! --line LINE` (see [`answer`]), and the program answers from its own help
+//! data ([`help::Command`](crate::help::Command)): flag names, a flag's
+//! choices, subcommand names, or a request for the shell's own file
+//! completion. The script stays a few lines and never goes stale: what can be
+//! typed is whatever the binary parses.
 //!
 //! [`Args::completion_request`](crate::Args::completion_request) answers the
 //! callback before the command line is parsed, and
@@ -298,10 +299,11 @@ fn push(out: &mut Completions, value: &str, help: &'static str, typed: &str) {
 /// on to parse it.
 ///
 /// The callback is `__complete_word__ --shell SHELL --line LINE`, `LINE`
-/// being the command line up to the cursor; bash adds `--bash-word WORD`, the
-/// part of the current word it will replace (it breaks words at `=` and `:`
-/// too). A shell that hands over words already unquoted (elvish) ends with
-/// `--words WORD…` instead of `--line`.
+/// being the command line up to the cursor, program name first; bash adds
+/// `--bash-word WORD`, the part of the current word it will replace (it breaks
+/// words at `=` and `:` too). A shell that hands over words already unquoted
+/// (elvish) ends with `--words WORD…`, the program's name first, instead of
+/// `--line`. The answer is one candidate a line, as [`render`] writes it.
 pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
     let (first, rest) = args.split_first()?;
     if first.to_str()? != REQUEST {

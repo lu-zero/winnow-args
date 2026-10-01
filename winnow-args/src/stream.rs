@@ -32,7 +32,7 @@ pub enum Mode {
     /// Past a `--`: every word is a value.
     Stopped,
     /// Every word is a value, but no `--` was typed: an argument declared
-    /// `double_dash = "automatic"` has taken a value ([`Argv::stop_flags`]).
+    /// `double_dash = "automatic"` or `stop_flags` has taken a value ([`Argv::stop_flags`]).
     Values,
 }
 
@@ -94,7 +94,8 @@ impl<'i> Argv<'i> {
     }
 
     /// Read every remaining word as a value, as if `--` had been typed. An
-    /// argument declared `double_dash = "automatic"` does this once it has a value.
+    /// argument declared `double_dash = "automatic"` or `stop_flags` does this
+    /// once it has a value.
     #[inline]
     pub fn stop_flags(&mut self) {
         if self.mode == Mode::Word {

@@ -133,14 +133,15 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
       `value::Spanned<T>` value.
 - [x] The sequence enum's flags in help (`Occurrence::ITEMS`, after the
       struct's own).
-- [ ] The sequence enum's names in the duplicate check.
+- [x] Duplicate spellings among the sequence enum's variants, and against the
+      parent's flags, are compile errors.
 
 ## Phase 5: response files
 
 `response::expand(&args, &mut ResponseFiles)` (`tests/response.rs`).
 
-- [x] `@file` expands to the file's words, recursively (mold caps nesting at
-      10), with quotes and backslashes; `@` is not a flag character.
+- [x] `@file` expands to the file's words, recursively (nesting is capped at
+      10 files deep and 4096 files in all), with quotes and backslashes; `@` is not a flag character.
       (`mold: response-file`, `response-file2`, `response-file-quoting`;
       wild `test_parse_recursive_file_option`, `test_arguments_from_string`,
       `test_parse_overlapping_file_and_inline_options`)

@@ -1,4 +1,4 @@
-# winnow-args design notes (phase 1)
+# winnow-args design notes
 
 ## What the references taught
 
@@ -24,10 +24,6 @@ words. Nothing is copied or joined, a word is never re-split (`"a b"` stays
 one value), and any byte, NUL included, may appear in a word. On Unix,
 `&OsStr` → `&BStr` is free (`as_encoded_bytes`), so a caller that already
 holds `&[&OsStr]`, as usage's harness does, parses with no allocation.
-
-Earlier drafts flattened argv into one NUL-terminated buffer so that every
-winnow byte parser applied directly. That cost a copy per parse (most of the
-remaining cost) and relied on NUL never appearing in a word; it is gone.
 
 Offsets are counted as if each word were followed by one separator. So a
 position inside a short bundle is still one number, which shrinks as the lexer
@@ -55,9 +51,9 @@ Two winnow facts drove this:
 `Word`, or `Separator`. It never decides whether a flag takes a value. The
 caller knows the flag and finishes it:
 
-- `token::value`: attached `=value`, the rest of a bundle (minus one `=`), or
+- `Arg::read_value`: attached `=value`, the rest of a bundle (minus one `=`), or
   the next word if that word isn't flag-like.
-- `token::no_value`: rejects `--switch=x`.
+- `Arg::check_switch`: rejects `--switch=x`.
 
 This split lets one lexer serve both composition styles.
 
