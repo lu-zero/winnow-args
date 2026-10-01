@@ -286,7 +286,7 @@ usage-port (`ab991c00`, the same base with usage-rs), release builds, pinned
   | `type -t ls` | 10.6 | 20.3 | 14.8 | 14.5 |
   | `read -r v <<<x` | 11.1 | 19.0 | 12.5 | 12.2 |
 
-After `ef4941e` (positional `Vec` sized once) and brush `f3b149ee` (the
+After `20c786f` (positional `Vec` sized once) and brush `f3b149ee` (the
 adapter's word list on the stack), instructions per script, averaged over
 four copies at different paths, usage / winnow: wordops 498.0 M / 498.7 M,
 config-lint-500 427.1 M / 413.2 M, deploy-sim 26.41 M / 26.26 M. Per call:
@@ -314,6 +314,6 @@ wordops 497.9 M against usage-port's 498.4 M.
 - [x] Release binary 6 472 000 bytes against usage-port's 6 733 808 (−256 KiB).
       three-way.py (15 samples) level with usage-port within noise; per call
       winnow is 0.1–0.6 µs faster, and `set -f +f` 77.8 → 5.0 µs.
-- [x] `flatten` (`d2c7f5f`): `complete`/`compgen` share
+- [x] `flatten` (`3b4825f`): `complete`/`compgen` share
       `CommonCompleteCommandArgs` as on usage-port (`be93f772`).
 - [ ] fish, elvish and PowerShell scripts run in their shells.
