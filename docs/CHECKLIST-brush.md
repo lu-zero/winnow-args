@@ -43,11 +43,9 @@ Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
       builtins move one at a time. `impl_winnow_args!(T, "synopsis")` maps a
       derived `winnow_args::Args` to brush's `FromArgs` and `builtins::Command`
       (`brush-builtins/src/args/winnow_support.rs`).
-- [x] Errors in bash's shape: `hash: -x: invalid option`, then
-      `hash: usage: hash [-lr] [-p pathname] [-dt] [name ...]`, status 2;
-      bash's own usage line where the builtin gives one (`help -s`), else one
-      derived from the help data. brush prints the message as is (bash's
-      `bash: line N:` prefix is the shell's, not the builtin's).
+- [x] Errors with status 2 and a usage line. (On `winnow-port`, superseded:
+      winnow-args' own message, `name: error: unknown flag `-x``, and a usage
+      line derived from the help data; no text taken from another shell.)
 - [x] `--help` asks for help only as the first word, as in bash, and prints
       the usage line and description; `-h` is not help.
 - [x] `help NAME` content (detailed, short usage, short description) from the
@@ -143,8 +141,8 @@ Done on brush branch `winnow-args-engine` (local, `c499caf0`, `fe431505`):
       because clap's derive on the same enums claims `#[arg]`. Per call:
       `compgen -W "a b" a` 26.2 → 10.6 µs, `complete -o nospace -W x cmd`
       29.8 → 8.4 µs.
-- [x] Each name of a shared builtin gets its own bash usage line
-      (`local: usage: local [option] name[=value] ...`).
+- [x] Each name of a shared builtin (`declare`, `local`, `typeset`) gets its
+      own usage line.
 - [x] Measure: compat suite unchanged (1971 passing, as with clap).
       `three-way.py`: config-lint-500 107 → 70 ms (−35 %), interp-loop
       285 → 232 ms (−19 %), the others within noise. Per call: `set -f +f`
@@ -202,9 +200,9 @@ included: `[ a = a ]` 9.1 → 7.3 µs, `test -n x` 7.4 → 6.0, `getopts ab o -a
       `"getopts: option value looks like another option"`, …)
 - [ ] brush's getopt on winnow-args' lexer (bundles, `-ovalue`, `--`, a lone
       `-`): it works as it is, so only if it pays.
-- [x] `help -s`: bash's `name: usage` line, identical to bash for every ported
-      builtin. `help -d`: `name - about`, the text brush's: help need not
-      match bash's wording.
+- [x] `help -s`: `name: synopsis`, the synopsis derived from the help data.
+      `help -d`: `name - about`. Help need not match another shell's wording,
+      and copies none.
       (`help: "Topic-specific help"`)
 - [ ] `help -m`: man-page layout, unimplemented in every engine.
 
