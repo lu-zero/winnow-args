@@ -187,7 +187,8 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [x] Positionals: `#[arg(positional, value_name = "…")]`, `T` / `Option<T>` / `Vec<T>`
 - [x] Subcommands: `#[arg(subcommand)]`, `#[derive(Subcommand)]`, `#[arg(name = "…")]`
 - [x] Flattening: `#[arg(flatten)]`, flags-only structs, nested; doc-comment help
-- [x] `#[cfg]` on flag fields
+- [x] `#[cfg]` on fields: rustc strips a field compiled out before the derive
+      sees it, so nothing is needed
 - [x] Every built field read once, as clap and usage do, so a flag accepted
       and ignored is not dead code in the user's crate
 

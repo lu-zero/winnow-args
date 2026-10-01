@@ -198,12 +198,16 @@ pub trait Occurrence: Sized {
     /// The variants as help lists them, after the parent's own flags.
     const ITEMS: &'static [help::Item] = &[];
 
+    /// Whether there is a positional variant: it takes every word.
+    const POSITIONAL: bool = false;
+
     /// Whether there is an `#[arg(bundle)]` variant.
     const BUNDLES: bool = false;
 
     /// A word of several short flags (`-sS`), whole, as the `#[arg(bundle)]`
-    /// variant: an item put before those of its letters, for a program that
-    /// reports grouping (GNU ld deprecates it). `None` if there is none.
+    /// variant: an item put before those of its letters, whoever takes them,
+    /// for a program that reports grouping (GNU ld deprecates it). `None` if
+    /// there is none.
     fn from_bundle(word: &token::Word<'_>) -> Result<Option<Self>, Error> {
         let _ = word;
         Ok(None)
@@ -353,14 +357,16 @@ pub mod __private {
 
     /// The flags of a struct that another flattens (`#[arg(flatten)]`):
     /// derived for every `Args` struct that has flags only (no positionals,
-    /// subcommand, `sequence`, `unknown` or `global` flags).
+    /// subcommand, `sequence`, `unknown`, `keywords` or `global` flags, no
+    /// `unknown_flags = "value"`, no generics).
     ///
     /// The parent keeps a [`Flatten::Slots`], offers it each flag its own
     /// arms do not take, and builds the value at the end.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` cannot be flattened",
         note = "a flattened struct derives `Args` and has only flags: no positionals, \
-                subcommand, `sequence`, `unknown`, `global` flags or generics"
+                subcommand, `sequence`, `unknown`, `keywords`, `global` flags, \
+                `unknown_flags = \"value\"` or generics"
     )]
     pub trait Flatten: Sized {
         /// What has been parsed so far.
@@ -378,6 +384,9 @@ pub mod __private {
 
         /// Whether `name` is a long name that may take one dash (`long_only`).
         fn is_long(name: &[u8]) -> bool;
+
+        /// Whether `-letter` always takes the rest of its word (`prefix`).
+        fn is_prefix(letter: u8) -> bool;
 
         /// Apply environment variables, defaults and rules, and build the value.
         fn finish(slots: Self::Slots, input: &Argv<'_>) -> Result<Self, Error>;
@@ -470,13 +479,20 @@ pub mod __private {
         })
     }
 
-    /// The end of a unit subcommand: only inherited global flags may follow.
-    pub fn finish_with(input: &mut Argv<'_>, globals: &mut dyn Globals) -> Result<(), Error> {
+    /// The end of a unit subcommand: only inherited global flags may follow,
+    /// or a request for its `help`.
+    pub fn finish_with(
+        input: &mut Argv<'_>,
+        globals: &mut dyn Globals,
+        help: &'static crate::help::Command,
+    ) -> Result<(), Error> {
         while !input.is_empty() {
             let arg = arg(input)?;
             match arg {
                 Arg::Separator { .. } => {}
                 Arg::Long(_) | Arg::Short(_) if globals.bind(&arg, input)? => {}
+                Arg::Long(flag) if flag.name == b"help" => return Err(Error::help(help, true)),
+                Arg::Short(flag) if flag.letter == 'h' => return Err(Error::help(help, false)),
                 _ => return Err(arg.unexpected()),
             }
         }

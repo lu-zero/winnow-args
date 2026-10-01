@@ -158,3 +158,70 @@ fn scripts_name_the_program() {
         assert!(Tool::completion_script(shell).contains("tool __complete_word__"));
     }
 }
+
+/// Aliases, `require_equals`, global flags and a declared `--help`.
+#[derive(Args, Debug)]
+#[arg(name = "more")]
+#[allow(dead_code, reason = "only the help data is completed")]
+struct More {
+    #[arg(long, alias = "out", value_name = "FILE")]
+    output: Option<String>,
+    #[arg(long, require_equals)]
+    color: Option<When>,
+    #[arg(long, global)]
+    global_flag: bool,
+    /// Own help.
+    #[arg(long)]
+    help: bool,
+    #[arg(subcommand)]
+    command: Option<Command>,
+}
+
+fn more(words: &[&str]) -> winnow_args::complete::Completions {
+    complete(More::HELP, words)
+}
+
+#[test]
+fn the_walk_reads_the_line_as_the_parser_does() {
+    // An alias takes its value from the next word, like the name it stands for.
+    assert!(more(&["--out", ""]).files);
+    // `require_equals`: the next word is not the value.
+    let next = more(&["--color", ""]);
+    assert!(
+        !next.candidates.iter().any(|c| c.value == "auto"),
+        "{next:?}"
+    );
+    assert_eq!(more(&["--color=a"]).candidates.len(), 2);
+    // A global flag is offered below its command.
+    let below: Vec<_> = more(&["build", "--g"])
+        .candidates
+        .into_iter()
+        .map(|c| c.value)
+        .collect();
+    assert_eq!(below, ["--global-flag"]);
+    // A declared `--help` is listed once.
+    let help: Vec<_> = more(&["--he"])
+        .candidates
+        .into_iter()
+        .map(|c| c.value)
+        .collect();
+    assert_eq!(help, ["--help"]);
+}
+
+#[test]
+fn words_given_unquoted_are_not_split_again() {
+    let args: Vec<OsString> = [
+        "__complete_word__",
+        "--shell",
+        "elvish",
+        "--words",
+        "tool",
+        "a b",
+        "--co",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let answer = Tool::completion_request(&args).unwrap();
+    assert!(answer.starts_with("--color"), "{answer}");
+}

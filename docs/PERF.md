@@ -1116,3 +1116,30 @@ instructions a parse, `release`, subcommand dispatch included:
 
 A sequence enum's variants are now listed in help (`Occurrence::ITEMS`),
 after the struct's own flags.
+
+## 49. A review pass
+
+Two adversarial reviews (the runtime, and the derive's generated code) found
+what follows; each is fixed with a test in `tests/interactions.rs`,
+`tests/complete.rs` or `tests/response.rs`.
+
+- A `+x` word reached a flattened struct's `-x` arm; `+x` global flags never
+  reached a subcommand.
+- The built-in `-h`/`--help`/`-V`/`--version` shadowed a flattened struct's or
+  a sequence enum's own (ld's `-h SONAME`): with either, they are now tried
+  after them.
+- A `bundle` item was only reported when the enum took the word's first letter.
+- A flattened `prefix` letter was unknown to a `long_only` parent.
+- A tristate `Option<bool>` flag counted as taking a value in bundle checks.
+- A flag declared by a struct and by what it flattens, or by two variants of
+  an `Occurrence` enum, and a struct positional beside a positional variant,
+  are now compile errors (`help::items_clash`, checked in a `const`).
+- Unit subcommands had no `--help`; a subcommand enum nested in another did
+  not take global flags before its word; a declared `--help` was still listed.
+- Completion: aliases, `require_equals`, global flags below their command,
+  bash right after `--name=`, PowerShell's missing trailing space, elvish's
+  unquoted words (`--words`); response files are capped at 4 096 in all.
+- The `#[cfg]` handling in the derive was redundant (rustc strips the
+  field first) and is gone.
+
+The measured lines are unchanged: 2 186 and 3 476 warm instructions.

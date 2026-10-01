@@ -1,4 +1,5 @@
-//! `#[cfg]` on fields: a flag compiled out is not parsed, listed or built.
+//! `#[cfg]` on fields: rustc strips a field compiled out before the derive
+//! runs, so it is not parsed, listed or built.
 #![cfg(feature = "derive")]
 
 use winnow::stream::BStr;

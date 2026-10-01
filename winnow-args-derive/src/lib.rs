@@ -60,12 +60,18 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let command = match &inner {
             Some(ty) => quote!(<#ty as ::winnow_args::Args>::HELP),
             None => {
-                let about = &info.about;
-                let about = text(about);
+                // The whole doc comment, when the description is its first paragraph.
+                let (doc, long_doc) = docs(&variant.attrs);
+                let long_about = text(if doc == info.about {
+                    &long_doc
+                } else {
+                    &info.about
+                });
+                let about = text(&info.about);
                 quote!(&::winnow_args::help::Command {
                     name: "",
                     about: #about,
-                    long_about: #about,
+                    long_about: #long_about,
                     after_help: "",
                     after_long_help: "",
                     items: &[],
@@ -95,7 +101,17 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         });
         let parse = match &variant.fields {
-            Fields::Unit => quote!(__wa::finish_with(__input, __globals).map(|()| Self::#ident)),
+            Fields::Unit => {
+                let index = subs.len() - 1;
+                quote! {
+                    __wa::finish_with(
+                        __input,
+                        __globals,
+                        <Self as ::winnow_args::Args>::HELP.subcommands[#index].command,
+                    )
+                    .map(|()| Self::#ident)
+                }
+            }
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                 let ty = &fields.unnamed[0].ty;
                 match boxed(ty) {
@@ -167,30 +183,40 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ) -> ::core::result::Result<Self, ::winnow_args::Error> {
                 use ::winnow_args::__private as __wa;
                 let __help = <Self as ::winnow_args::Args>::HELP;
-                if __input.is_empty() {
-                    return ::core::result::Result::Err(__wa::Error::missing_subcommand(__input.offset()));
-                }
-                let __arg = __wa::arg(__input)?;
-                match __arg {
-                    __wa::Arg::Word(__word) => {
-                        if <Self as __wa::Subcommand>::has(&**__word.value) {
-                            return <Self as __wa::Subcommand>::parse_subcommand(
-                                &**__word.value, __input, __globals,
-                            );
+                // Inherited global flags may come before the subcommand's name.
+                loop {
+                    if __input.is_empty() {
+                        return ::core::result::Result::Err(
+                            __wa::Error::missing_subcommand(__input.offset()),
+                        );
+                    }
+                    let __arg = __wa::arg(__input)?;
+                    match __arg {
+                        __wa::Arg::Word(__word) => {
+                            if <Self as __wa::Subcommand>::has(&**__word.value) {
+                                return <Self as __wa::Subcommand>::parse_subcommand(
+                                    &**__word.value, __input, __globals,
+                                );
+                            }
+                            if &**__word.value == b"help" {
+                                return ::core::result::Result::Err(__wa::help_word(__help, __input));
+                            }
                         }
-                        if &**__word.value == b"help" {
-                            return ::core::result::Result::Err(__wa::help_word(__help, __input));
+                        __wa::Arg::Long(_) | __wa::Arg::Short(_)
+                            if __globals.bind(&__arg, __input)? =>
+                        {
+                            continue;
                         }
+                        __wa::Arg::Long(__flag) if __flag.name == b"help" => {
+                            return ::core::result::Result::Err(__wa::Error::help(__help, true));
+                        }
+                        __wa::Arg::Short(__flag) if __flag.letter == 'h' => {
+                            return ::core::result::Result::Err(__wa::Error::help(__help, false));
+                        }
+                        _ => {}
                     }
-                    __wa::Arg::Long(__flag) if __flag.name == b"help" => {
-                        return ::core::result::Result::Err(__wa::Error::help(__help, true));
-                    }
-                    __wa::Arg::Short(__flag) if __flag.letter == 'h' => {
-                        return ::core::result::Result::Err(__wa::Error::help(__help, false));
-                    }
-                    _ => {}
+                    return ::core::result::Result::Err(__arg.unexpected());
                 }
-                ::core::result::Result::Err(__arg.unexpected())
             }
         }
     })
@@ -228,6 +254,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
     let (mut word, mut unknown, mut bundle) = (None, None, None);
+    let mut seen = std::collections::HashMap::new();
     // What help lists: one row a variant, in declaration order.
     let mut help_items = Vec::new();
     let opt_str = |s: Option<&str>| match s {
@@ -298,7 +325,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     return Err(meta.error(
                         "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
                          `value_name`, `allow_hyphen_values`, `allow_negative_numbers`, \
-                         `require_equals`, `keep_equals`, `default_missing`, `skip` or `unknown`",
+                         `require_equals`, `keep_equals`, `default_missing`, `skip`, `unknown` or `bundle`",
                     ));
                 }
                 Ok(())
@@ -341,7 +368,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let Some(ty) = takes else {
                 return Err(syn::Error::new(
                     variant.span(),
-                    "a positional or `unknown` variant holds its value",
+                    "a positional, `unknown` or `bundle` variant holds its value",
                 ));
             };
             let ty = spanned.unwrap_or(ty);
@@ -355,7 +382,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             if slot.is_some() {
                 return Err(syn::Error::new(
                     variant.span(),
-                    "at most one positional and one `unknown` variant",
+                    "at most one positional, one `unknown` and one `bundle` variant",
                 ));
             }
             let name = value_name.unwrap_or_else(|| ident.to_string().to_uppercase());
@@ -365,10 +392,12 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 let (h_short, h_long) = (opt_str(None), opt_str(None));
                 let h_value = opt_str(Some(&name));
                 let h_positional = true;
+                let (h_aliases, h_require_equals) = (quote!(&[]), false);
                 let h_choices = quote!(<#ty as ::winnow_args::FromArg>::CHOICES);
                 help_items.push(quote!(::winnow_args::help::Item {
                     short: #h_short,
                     long: #h_long,
+                    aliases: #h_aliases,
                     negate: ::core::option::Option::None,
                     value_name: #h_value,
                     help: #h_help,
@@ -382,6 +411,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     default: ::core::option::Option::None,
                     env: ::core::option::Option::None,
                     choices: #h_choices,
+                    require_equals: #h_require_equals,
+                    global: false,
                 }));
             }
             let value = wrap(
@@ -397,6 +428,18 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         if short.is_none() && longs.is_empty() {
             longs.push(kebab_case(&ident.to_string()));
         }
+        let spelled = short
+            .map(|c| format!("-{c}"))
+            .into_iter()
+            .chain(longs.iter().map(|l| format!("--{l}")));
+        for name in spelled {
+            if let Some(other) = seen.insert(name.clone(), ident.clone()) {
+                return Err(syn::Error::new(
+                    variant.span(),
+                    format!("`{name}` is already used by `{other}`"),
+                ));
+            }
+        }
         {
             let (doc, long_doc) = docs(&variant.attrs);
             let (h_help, h_long_help) = (text(&doc), text(&long_doc));
@@ -411,6 +454,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     .then(|| value_name.as_deref().unwrap_or("VALUE")),
             );
             let h_positional = false;
+            let more = longs.iter().skip(1);
+            let (h_aliases, h_require_equals) = (quote!(&[#(#more),*]), require_equals);
             let h_choices = match takes {
                 Some(ty) => {
                     let ty = spanned.unwrap_or(ty);
@@ -421,6 +466,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             help_items.push(quote!(::winnow_args::help::Item {
                 short: #h_short,
                 long: #h_long,
+                aliases: #h_aliases,
                 negate: ::core::option::Option::None,
                 value_name: #h_value,
                 help: #h_help,
@@ -434,6 +480,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 default: ::core::option::Option::None,
                 env: ::core::option::Option::None,
                 choices: #h_choices,
+                require_equals: #h_require_equals,
+                global: false,
             }));
         }
         let body = match takes {
@@ -502,6 +550,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             short_arms.push(quote!(#letter => { #body }));
         }
     }
+    let has_positional = word.is_some();
     let word =
         word.unwrap_or_else(|| quote!(::core::result::Result::Ok(::core::option::Option::None)));
     let bundle = bundle.map(|body| {
@@ -535,6 +584,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
             const PREFIXES: &'static [u8] = &[#(#prefixes),*];
+
+            const POSITIONAL: bool = #has_positional;
 
             const ITEMS: &'static [::winnow_args::help::Item] = &[#(#help_items),*];
 
@@ -1007,9 +1058,6 @@ struct Field {
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
-    /// The field's `#[cfg(…)]` attributes, repeated on everything generated
-    /// for it.
-    cfg: TokenStream2,
 }
 
 impl Field {
@@ -1024,7 +1072,10 @@ impl Field {
             None => quote!(::core::option::Option::None),
         };
         let long = opt_str(self.longs().first().copied());
+        let aliases = self.longs().into_iter().skip(1);
         let negate = opt_str(self.negate.as_deref());
+        let require_equals = self.require_equals;
+        let global = matches!(self.role, Role::Flag { global: true, .. });
         let (positional, trailing) = match &self.role {
             Role::Positional { double_dash, .. } => (true, *double_dash == DoubleDash::Required),
             _ => (false, false),
@@ -1061,6 +1112,7 @@ impl Field {
             ::winnow_args::help::Item {
                 short: #short,
                 long: #long,
+                aliases: &[#(#aliases),*],
                 negate: #negate,
                 value_name: #value_name,
                 help: #help,
@@ -1074,6 +1126,8 @@ impl Field {
                 default: #default,
                 env: #env,
                 choices: #choices,
+                require_equals: #require_equals,
+                global: #global,
             }
         }
     }
@@ -1336,7 +1390,7 @@ impl Field {
 
     /// Whether a flag reads a value (rather than being a switch or a count).
     fn takes_value(&self) -> bool {
-        !matches!(self.kind, Kind::Switch | Kind::Count(_))
+        !self.tristate && !matches!(self.kind, Kind::Switch | Kind::Count(_))
     }
 
     fn is_positional(&self) -> bool {
@@ -1497,8 +1551,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // Each field's slot: its `cfg`, name, type and starting value.
-    let slot_parts: Vec<(&TokenStream2, Ident, TokenStream2, TokenStream2)> = fields
+    // Each field's slot: its name, type and starting value.
+    let slot_parts: Vec<(Ident, TokenStream2, TokenStream2)> = fields
         .iter()
         .map(|f| {
             let none = quote!(::core::option::Option::None);
@@ -1514,12 +1568,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
                 Kind::Many(ty) => (quote!(::std::vec::Vec<#ty>), new),
             };
-            (&f.cfg, slot(&f.ident), ty, init)
+            (slot(&f.ident), ty, init)
         })
         .collect();
     let slots = slot_parts
         .iter()
-        .map(|(cfg, ident, ty, init)| quote!(#cfg let mut #ident: #ty = #init;));
+        .map(|(ident, ty, init)| quote!(let mut #ident: #ty = #init;));
 
     // What storing one flag occurrence looks like; the same for both spellings.
     let store = |f: &Field| {
@@ -1594,8 +1648,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let long_arms = fields.iter().filter_map(|f| {
         let pattern = f.long_pattern()?;
         let body = store(f);
-        let cfg = &f.cfg;
-        Some(quote!(#cfg #pattern => { #body }))
+        Some(quote!(#pattern => { #body }))
     });
     let negated = |f: &Field| {
         let no = LitByteStr::new(f.negate.as_ref()?.as_bytes(), Span::call_site());
@@ -1612,15 +1665,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let negated_arms = fields.iter().filter_map(|f| {
         let (pattern, body) = negated(f)?;
-        let cfg = &f.cfg;
-        Some(quote!(#cfg #pattern => { #body }))
+        Some(quote!(#pattern => { #body }))
     });
     let long_arms = long_arms.chain(negated_arms);
     let short_arms = fields.iter().filter_map(|f| {
         let pattern = f.short_pattern()?;
         let body = store(f);
-        let cfg = &f.cfg;
-        Some(quote!(#cfg #pattern => { #body }))
+        Some(quote!(#pattern => { #body }))
     });
 
     let unexpected = quote!(return ::core::result::Result::Err(__arg.unexpected()));
@@ -1773,6 +1824,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let body = store(f);
             Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
         });
+        let global_plus = fields.iter().filter(is_global).filter_map(|f| {
+            let letter = LitChar::new(f.plus?, Span::call_site());
+            let ident = slot(&f.ident);
+            let displace = rules.displace(&fields, f);
+            let body = if f.tristate {
+                quote!(#ident = ::core::option::Option::Some(false); #displace)
+            } else {
+                store(f)
+            };
+            Some(quote!(#letter => { #body return ::core::result::Result::Ok(true); }))
+        });
         // The subcommand sees this struct's globals first, then its ancestors'.
         let (inherit, handler) = if fields.iter().any(|f| is_global(&f)) {
             let shorts = fields.iter().filter(is_global).flat_map(|f| {
@@ -1787,6 +1849,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#global_longs)*
+                            _ => {}
+                        },
+                        __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
+                            #(#global_plus)*
                             _ => {}
                         },
                         __wa::Arg::Short(__flag) => match __flag.letter {
@@ -1928,25 +1994,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 if let ::core::option::Option::Some(__item) =
                     <#ty as ::winnow_args::Occurrence>::from_arg(&__arg, __input)?
                 {
-                    // A word of several short flags (`-sS`), where the enum
-                    // wants to know: its `bundle` item goes before the first
-                    // letter's.
-                    if <#ty as ::winnow_args::Occurrence>::BUNDLES
-                        && __bundle_start
-                        && matches!(__arg, __wa::Arg::Short(_))
-                        && __input.mode() == ::winnow_args::stream::Mode::Bundle
-                    {
-                        let __word = __wa::Word {
-                            value: __wa::BStr::new(__bundle_word),
-                            offset: __arg.offset(),
-                            after_separator: false,
-                        };
-                        if let ::core::option::Option::Some(__bundle) =
-                            <#ty as ::winnow_args::Occurrence>::from_bundle(&__word)?
-                        {
-                            __sequence.push(__bundle);
-                        }
-                    }
                     __sequence.push(__item);
                 } else
             },
@@ -1954,10 +2001,34 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ),
         None => (quote!(), quote!(), quote!()),
     };
+    // A word of several short flags (`-sS`), where the enum wants to know:
+    // once its first letter is read, whoever took it, the `bundle` item goes
+    // before the items of its letters.
     let bundle_start = sequence.as_ref().map(|_| {
         quote! {
             let __bundle_word = __input.front();
             let __bundle_start = __input.mode() == ::winnow_args::stream::Mode::Word;
+            let __bundle_at = __sequence.len();
+        }
+    });
+    let bundle_end = sequence.as_ref().map(|(_, ty)| {
+        quote! {
+            if <#ty as ::winnow_args::Occurrence>::BUNDLES
+                && __bundle_start
+                && matches!(__arg, __wa::Arg::Short(__flag) if !__flag.plus)
+                && __input.mode() == ::winnow_args::stream::Mode::Bundle
+            {
+                let __word = __wa::Word {
+                    value: __wa::BStr::new(__bundle_word),
+                    offset: __arg.offset(),
+                    after_separator: false,
+                };
+                if let ::core::option::Option::Some(__bundle) =
+                    <#ty as ::winnow_args::Occurrence>::from_bundle(&__word)?
+                {
+                    __sequence.insert(__bundle_at, __bundle);
+                }
+            }
         }
     });
     // `#[arg(flatten)]` fields: their slots, the flags offered to them after
@@ -1990,6 +2061,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let flatten_longs = flattens
         .iter()
         .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
+    let flatten_prefixes = flattens.iter().map(|(_, ty)| {
+        quote!(&& !__name.first().is_some_and(|__c| <#ty as __wa::Flatten>::is_prefix(*__c)))
+    });
     let lexer = if plus_options {
         quote!(__wa::arg_plus)
     } else {
@@ -2012,14 +2086,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } else {
             store(f)
         };
-        let cfg = &f.cfg;
-        Some(quote!(#cfg #letter => { #body }))
+        Some(quote!(#letter => { #body }))
     });
     let plus_match = plus_options.then(|| {
         quote! {
             __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
                 #(#plus_arms)*
-                _ => #flatten_arg { #unexpected; }
+                _ => #flatten_arg if !__globals.bind(&__arg, __input)? { #unexpected; }
             },
         }
     });
@@ -2078,8 +2151,49 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     );
     let version_short = (with_version && !declares_short('V'))
         .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
-    let help_flag = help_long.is_some() || help_short.is_some();
+    // The row help prints is `--help`'s: a struct with its own has none.
+    let help_flag = help_long.is_some();
     let help_short_flag = help_short.is_some();
+    // A flattened struct or a sequence enum may declare `-h`, `--help`, `-V`
+    // or `--version` itself (ld's `-h SONAME`): the built-in ones are then
+    // tried after them, not as arms before.
+    let late = !flattens.is_empty() || sequence.is_some();
+    let late_if = |on: bool, test: TokenStream2, error: TokenStream2| {
+        (late && on).then(|| quote!(if #test { return ::core::result::Result::Err(#error); } else))
+    };
+    let late_long: TokenStream2 = [
+        late_if(
+            help_long.is_some(),
+            quote!(__flag.name == b"help"),
+            quote!(__wa::Error::help(#help, true)),
+        ),
+        late_if(
+            version_long.is_some(),
+            quote!(__flag.name == b"version"),
+            quote!(__wa::Error::version(#help)),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let late_short: TokenStream2 = [
+        late_if(
+            help_short.is_some(),
+            quote!(__flag.letter == 'h'),
+            quote!(__wa::Error::help(#help, false)),
+        ),
+        late_if(
+            version_short.is_some(),
+            quote!(__flag.letter == 'V'),
+            quote!(__wa::Error::version(#help)),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let keep = |arm: Option<TokenStream2>| arm.filter(|_| !late);
+    let (help_long, help_short) = (keep(help_long), keep(help_short));
+    let (version_long, version_short) = (keep(version_long), keep(version_short));
 
     // `long_only`: `-name` is `--name` for the long names that may take one
     // dash, tried before the word is read as short letters.
@@ -2133,8 +2247,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let own = fields.iter().filter_map(|f| {
             let letters = f.short_pattern()?;
             let takes_value = f.takes_value();
-            let cfg = &f.cfg;
-            Some(quote!(#cfg #letters => ::core::option::Option::Some(#takes_value),))
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
         });
         let builtin = help_short
             .is_some()
@@ -2217,7 +2330,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
         quote! {
             match __wa::long_only(__input, |__name| {
-                #not_prefixed (#own #their_names #(#flatten_longs)*) #their_prefixes
+                #not_prefixed (#own #their_names #(#flatten_longs)*) #their_prefixes #(#flatten_prefixes)*
             }) {
                 ::core::option::Option::Some(__arg) => __arg,
                 ::core::option::Option::None => {
@@ -2245,10 +2358,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let help_items = fields
         .iter()
         .filter(|f| !matches!(f.role, Role::Subcommand))
-        .map(|f| {
-            let (cfg, item) = (&f.cfg, f.help_item());
-            quote!(#cfg #item)
-        });
+        .map(|f| f.help_item());
     let (help_subcommands, subcommand_required) = match subcommand {
         Some(f) => {
             let ty = match &f.kind {
@@ -2263,21 +2373,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         None => (quote!(&[]), false),
     };
     let displaced = rules.displaced_slots(&fields);
-    let with_cfg = |f: &Field, code: TokenStream2| {
-        if f.cfg.is_empty() || code.is_empty() {
-            code
-        } else {
-            let cfg = &f.cfg;
-            quote!(#cfg { #code })
-        }
-    };
     let env_fallbacks: Vec<TokenStream2> = fields
         .iter()
-        .map(|f| with_cfg(f, f.fallback(true, rules.is_displaced(&fields, f))))
+        .map(|f| f.fallback(true, rules.is_displaced(&fields, f)))
         .collect();
     let default_fallbacks: Vec<TokenStream2> = fields
         .iter()
-        .map(|f| with_cfg(f, f.fallback(false, rules.is_displaced(&fields, f))))
+        .map(|f| f.fallback(false, rules.is_displaced(&fields, f)))
         .collect();
     let exclusive = rules.exclusive(&fields, &groups);
     let supplied = rules.supplied(&fields);
@@ -2285,7 +2387,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
-        let cfg = &f.cfg;
         let value = match &f.kind {
             Kind::Required(ty) if f.keywords => {
                 let display = LitStr::new(&f.display(), Span::call_site());
@@ -2316,7 +2417,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
         };
-        quote!(#cfg #value)
+        quote!(#value)
     });
     let build: Vec<TokenStream2> = build.collect();
     // Every field read once after building, as clap's and usage's derives do:
@@ -2325,8 +2426,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let field_reads: Vec<TokenStream2> = fields
         .iter()
         .map(|f| {
-            let (cfg, ident) = (&f.cfg, &f.ident);
-            quote!(#cfg let _ = &__built.#ident;)
+            let ident = &f.ident;
+            quote!(let _ = &__built.#ident;)
         })
         .chain(skipped.iter().map(|ident| quote!(let _ = &__built.#ident;)))
         .chain(
@@ -2362,21 +2463,22 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .filter(|f| rules.is_displaced(&fields, f))
             .map(|f| format_ident!("__displaced_{}", f.ident))
             .collect();
-        let nested: Vec<(Ident, &Type)> =
-            flattens.iter().map(|(ident, ty)| (flat_slot(ident), ty)).collect();
-        let decls = slot_parts.iter().map(|(cfg, ident, ty, _)| quote!(#cfg #ident: #ty,));
-        let inits = slot_parts.iter().map(|(cfg, ident, _, init)| quote!(#cfg #ident: #init,));
-        let empty = TokenStream2::new();
-        let all: Vec<(&TokenStream2, &Ident)> = slot_parts
+        let nested: Vec<(Ident, &Type)> = flattens
             .iter()
-            .map(|(cfg, ident, _, _)| (*cfg, ident))
-            .chain(displaced_idents.iter().map(|d| (&empty, d)))
-            .chain(nested.iter().map(|(n, _)| (&empty, n)))
+            .map(|(ident, ty)| (flat_slot(ident), ty))
             .collect();
-        let names: Vec<TokenStream2> =
-            all.iter().map(|(cfg, ident)| quote!(#cfg #ident,)).collect();
-        let mutable: Vec<TokenStream2> =
-            all.iter().map(|(cfg, ident)| quote!(#cfg mut #ident,)).collect();
+        let decls = slot_parts.iter().map(|(ident, ty, _)| quote!(#ident: #ty,));
+        let inits = slot_parts
+            .iter()
+            .map(|(ident, _, init)| quote!(#ident: #init,));
+        let all: Vec<&Ident> = slot_parts
+            .iter()
+            .map(|(ident, _, _)| ident)
+            .chain(&displaced_idents)
+            .chain(nested.iter().map(|(n, _)| n))
+            .collect();
+        let names: Vec<TokenStream2> = all.iter().map(|ident| quote!(#ident,)).collect();
+        let mutable: Vec<TokenStream2> = all.iter().map(|ident| quote!(mut #ident,)).collect();
         let displaced_decls = displaced_idents.iter().map(|d| quote!(#d: bool,));
         let displaced_inits = displaced_idents.iter().map(|d| quote!(#d: false,));
         let nested_decls = nested
@@ -2385,19 +2487,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let nested_inits = nested
             .iter()
             .map(|(n, _)| quote!(#n: ::core::default::Default::default(),));
-        let arm = |cfg: &TokenStream2, pattern: TokenStream2, body: TokenStream2| {
-            quote!(#cfg #pattern => { #body true })
-        };
-        let bind_long = fields.iter().filter_map(|f| {
-            Some(arm(&f.cfg, f.long_pattern()?, store(f)))
-        });
+        let arm = |pattern: TokenStream2, body: TokenStream2| quote!(#pattern => { #body true });
+        let bind_long = fields
+            .iter()
+            .filter_map(|f| Some(arm(f.long_pattern()?, store(f))));
         let bind_negated = fields.iter().filter_map(|f| {
             let (pattern, body) = negated(f)?;
-            Some(arm(&f.cfg, pattern, body))
+            Some(arm(pattern, body))
         });
-        let bind_short = fields.iter().filter_map(|f| {
-            Some(arm(&f.cfg, f.short_pattern()?, store(f)))
-        });
+        let bind_short = fields
+            .iter()
+            .filter_map(|f| Some(arm(f.short_pattern()?, store(f))));
         let bind_plus = fields.iter().filter_map(|f| {
             let letter = LitChar::new(f.plus?, Span::call_site());
             let ident = slot(&f.ident);
@@ -2407,7 +2507,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             } else {
                 store(f)
             };
-            Some(arm(&f.cfg, quote!(#letter), body))
+            Some(arm(quote!(#letter), body))
         });
         let bind_nested: TokenStream2 = nested
             .iter()
@@ -2415,19 +2515,21 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 quote!(if <#ty as __wa::Flatten>::bind(&mut #n, &__arg, __input)? { true } else)
             })
             .collect();
-        let plus = plus_options.then(|| {
+        // A `+x` word is offered to the `+` arms only, here and below.
+        let plus = if plus_options {
             quote! {
                 __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
                     #(#bind_plus)*
                     _ => #bind_nested { false }
                 },
             }
-        });
+        } else {
+            quote!(__wa::Arg::Short(__flag) if __flag.plus => #bind_nested { false },)
+        };
         let letters = fields.iter().filter_map(|f| {
             let letters = f.short_pattern()?;
             let takes_value = f.takes_value();
-            let cfg = &f.cfg;
-            Some(quote!(#cfg #letters => ::core::option::Option::Some(#takes_value),))
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
         });
         let nested_shorts = nested.iter().map(|(_, ty)| {
             quote! {
@@ -2450,6 +2552,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let nested_longs = nested
             .iter()
             .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
+        let prefix_letters: Vec<u8> = fields
+            .iter()
+            .filter(|f| f.prefix)
+            .filter_map(|f| f.short().map(|c| c as u8))
+            .collect();
+        let own_prefixes = if prefix_letters.is_empty() {
+            quote!(false)
+        } else {
+            quote!(matches!(__c, #(#prefix_letters)|*))
+        };
+        let nested_prefixes = nested
+            .iter()
+            .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_prefix(__c)));
         quote! {
             #[doc(hidden)]
             #[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
@@ -2517,6 +2632,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
 
+                fn is_prefix(__c: u8) -> bool {
+                    use ::winnow_args::__private as __wa;
+                    #own_prefixes #(#nested_prefixes)*
+                }
+
                 fn is_long(__name: &[u8]) -> bool {
                     use ::winnow_args::__private as __wa;
                     #own_longs #(#nested_longs)*
@@ -2545,6 +2665,18 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     });
     let own_items = quote!(&[#(#help_items),*]);
+    // A sequence enum with a positional variant takes every word.
+    let positional_clash = sequence
+        .as_ref()
+        .filter(|_| !positionals.is_empty() || trailing.is_some())
+        .map(|(_, ty)| {
+            quote! {
+                const _: () = assert!(
+                    !<#ty as ::winnow_args::Occurrence>::POSITIONAL,
+                    "the sequence enum has a positional variant, which takes every word: this struct's positionals would never be filled",
+                );
+            }
+        });
     // Ours, then the flattened structs', then the sequence enum's.
     let more: Vec<TokenStream2> = flattens
         .iter()
@@ -2560,6 +2692,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     } else {
         quote!({
             const __OWN: &[::winnow_args::help::Item] = #own_items;
+            const _: () = assert!(
+                !::winnow_args::help::items_clash(&[__OWN, #(#more),*]),
+                "a flattened struct or the sequence enum declares a flag that this struct, or another of them, also declares",
+            );
+            #positional_clash
             const __N: usize = __OWN.len() #(+ #more.len())*;
             const __ALL: [::winnow_args::help::Item; __N] = ::winnow_args::__private::concat_items::<__N>(
                 &[__OWN, #(#more),*],
@@ -2608,18 +2745,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #(#long_arms)*
                             #help_long
                             #version_long
-                            _ => #sequence_arg #flatten_arg if !__globals.bind(&__arg, __input)? { #unknown_flag },
+                            _ => #sequence_arg #flatten_arg #late_long if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
                         #plus_match
                         __wa::Arg::Short(__flag) => match __flag.letter {
                             #(#short_arms)*
                             #help_short
                             #version_short
-                            _ => #sequence_arg #flatten_arg if !__globals.bind(&__arg, __input)? { #unknown_short },
+                            _ => #sequence_arg #flatten_arg #late_short if !__globals.bind(&__arg, __input)? { #unknown_short },
                         },
                         #separator_arm
                         #word_arm
                     }
+                    #bundle_end
                 }
                 #(#env_fallbacks)*
                 #exclusive
@@ -3408,29 +3546,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         _ => {}
     }
-    let cfg: TokenStream2 = f
-        .attrs
-        .iter()
-        .filter(|a| a.path().is_ident("cfg"))
-        .map(|a| quote!(#a))
-        .collect();
-    if !cfg.is_empty() {
-        let plain_flag = matches!(role, Role::Flag { .. })
-            && !global
-            && group.is_none()
-            && conflicts.is_empty()
-            && overrides.is_empty()
-            && requires.is_empty()
-            && required_unless.is_empty()
-            && !required;
-        if !plain_flag {
-            return error(
-                "`#[cfg]` is supported on flags that no rule, group or `global` names".into(),
-            );
-        }
-    }
     Ok(Field {
-        cfg,
         ident,
         kind,
         role,
@@ -3476,10 +3592,6 @@ fn spellings(f: &Field) -> Vec<&str> {
 fn check_duplicates(fields: &[Field]) -> syn::Result<()> {
     for (i, a) in fields.iter().enumerate() {
         for b in &fields[..i] {
-            if !a.cfg.is_empty() && !b.cfg.is_empty() {
-                // Alternatives for different configurations, as a rule.
-                continue;
-            }
             let theirs = b.shorts();
             let clash = a
                 .shorts()

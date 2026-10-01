@@ -44,6 +44,8 @@ pub struct Item {
     pub short: Option<char>,
     /// `--name`.
     pub long: Option<&'static str>,
+    /// Other long names it answers to, not shown.
+    pub aliases: &'static [&'static str],
     /// `--no-name`, the spelling that sets it false.
     pub negate: Option<&'static str>,
     /// The value's placeholder; `None` for a switch.
@@ -70,6 +72,10 @@ pub struct Item {
     pub env: Option<&'static str>,
     /// The only values accepted.
     pub choices: &'static [&'static str],
+    /// The value is only taken attached (`--name=value`), never the next word.
+    pub require_equals: bool,
+    /// Also accepted by every subcommand below.
+    pub global: bool,
 }
 
 impl Item {
@@ -77,6 +83,7 @@ impl Item {
     const EMPTY: Item = Item {
         short: None,
         long: None,
+        aliases: &[],
         negate: None,
         value_name: None,
         help: "",
@@ -90,7 +97,64 @@ impl Item {
         default: None,
         env: None,
         choices: &[],
+        require_equals: false,
+        global: false,
     };
+}
+
+/// Whether two items of different `parts` are spelled alike (a short letter,
+/// a long name or its negation): a struct and what it flattens, checked at
+/// compile time.
+#[doc(hidden)]
+pub const fn items_clash(parts: &[&[Item]]) -> bool {
+    const fn same(a: Option<&str>, b: Option<&str>) -> bool {
+        let (Some(a), Some(b)) = (a, b) else {
+            return false;
+        };
+        let (a, b) = (a.as_bytes(), b.as_bytes());
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < a.len() {
+            if a[i] != b[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+    const fn clash(a: &Item, b: &Item) -> bool {
+        if a.positional || b.positional {
+            return false;
+        }
+        let shorts = matches!((a.short, b.short), (Some(x), Some(y)) if x == y);
+        shorts
+            || same(a.long, b.long)
+            || same(a.long, b.negate)
+            || same(a.negate, b.long)
+            || same(a.negate, b.negate)
+    }
+    let mut p = 0;
+    while p < parts.len() {
+        let mut q = p + 1;
+        while q < parts.len() {
+            let (mut i, a, b) = (0, parts[p], parts[q]);
+            while i < a.len() {
+                let mut j = 0;
+                while j < b.len() {
+                    if clash(&a[i], &b[j]) {
+                        return true;
+                    }
+                    j += 1;
+                }
+                i += 1;
+            }
+            q += 1;
+        }
+        p += 1;
+    }
+    false
 }
 
 /// `parts`, one after another, as one array: a struct's own items and those
