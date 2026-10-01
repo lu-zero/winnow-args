@@ -227,7 +227,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (mut long_arms, mut short_arms) = (Vec::new(), Vec::new());
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
-    let (mut word, mut unknown) = (None, None);
+    let (mut word, mut unknown, mut bundle) = (None, None, None);
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
     // variant's default.
     let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
@@ -251,7 +251,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
         let (mut require_equals, mut default_missing) = (false, None);
         let mut keep_equals = enum_keep_equals;
-        let (mut skip, mut is_unknown) = (false, false);
+        let (mut skip, mut is_unknown, mut is_bundle) = (false, false, false);
         for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("allow_hyphen_values") {
@@ -266,6 +266,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("skip") {
                     skip = true;
+                } else if meta.path.is_ident("bundle") {
+                    is_bundle = true;
                 } else if meta.path.is_ident("unknown") {
                     is_unknown = true;
                 } else if meta.path.is_ident("short") {
@@ -329,7 +331,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 value
             }
         };
-        if positional || is_unknown {
+        if positional || is_unknown || is_bundle {
             let Some(ty) = takes else {
                 return Err(syn::Error::new(
                     variant.span(),
@@ -337,7 +339,13 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             };
             let ty = spanned.unwrap_or(ty);
-            let slot = if positional { &mut word } else { &mut unknown };
+            let slot = if positional {
+                &mut word
+            } else if is_unknown {
+                &mut unknown
+            } else {
+                &mut bundle
+            };
             if slot.is_some() {
                 return Err(syn::Error::new(
                     variant.span(),
@@ -426,6 +434,17 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     let word =
         word.unwrap_or_else(|| quote!(::core::result::Result::Ok(::core::option::Option::None)));
+    let bundle = bundle.map(|body| {
+        quote! {
+            const BUNDLES: bool = true;
+
+            fn from_bundle(
+                __word: &::winnow_args::token::Word<'_>,
+            ) -> ::core::result::Result<::core::option::Option<Self>, ::winnow_args::Error> {
+                #body
+            }
+        }
+    });
     let unknown = unknown.map(|body| {
         quote! {
             fn from_unknown(
@@ -477,6 +496,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
 
             #unknown
+
+            #bundle
 
             fn short(__letter: char) -> ::core::option::Option<bool> {
                 match __letter {
@@ -1835,6 +1856,25 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 if let ::core::option::Option::Some(__item) =
                     <#ty as ::winnow_args::Occurrence>::from_arg(&__arg, __input)?
                 {
+                    // A word of several short flags (`-sS`), where the enum
+                    // wants to know: its `bundle` item goes before the first
+                    // letter's.
+                    if <#ty as ::winnow_args::Occurrence>::BUNDLES
+                        && __bundle_start
+                        && matches!(__arg, __wa::Arg::Short(_))
+                        && __input.mode() == ::winnow_args::stream::Mode::Bundle
+                    {
+                        let __word = __wa::Word {
+                            value: __wa::BStr::new(__bundle_word),
+                            offset: __arg.offset(),
+                            after_separator: false,
+                        };
+                        if let ::core::option::Option::Some(__bundle) =
+                            <#ty as ::winnow_args::Occurrence>::from_bundle(&__word)?
+                        {
+                            __sequence.push(__bundle);
+                        }
+                    }
                     __sequence.push(__item);
                 } else
             },
@@ -1842,6 +1882,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ),
         None => (quote!(), quote!(), quote!()),
     };
+    let bundle_start = sequence.as_ref().map(|_| {
+        quote! {
+            let __bundle_word = __input.front();
+            let __bundle_start = __input.mode() == ::winnow_args::stream::Mode::Word;
+        }
+    });
     // `#[arg(flatten)]` fields: their slots, the flags offered to them after
     // ours, and their values built at the end.
     let flat_slot = |ident: &Ident| format_ident!("__flat_{}", ident);
@@ -2474,6 +2520,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #start
                     #lenient_bundle
                     #save_token
+                    #bundle_start
                     let __arg = #lex;
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {

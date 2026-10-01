@@ -120,3 +120,47 @@ fn skip_variants_are_not_spelled() {
         ErrorKind::UnknownFlag
     );
 }
+
+/// Grouped short flags are reported, for a linker that deprecates them.
+#[derive(Occurrence, Debug, PartialEq)]
+enum Grouping {
+    #[arg(short = 's')]
+    StripAll,
+    #[arg(short = 'S')]
+    StripDebug,
+    #[arg(short = 'o')]
+    Output(String),
+    #[arg(long)]
+    Shared,
+    #[arg(bundle)]
+    Grouped(String),
+}
+
+#[derive(Args, Debug)]
+#[arg(long_only)]
+struct Grouper {
+    #[arg(sequence)]
+    items: Vec<Grouping>,
+}
+
+#[test]
+fn a_bundle_is_an_item_before_its_letters() {
+    let words: Vec<&BStr> = ["-s", "-sS", "-shared", "-ofile", "-so", "x"]
+        .iter()
+        .map(BStr::new)
+        .collect();
+    assert_eq!(
+        Grouper::parse_from(&words).unwrap().items,
+        [
+            Grouping::StripAll,
+            Grouping::Grouped("-sS".into()),
+            Grouping::StripAll,
+            Grouping::StripDebug,
+            Grouping::Shared,
+            Grouping::Output("file".into()),
+            Grouping::Grouped("-so".into()),
+            Grouping::StripAll,
+            Grouping::Output("x".into()),
+        ]
+    );
+}
