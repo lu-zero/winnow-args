@@ -131,7 +131,9 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 - [x] A stray `--pop-state` or `--end-group` is an error at its position: the
       linker's check over the sequence, with each item's offset from a
       `value::Spanned<T>` value.
-- [ ] The sequence enum's flags in help, and its names in the duplicate check.
+- [x] The sequence enum's flags in help (`Occurrence::ITEMS`, after the
+      struct's own).
+- [ ] The sequence enum's names in the duplicate check.
 
 ## Phase 5: response files
 

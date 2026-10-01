@@ -28,3 +28,11 @@ required-features = ["derive"]
 [[example]]
 name = "help"
 required-features = ["derive"]
+
+[[example]]
+name = "brush_builtins"
+required-features = ["derive"]
+
+[[example]]
+name = "ld"
+required-features = ["derive"]

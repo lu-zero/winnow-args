@@ -195,6 +195,9 @@ pub trait Occurrence: Sized {
     /// dash, for a `long_only` parent.
     fn is_long(name: &[u8]) -> bool;
 
+    /// The variants as help lists them, after the parent's own flags.
+    const ITEMS: &'static [help::Item] = &[];
+
     /// Whether there is an `#[arg(bundle)]` variant.
     const BUNDLES: bool = false;
 
