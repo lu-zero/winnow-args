@@ -228,15 +228,19 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
     let (mut word, mut unknown) = (None, None);
-    // `#[arg(allow_hyphen_values)]` on the enum: every value variant's default.
-    let mut enum_hyphen_values = false;
+    // `allow_hyphen_values` and `keep_equals` on the enum: every value
+    // variant's default.
+    let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("allow_hyphen_values") {
                 enum_hyphen_values = true;
                 Ok(())
+            } else if meta.path.is_ident("keep_equals") {
+                enum_keep_equals = true;
+                Ok(())
             } else {
-                Err(meta.error("expected `allow_hyphen_values`"))
+                Err(meta.error("expected `allow_hyphen_values` or `keep_equals`"))
             }
         })?;
     }
@@ -246,6 +250,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let (mut two_dashes, mut prefix, mut value_name) = (false, false, None);
         let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
         let (mut require_equals, mut default_missing) = (false, None);
+        let mut keep_equals = enum_keep_equals;
         let (mut skip, mut is_unknown) = (false, false);
         for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
             attr.parse_nested_meta(|meta| {
@@ -255,6 +260,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     negative_numbers = true;
                 } else if meta.path.is_ident("require_equals") {
                     require_equals = true;
+                } else if meta.path.is_ident("keep_equals") {
+                    keep_equals = true;
                 } else if meta.path.is_ident("default_missing") {
                     default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("skip") {
@@ -283,7 +290,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     return Err(meta.error(
                         "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
                          `value_name`, `allow_hyphen_values`, `allow_negative_numbers`, \
-                         `require_equals`, `default_missing`, `skip` or `unknown`",
+                         `require_equals`, `keep_equals`, `default_missing`, `skip` or `unknown`",
                     ));
                 }
                 Ok(())
@@ -363,6 +370,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         negative_numbers: #negative_numbers,
                         hyphen_values: #hyphen_values,
                         require_equals: #require_equals,
+                        keep_equals: #keep_equals,
                     }
                 };
                 let read = match &default_missing {
@@ -882,6 +890,8 @@ struct Field {
     hyphen_values: bool,
     /// A flag's value must be attached.
     require_equals: bool,
+    /// A short option's attached value keeps a leading `=` (GNU ld's `-L=dir`).
+    keep_equals: bool,
     /// The long spelling that sets a `bool` false; the slot is then an
     /// `Option<bool>` until the end, so a default fills only what was not given.
     negate: Option<String>,
@@ -977,20 +987,22 @@ impl Field {
 
     /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
     fn read(&self) -> TokenStream2 {
-        let (negative_numbers, hyphen_values, require_equals) = (
+        let (negative_numbers, hyphen_values, require_equals, keep_equals) = (
             self.negative_numbers,
             self.hyphen_values,
             self.require_equals,
+            self.keep_equals,
         );
         let options = quote! {
             __wa::ValueOptions {
                 negative_numbers: #negative_numbers,
                 hyphen_values: #hyphen_values,
                 require_equals: #require_equals,
+                keep_equals: #keep_equals,
             }
         };
         match &self.default_missing {
-            None if !negative_numbers && !hyphen_values && !require_equals => {
+            None if !negative_numbers && !hyphen_values && !require_equals && !keep_equals => {
                 quote!(__arg.read_value(__input)?)
             }
             None => quote!(__arg.read_value_with(__input, #options)?),
@@ -2956,6 +2968,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negative_numbers = false;
     let mut hyphen_values = false;
     let mut require_equals = false;
+    let mut keep_equals = false;
     let (mut two_dashes, mut prefix) = (false, false);
     let mut values = 1;
     let mut stop_flags = false;
@@ -3038,6 +3051,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 prefix = true;
             } else if meta.path.is_ident("require_equals") {
                 require_equals = true;
+            } else if meta.path.is_ident("keep_equals") {
+                keep_equals = true;
             } else if meta.path.is_ident("allow_hyphen_values") {
                 hyphen_values = true;
             } else if meta.path.is_ident("allow_negative_numbers") {
@@ -3094,7 +3109,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
+                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -3306,6 +3321,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         negative_numbers,
         hyphen_values,
         require_equals,
+        keep_equals,
         negate,
         two_dashes,
         prefix,

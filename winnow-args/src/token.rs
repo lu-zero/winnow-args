@@ -228,6 +228,9 @@ impl<'i> Arg<'i> {
             Arg::Long(LongFlag { value: Some(v), .. }) => Some(v),
             Arg::Short(_) if input.mode() == Mode::Bundle => {
                 let v = input.take_word();
+                if options.keep_equals {
+                    return Some(v);
+                }
                 Some(BStr::new(v.strip_prefix(b"=").unwrap_or(v)))
             }
             _ => {
@@ -358,6 +361,9 @@ pub struct ValueOptions {
     pub hyphen_values: bool,
     /// Only an attached value: `--inspect=9229`, `-i9229`; the next word is never taken.
     pub require_equals: bool,
+    /// A short option's attached value keeps a leading `=`: `-L=dir` is
+    /// `=dir`, as GNU ld reads it (a sysroot-relative path), not `dir`.
+    pub keep_equals: bool,
 }
 
 impl ValueOptions {
@@ -366,6 +372,7 @@ impl ValueOptions {
         negative_numbers: false,
         hyphen_values: false,
         require_equals: false,
+        keep_equals: false,
     };
 }
 
