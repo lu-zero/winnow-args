@@ -167,6 +167,7 @@ def emit_enum(used_values):
   for kw, (name, takes) in zvariants.items():
       out.append(f'    /// `-z {kw}{"=VALUE" if takes else ""}`.\n    #[arg(skip)]\n    {name}' + ('(OsString)' if takes else '') + ',')
   out.append('    /// A flag nothing above names, whole: `--lto-O3`, or an error.\n    #[arg(unknown)]\n    Unknown(OsString),')
+  out.append('    /// Several short options in one word (`-sS`): accepted, with a warning,\n    /// as GNU ld does.\n    #[arg(bundle)]\n    Grouped(OsString),')
   out.append('    /// An input file.\n    #[arg(positional)]\n    Input(OsString),')
   out.append('    /// `--help`.\n    #[arg(long = "help")]\n    Help,')
   out.append('}')
@@ -308,6 +309,12 @@ for pat, prelude, arm in match_arms:
     fold.append('        }')
 # unknown
 dyn_body = body_of(217)
+fold.append('        Item::Grouped(value_os) => {')
+fold.append('            warn!(')
+fold.append('                "grouped short command line options are deprecated: {}",')
+fold.append('                value_os.to_string_lossy()')
+fold.append('            );')
+fold.append('        }')
 fold.append('        Item::Unknown(value_os) => {')
 fold.append('            if let Some(level) = value_os.as_encoded_bytes().strip_prefix(b"--lto-O") {')
 fold.append('                a.plugin_opt.push([b"O", level].concat());')

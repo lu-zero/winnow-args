@@ -195,6 +195,17 @@ pub trait Occurrence: Sized {
     /// dash, for a `long_only` parent.
     fn is_long(name: &[u8]) -> bool;
 
+    /// Whether there is an `#[arg(bundle)]` variant.
+    const BUNDLES: bool = false;
+
+    /// A word of several short flags (`-sS`), whole, as the `#[arg(bundle)]`
+    /// variant: an item put before those of its letters, for a program that
+    /// reports grouping (GNU ld deprecates it). `None` if there is none.
+    fn from_bundle(word: &token::Word<'_>) -> Result<Option<Self>, Error> {
+        let _ = word;
+        Ok(None)
+    }
+
     /// A flag no variant names, as the `#[arg(unknown)]` variant; `None` if
     /// there is none. Asked by a parent whose field is
     /// `#[arg(sequence, unknown)]`.
