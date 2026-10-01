@@ -1,4 +1,8 @@
-//! `#[derive(Args)]` and `#[derive(Subcommand)]` for winnow-args.
+//! The derives of winnow-args: `Args`, `Subcommand`, `ValueEnum` and `Occurrence`.
+//!
+//! Each is documented with every attribute it accepts. `#[winnow_args(...)]` is
+//! `#[arg(...)]` under another name, for a type whose other derives (clap's)
+//! claim `arg`.
 //!
 //! The generated `parse_argv` is one loop: lex an item with `arg`, `match` it
 //! against every flag the struct declares, store into a local per field, and
@@ -16,6 +20,97 @@ use syn::{
     Type, parse_macro_input, spanned::Spanned as _,
 };
 
+/// Derive `Args` for a struct with named fields: the generated loop parses the whole command line.
+///
+/// Every attribute is `#[arg(...)]` (or `#[winnow_args(...)]`); a field with none is `--field-name`.
+/// Doc comments are the help text.
+///
+/// # Struct options
+///
+/// Naming and help:
+///
+/// - `name = "…"`: the program name in usage and completion scripts; `argv[0]` when empty.
+/// - `version`, `version = "…"`: supply `-V`/`--version`; bare, the crate's `CARGO_PKG_VERSION`.
+/// - `about`, `long_about`, `after_help`, `after_long_help`: help text; the first two default to the doc comment.
+/// - `disable_help_flag`, `disable_help_short` (`--help` only), `disable_version_flag`,
+///   `disable_help_subcommand`: do not supply that item.
+/// - `arg_required_else_help`: no arguments at all is a request for help.
+///
+/// Grammar:
+///
+/// - `unknown_flags = "value"`: a flag-like word naming no flag is a positional value; `"error"` is the default.
+/// - `long_only`: a long name may be spelled with one dash (GNU `getopt_long_only`).
+/// - `plus_options`: `+abc` is a bundle of `+` options, for fields with `plus`.
+/// - `restart_token = "…"`: a word that starts a new run of positionals; flags resume and keep their values.
+/// - `default_subcommand = "…"`: the subcommand for a line whose first word names none; needs a `subcommand` field.
+/// - `group("name", required, multiple)`: declare a group; fields join it with `group = "name"`.
+///
+/// # Field roles
+///
+/// A field is a flag unless it is one of these:
+///
+/// - `positional`: a word. `T` is required, `Option<T>` optional, `Vec<T>` every word left; in that order.
+/// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
+/// - `flatten`: another flags-only `Args` struct, parsed as if declared here (nested too). A flag spelled in
+///   both is a compile error. The flattened struct has no positionals, subcommand, `sequence`, `unknown`,
+///   `keywords`, `global` flags or generics, nor `unknown_flags = "value"`; the parent no generics.
+/// - `sequence`: a `Vec` of an `Occurrence` enum: its flags and words, kept in order, its flags in help.
+///   One per struct; a spelling it shares with the struct is a compile error.
+/// - `sequence, unknown`: the same, with unknown flags offered to the enum's `unknown` variant.
+/// - `unknown`: a `Vec<T>` of the flag-like words no flag takes, whole. One per struct.
+/// - `skip`: left at `Default`, never parsed.
+///
+/// # Flag names
+///
+/// - `short`, `short = 'x'`: `-x`; bare, the field name's first letter. A second `short` is another letter.
+/// - `long`, `long = "name"`: `--name`; bare, the field name in kebab-case. A second `long` is another name.
+/// - `alias = "…"`, `alias("…", …)`: more long names, not shown in help.
+/// - `negate`, `negate = "no-name"`: `--no-name` sets a `bool` false; bare, `--no-<long>`.
+/// - `two_dashes`: under `long_only`, the long name is never spelled with one dash (`--omagic`).
+/// - `prefix`: an ASCII `short` that always takes the rest of its word (`-lfoo`); a value flag.
+/// - `plus = 'c'`: also spelled `+c` in a `plus_options` struct; on an `Option<bool>` with `short = 'c'`,
+///   `-c` is `Some(true)` and `+c` `Some(false)`.
+/// - `global`: also accepted after a subcommand word, at any depth.
+///
+/// # Values
+///
+/// Field types are `bool` (a switch), an integer with `count`, `T`, `Option<T>` and `Vec<T>`, `T: FromArg`.
+///
+/// - `count`: an integer counting occurrences.
+/// - `value_name = "…"`: the placeholder in help.
+/// - `delimiter = ','`: split each value of a `Vec` field.
+/// - `values = N`: each occurrence of a `Vec` flag takes `N` words, whatever they look like.
+/// - `choices("a", "b")`: the only values accepted.
+/// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order.
+/// - `default_missing = "…"`: the value of a flag given without one; `value_optional` is accepted with it, and needs it.
+/// - `require_equals`: the value only binds attached (`--name=v`, `-nv`).
+/// - `keep_equals`: a short flag's attached value keeps a leading `=` (`-L=dir`).
+/// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
+/// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
+/// - `keywords`: on a flag of a type deriving `Args`, each value is `--value` of that type (`-z now`).
+///
+/// # Positionals
+///
+/// - `double_dash = "…"`: how `--` treats it: `"optional"` (default), `"required"` (only words after it),
+///   `"automatic"` (flags stop once it has a value), `"preserve"` (a `--` reaching it is a value).
+/// - `stop_flags`: once it has a value, flags stop, whatever its `double_dash`.
+///
+/// # Rules
+///
+/// Selectors name another field: `"--long"`, `"-s"`, a positional's name or the field's name.
+///
+/// - `required`: must end with a value.
+/// - `required_unless("…", …)`: required unless one of them has a value.
+/// - `conflicts("…", …)`: not supplied together with these.
+/// - `overrides("…", …)`: the last of this and these supplied wins.
+/// - `requires("…", …)`: these must have a value when this is supplied.
+/// - `group = "name"`: a member of a struct-level group.
+///
+/// # Help
+///
+/// - `help = "…"`, `long_help = "…"`: replace the doc comment's first paragraph and whole text.
+/// - `help_heading = "…"`: list it under that heading instead of "Options".
+/// - `hide`: leave it out of help and completion.
 #[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -24,6 +119,17 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Derive `Subcommand` (and `Args`, so the enum can be the whole command line) for an enum of subcommands.
+///
+/// A variant is a unit, or holds one `Args` type, which may be `Box`ed; a parent struct holds the enum in
+/// a `subcommand` field. The doc comments are the help text.
+///
+/// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
+///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
+/// - Variant: `name = "…"`: the word that selects it.
+/// - Variant: `alias = "…"`, `alias("…", …)`: other words, shown in help; `alias_hidden` is the same, not shown.
+/// - Variant: `hide`: leave it out of the list in help and completion.
+/// - Variant: `help = "…"`: the one-line description; `long_help = "…"` is accepted and unused in the list.
 #[proc_macro_derive(Subcommand, attributes(arg, winnow_args))]
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -224,6 +330,32 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
 /// Derive `Occurrence` for an enum: one variant per flag or positional, kept
 /// in command-line order by an `#[arg(sequence)]` field of an `Args` struct.
+///
+/// A variant is a unit (a switch) or holds one value type; a `Spanned<T>` also records the offset and
+/// whether the value was attached. A variant with no `short` or `long` is `--variant-name`. Doc comments
+/// are the help text. A spelling used twice, here or in the parent, is a compile error.
+///
+/// Enum options, the default of every value variant:
+///
+/// - `allow_hyphen_values`, `keep_equals`: as for a field.
+///
+/// Variant names:
+///
+/// - `short = 'x'`, `long`, `long = "name"`: as for a field; a second `long` is another name.
+/// - `alias = "…"`, `alias("…", …)`: more long names.
+/// - `two_dashes`, `prefix`: as for a field.
+///
+/// Variant values, as for a field:
+///
+/// - `value_name = "…"`, `require_equals`, `keep_equals`, `allow_hyphen_values`, `allow_negative_numbers`,
+///   `default_missing = "…"`.
+///
+/// Variant roles, at most one of each in an enum:
+///
+/// - `positional`: the variant takes every word; its `value_name` defaults to the variant's name.
+/// - `unknown`: takes a flag no variant names, whole, for a parent with `sequence, unknown`.
+/// - `bundle`: takes a word of several short flags (`-sS`), whole, ahead of its letters.
+/// - `skip`: built by the program, never parsed.
 #[proc_macro_derive(Occurrence, attributes(arg, winnow_args))]
 pub fn derive_occurrence(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -232,6 +364,14 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Derive `FromArg` for an enum of unit variants, matched on the value's bytes; help lists them as possible values.
+///
+/// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
+///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
+/// - Variant: `name = "…"`: the value that selects it.
+/// - Variant: `alias = "…"`, `alias("…", …)`: other accepted values; `alias_hidden` is the same, not listed.
+/// - Variant: `hide`: accepted, but not listed as possible.
+/// - Variant: `help = "…"`, `long_help = "…"`: accepted and unused.
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

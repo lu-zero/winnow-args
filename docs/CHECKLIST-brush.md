@@ -1,16 +1,15 @@
 # Checklist: brush's bash builtins
 
 What [brush](../../brush-abstract-arg-parsing) needs to parse bash builtin
-arguments with winnow-args, as a fourth engine beside the clap, bpaf and
-usage ones on its `abstract-arg-parsing` branch. Each builtin there has one
-file per engine (`brush-builtins/src/<builtin>/{clap,bpaf,usage}.rs`), picked
-by a cargo feature (`parser-clap`, `parser-bpaf`, `parser-usage`); a
-`parser-winnow` feature and `winnow.rs` files would follow the same pattern.
+arguments with winnow-args. On brush's `abstract-arg-parsing` branch each
+builtin has one file per engine (`brush-builtins/src/<builtin>/{clap,bpaf,usage}.rs`),
+picked by a cargo feature (`parser-clap`, `parser-bpaf`, `parser-usage`).
 
-Phases 1 to 6 were done on a local branch, `winnow-args-engine`, in that
-one-file-per-engine layout; it has since been dropped, and the commits it
-names below are gone. Phase 7 is the current port: `winnow-port`, on brush's
-engine-neutral contracts.
+Phases 1 to 6 were done as a fourth engine in that layout, on a local branch,
+`winnow-args-engine`; it has since been dropped, and the commits it names
+below are gone, with its `parser-winnow` feature and `arg_impl!`/`impl_winnow_args!`
+macros. Phase 7 is the current port: `winnow-port`, on brush's engine-neutral
+contracts, where `winnow_builtin!` replaces them.
 
 Legend: `[x]` winnow-args covers it today (the feature that does is named),
 `[ ]` not yet. Behaviour is bash 5.3's, checked by running it.
@@ -40,7 +39,7 @@ Legend: `[x]` winnow-args covers it today (the feature that does is named),
 
 ## Phase 1: the engine, and builtins with ordinary grammar
 
-Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
+Done on the dropped `winnow-args-engine` branch (`c8b308a0`).
 
 - [x] `parser-winnow` feature in brush-builtins and brush-shell, and
       `arg_impl!(T, winnow)`: a ported builtin uses winnow-args with the
@@ -78,7 +77,7 @@ Done on brush branch `winnow-args-engine` (local, `c8b308a0`).
 
 ## Phase 2: option zone, then verbatim operands
 
-Done on brush branch `winnow-args-engine` (local, `402dfeb7`): `echo`,
+Done on the dropped `winnow-args-engine` branch (`402dfeb7`): `echo`,
 `printf`, `exec`, `eval`, `let`, `.`/`source`. `command` and `builtin` move to
 phase 3: brush parses them as declaration builtins, like `declare`.
 
@@ -117,7 +116,7 @@ phase 3: brush parses them as declaration builtins, like `declare`.
 
 ## Phase 3: `+` options
 
-Done on brush branch `winnow-args-engine` (local, `c499caf0`, `fe431505`):
+Done on the dropped `winnow-args-engine` branch (`c499caf0`, `fe431505`):
 `set`, `declare` (also `local`, `readonly`, `typeset`), `export`, `command`,
 `builtin`, `complete`, `compgen`, `compopt`.
 
@@ -158,7 +157,7 @@ Done on brush branch `winnow-args-engine` (local, `c499caf0`, `fe431505`):
 
 ## Phase 4: numeric and signal operands
 
-Done on brush branch `winnow-args-engine` (local, `fa5bc249`): `kill`,
+Done on the dropped `winnow-args-engine` branch (`fa5bc249`): `kill`,
 `ulimit`, `dirs`, `pushd`, `popd`, `trap`, `history`, `fc`, `exit`, `return`,
 `shift`, `break`, `continue`. Compat suite unchanged (1971 passing). Per call:
 `ulimit -n` 20.0 → 8.4 µs, `kill -0` 10.4 → 7.6, `trap -p` 8.6 → 5.6,
@@ -189,7 +188,7 @@ Done on brush branch `winnow-args-engine` (local, `fa5bc249`): `kill`,
 
 ## Phase 5: not an option grammar
 
-Done on brush branch `winnow-args-engine` (local, `38c51eaa`): `test`/`[`,
+Done on the dropped `winnow-args-engine` branch (`38c51eaa`): `test`/`[`,
 `getopts`, `help`. Compat suite unchanged (1971 passing). Per call, loop
 included: `[ a = a ]` 9.1 → 7.3 µs, `test -n x` 7.4 → 6.0, `getopts ab o -a`
 10.7 → 7.7 (bash: 3.0, 2.8, 3.2).
@@ -213,7 +212,7 @@ included: `[ a = a ]` 9.1 → 7.3 µs, `test -n x` 7.4 → 6.0, `getopts ab o -a
 
 ## Phase 6: the shootout
 
-Done on brush branch `winnow-args-engine` (local, `10119107`, results in
+Done on the dropped `winnow-args-engine` branch (`10119107`, results in
 `benchmarks/results/winnow-phase6-fe1019ba`): every builtin has a winnow-args
 port (`bg`, `fg`, `cd`, `umask`, `type`, `shopt`, `suspend`, `unset`, `bind`,
 `unimp` last).
@@ -305,7 +304,7 @@ wordops 497.9 M against usage-port's 498.4 M.
       (`usage_minus_or_plus_flag_arg!` removed); `complete`/`compgen` share
       their options with `#[arg(flatten)]`.
 - [x] brush's command line: `+o`/`+O` native (the pre-parse rewrite gone),
-      `--help` without `-h` (`disable_help_short`), `#[cfg]` fields.
+      `--help` without `-h` (`disable_help_short`).
 - [x] Completion scripts (bash, zsh, fish, elvish, PowerShell) answered by
       `brush __complete_word__ --shell S --line L` from the help data
       (`winnow_args::complete`); bash and zsh checked end to end.

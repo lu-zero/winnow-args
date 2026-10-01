@@ -34,6 +34,22 @@
 //! assert_eq!(cli.path, Some(PathBuf::from("/tmp")));
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
+//!
+//! # Derive attributes
+//!
+//! The derives read `#[arg(...)]`, or `#[winnow_args(...)]` for a type whose other derives (clap's)
+//! claim `arg`. The page of each derive macro lists every attribute it accepts: `Args` (struct options,
+//! field roles such as `flatten`, `sequence` and `unknown`, flag names, values, positionals, rules,
+//! help), `Subcommand`, `ValueEnum` and `Occurrence`.
+//!
+//! # Supporting modules
+//!
+//! - [`value`]: [`FromArg`] and the value types [`value::CInt`] (C-syntax integers), [`value::KeyValue`]
+//!   (`key=value`), [`value::Parsed`] (any `FromStr`) and [`value::Spanned`] (a value with its offset).
+//! - [`help`], [`color`]: the help data the derive emits, and how it is rendered and painted.
+//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and PowerShell that call the program back.
+//! - [`response`]: `@file` response files, nested up to 10 deep and 4096 files in all.
+//! - [`mod@env`]: [`with_env`], a fixed environment for deterministic tests.
 
 pub mod color;
 pub mod combinator;
@@ -116,8 +132,8 @@ pub trait Args: Sized {
         Self::parse_from(&words(&args))
     }
 
-    /// Parse the process's arguments. Help and version are printed with exit
-    /// status 0; a failure is reported on stderr with status 2.
+    /// Parse the process's arguments, reporting as [`report`] does: help and
+    /// version go to stdout, and the process exits with 0 or, on a failure, 2.
     fn parse() -> Self {
         let mut args = std::env::args_os();
         let program = Self::HELP.name;
@@ -363,10 +379,8 @@ pub mod __private {
 
     use crate::token::is_flag_like;
 
-    /// The flags of a struct that another flattens (`#[arg(flatten)]`):
-    /// derived for every `Args` struct that has flags only (no positionals,
-    /// subcommand, `sequence`, `unknown`, `keywords` or `global` flags, no
-    /// `unknown_flags = "value"`, no generics).
+    /// The flags of a struct that another flattens (`#[arg(flatten)]`), derived
+    /// for every `Args` struct that has flags only.
     ///
     /// The parent keeps a [`Flatten::Slots`], offers it each flag its own
     /// arms do not take, and builds the value at the end.
