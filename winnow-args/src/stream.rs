@@ -81,6 +81,12 @@ impl<'i> Argv<'i> {
         self.words.is_empty()
     }
 
+    /// How many words are left, the current one included.
+    #[inline(always)]
+    pub fn words_left(&self) -> usize {
+        self.words.len()
+    }
+
     /// Where in the grammar the stream is.
     #[inline(always)]
     pub fn mode(&self) -> Mode {

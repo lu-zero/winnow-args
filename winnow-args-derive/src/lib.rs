@@ -1470,7 +1470,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     let push = match f.delimiter {
                         None => {
                             let value = f.word_value(ty, quote!(__word), &display);
-                            quote!(#ident.push(#value);)
+                            // Sized once, for at most every word left: the
+                            // usual tail of operands then needs no regrowth.
+                            quote! {
+                                if #ident.capacity() == 0 {
+                                    #ident.reserve_exact(__input.words_left() + 1);
+                                }
+                                #ident.push(#value);
+                            }
                         }
                         Some(d) => {
                             let value = f.word_value(ty, quote!(__piece), &display);
