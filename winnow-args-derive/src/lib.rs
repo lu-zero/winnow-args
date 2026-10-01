@@ -227,14 +227,41 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (mut long_arms, mut short_arms) = (Vec::new(), Vec::new());
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
-    let mut word = None;
+    let (mut word, mut unknown) = (None, None);
+    // `#[arg(allow_hyphen_values)]` on the enum: every value variant's default.
+    let mut enum_hyphen_values = false;
+    for attr in input.attrs.iter().filter(|a| is_ours(a)) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("allow_hyphen_values") {
+                enum_hyphen_values = true;
+                Ok(())
+            } else {
+                Err(meta.error("expected `allow_hyphen_values`"))
+            }
+        })?;
+    }
     for variant in &data.variants {
         let ident = &variant.ident;
         let (mut short, mut longs, mut positional) = (None, Vec::new(), false);
         let (mut two_dashes, mut prefix, mut value_name) = (false, false, None);
+        let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
+        let (mut require_equals, mut default_missing) = (false, None);
+        let (mut skip, mut is_unknown) = (false, false);
         for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("short") {
+                if meta.path.is_ident("allow_hyphen_values") {
+                    hyphen_values = true;
+                } else if meta.path.is_ident("allow_negative_numbers") {
+                    negative_numbers = true;
+                } else if meta.path.is_ident("require_equals") {
+                    require_equals = true;
+                } else if meta.path.is_ident("default_missing") {
+                    default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("skip") {
+                    skip = true;
+                } else if meta.path.is_ident("unknown") {
+                    is_unknown = true;
+                } else if meta.path.is_ident("short") {
                     short = Some(meta.value()?.parse::<LitChar>()?.value());
                 } else if meta.path.is_ident("long") {
                     longs.push(if meta.input.peek(syn::Token![=]) {
@@ -254,7 +281,9 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     value_name = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else {
                     return Err(meta.error(
-                        "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix` or `value_name`",
+                        "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
+                         `value_name`, `allow_hyphen_values`, `allow_negative_numbers`, \
+                         `require_equals`, `default_missing`, `skip` or `unknown`",
                     ));
                 }
                 Ok(())
@@ -270,24 +299,52 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
         };
-        if positional {
+        if skip {
+            // Built by the program itself (from a `-z` keyword, say), never parsed.
+            continue;
+        }
+        // A `Spanned<T>` value also records where it was and whether it was attached.
+        let spanned = takes.and_then(|ty| {
+            last_segment(ty)
+                .filter(|s| s.ident == "Spanned")
+                .and_then(inner)
+        });
+        let wrap = |value: TokenStream2, offset: TokenStream2, attached: TokenStream2| {
+            if spanned.is_some() {
+                quote! {
+                    ::winnow_args::value::Spanned {
+                        value: #value,
+                        offset: #offset,
+                        attached: #attached,
+                    }
+                }
+            } else {
+                value
+            }
+        };
+        if positional || is_unknown {
             let Some(ty) = takes else {
                 return Err(syn::Error::new(
                     variant.span(),
-                    "a positional variant holds its value",
+                    "a positional or `unknown` variant holds its value",
                 ));
             };
-            if word.is_some() {
+            let ty = spanned.unwrap_or(ty);
+            let slot = if positional { &mut word } else { &mut unknown };
+            if slot.is_some() {
                 return Err(syn::Error::new(
                     variant.span(),
-                    "at most one positional variant",
+                    "at most one positional and one `unknown` variant",
                 ));
             }
             let name = value_name.unwrap_or_else(|| ident.to_string().to_uppercase());
-            word = Some(quote! {
-                ::core::result::Result::Ok(::core::option::Option::Some(
-                    Self::#ident(__word.convert::<#ty>(#name)?),
-                ))
+            let value = wrap(
+                quote!(__word.convert::<#ty>(#name)?),
+                quote!(__word.offset),
+                quote!(false),
+            );
+            *slot = Some(quote! {
+                ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident(#value)))
             });
             continue;
         }
@@ -299,12 +356,42 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 __arg.check_switch()?;
                 ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident))
             },
-            Some(ty) => quote! {
-                let __value = __arg.read_value(__input)?;
-                ::core::result::Result::Ok(::core::option::Option::Some(
-                    Self::#ident(__arg.convert::<#ty>(__value)?),
-                ))
-            },
+            Some(ty) => {
+                let ty = spanned.unwrap_or(ty);
+                let options = quote! {
+                    ::winnow_args::token::ValueOptions {
+                        negative_numbers: #negative_numbers,
+                        hyphen_values: #hyphen_values,
+                        require_equals: #require_equals,
+                    }
+                };
+                let read = match &default_missing {
+                    Some(missing) => {
+                        let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
+                        quote! {
+                            __arg.read_value_or_with(
+                                __input,
+                                #options,
+                                ::winnow_args::__private::BStr::new(#bytes),
+                            )
+                        }
+                    }
+                    None => quote!(__arg.read_value_with(__input, #options)?),
+                };
+                let value = wrap(
+                    quote!(__arg.convert::<#ty>(__value)?),
+                    quote!(__arg.offset()),
+                    quote!(__attached),
+                );
+                let attached = spanned
+                    .is_some()
+                    .then(|| quote!(let __attached = __arg.has_attached_value(__input);));
+                quote! {
+                    #attached
+                    let __value = #read;
+                    ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident(#value)))
+                }
+            }
         };
         if !longs.is_empty() {
             let pattern = byte_patterns(&longs);
@@ -331,6 +418,15 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     let word =
         word.unwrap_or_else(|| quote!(::core::result::Result::Ok(::core::option::Option::None)));
+    let unknown = unknown.map(|body| {
+        quote! {
+            fn from_unknown(
+                __word: &::winnow_args::token::Word<'_>,
+            ) -> ::core::result::Result<::core::option::Option<Self>, ::winnow_args::Error> {
+                #body
+            }
+        }
+    });
     let is_long = if single_dash.is_empty() {
         quote!(false)
     } else {
@@ -371,6 +467,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             fn is_long(__name: &[u8]) -> bool {
                 #is_long
             }
+
+            #unknown
 
             fn short(__letter: char) -> ::core::option::Option<bool> {
                 match __letter {
@@ -666,7 +764,7 @@ fn is_flatten(f: &syn::Field) -> bool {
 
 /// Whether a field is `#[arg(unknown)]`: the flags no one declared, whole.
 fn is_unknown(f: &syn::Field) -> bool {
-    has_flag(f, "unknown")
+    has_flag(f, "unknown") && !is_sequence(f)
 }
 
 /// Whether a field is `#[arg(skip)]`: left at its default, not parsed.
@@ -1175,6 +1273,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "a struct has at most one `sequence` field",
         ));
     }
+    // `#[arg(sequence, unknown)]`: unknown flags join the sequence, through
+    // the enum's `#[arg(unknown)]` variant.
+    let sequence_unknown = sequences.first().is_some_and(|f| has_flag(f, "unknown"));
     let sequence = match sequences.first() {
         Some(f) => {
             let Some(ty) = last_segment(&f.ty)
@@ -1853,15 +1954,32 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // checked before any binds; a long word or a single letter once no arm or
     // global took it.
     // An `unknown` field takes those words instead of the positionals.
-    let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value || unknown.is_some() {
+    let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value
+        || unknown.is_some()
+        || sequence_unknown
+    {
         // With nothing to take a word, `positional_match` always returns.
         let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
-        let (sink, sink_next) = match &unknown {
-            Some((_, ty)) => (
+        let (sink, sink_next) = match (&unknown, sequence.as_ref().filter(|_| sequence_unknown)) {
+            (_, Some((_, ty))) => (
+                quote! {
+                    match <#ty as ::winnow_args::Occurrence>::from_unknown(&__word)? {
+                        ::core::option::Option::Some(__item) => __sequence.push(__item),
+                        ::core::option::Option::None => {
+                            return ::core::result::Result::Err(__wa::Error::unknown_flag(
+                                __word.offset,
+                                ::std::string::String::from_utf8_lossy(&__word.value),
+                            ));
+                        }
+                    }
+                },
+                quote!(continue;),
+            ),
+            (Some((_, ty)), None) => (
                 quote!(__unknown.push(__word.convert::<#ty>("<UNKNOWN>")?);),
                 quote!(continue;),
             ),
-            None => (
+            (None, None) => (
                 quote! {
                     let __arg = __wa::Arg::Word(__word);
                     #positional_match
