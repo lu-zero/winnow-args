@@ -244,6 +244,40 @@ unstripped release build has no clap symbol; uucore is 65 KB), so it stays a
 compile-time dependency, by choice. The optional coreutils builtins are
 uutils' clap-based tools.
 
+Measured against its own base (`args-abstracted-on-main`, clap), release
+builds, pinned (node 3, core 96):
+
+- Binary: clap 6 904 560, winnow 6 464 048 bytes (−430 KiB).
+- three-way.py, 15 samples, bash / clap / winnow: startup 2.38 / 4.54 /
+  4.48 ms; config-lint-500 31.7 / 116.8 / 70.3 ms (0.60×); deploy-sim
+  20.7 / 56.4 / 52.1 ms; wordops 307 / 160 / 154 ms; interp-loop
+  146 / 295 / 257 ms (no builtin parsing there: layout, not the parser).
+- Per call, 100 000 iterations in a function, loop included (`:` is the
+  loop: 2.3 / 4.1 / 3.9 µs), bash / clap / winnow, µs:
+
+  | command | bash | clap | winnow |
+  |---|---|---|---|
+  | `set -f +f` | 3.1 | 132.5 | 5.9 |
+  | `declare -i n=1` | 3.2 | 31.5 | 6.5 |
+  | `local` | 2.4 | 27.7 | 4.4 |
+  | `compgen -W "a b" a` | 4.3 | 25.8 | 9.3 |
+  | `ulimit -n` | 3.3 | 17.9 | 6.3 |
+  | `shopt -q extglob` | 2.8 | 12.5 | 6.3 |
+  | `unset -v x` | 2.9 | 11.1 | 6.0 |
+  | `getopts ab o -a` | 3.2 | 11.1 | 7.1 |
+  | `cd .` | 5.6 | 11.2 | 6.6 |
+  | `kill -0 $$` | 3.3 | 10.6 | 7.2 |
+  | `command true` | 2.7 | 10.3 | 6.2 |
+  | `[ a = a ]` | 3.1 | 9.4 | 7.2 |
+  | `printf %s x` | 3.2 | 8.7 | 6.6 |
+  | `echo -n` | 2.6 | 8.1 | 5.1 |
+  | `export E=1` | 2.8 | 7.9 | 5.3 |
+  | `trap -p` | 2.8 | 7.8 | 5.1 |
+  | `test -n x` | 2.9 | 7.5 | 6.0 |
+  | `shift 0` | 2.6 | 6.8 | 5.1 |
+  | `type -t ls` | 10.7 | 20.4 | 14.4 |
+  | `read -r v <<<x` | 11.0 | 19.0 | 12.1 |
+
 - [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
 - [x] Every builtin; `-x`/`+x` pairs are `Option<bool>` fields
