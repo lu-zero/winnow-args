@@ -228,6 +228,12 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
     let (mut word, mut unknown, mut bundle) = (None, None, None);
+    // What help lists: one row a variant, in declaration order.
+    let mut help_items = Vec::new();
+    let opt_str = |s: Option<&str>| match s {
+        Some(s) => quote!(::core::option::Option::Some(#s)),
+        None => quote!(::core::option::Option::None),
+    };
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
     // variant's default.
     let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
@@ -353,6 +359,31 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
             let name = value_name.unwrap_or_else(|| ident.to_string().to_uppercase());
+            if positional {
+                let (doc, long_doc) = docs(&variant.attrs);
+                let (h_help, h_long_help) = (text(&doc), text(&long_doc));
+                let (h_short, h_long) = (opt_str(None), opt_str(None));
+                let h_value = opt_str(Some(&name));
+                let h_positional = true;
+                let h_choices = quote!(<#ty as ::winnow_args::FromArg>::CHOICES);
+                help_items.push(quote!(::winnow_args::help::Item {
+                    short: #h_short,
+                    long: #h_long,
+                    negate: ::core::option::Option::None,
+                    value_name: #h_value,
+                    help: #h_help,
+                    long_help: #h_long_help,
+                    heading: ::core::option::Option::None,
+                    hide: false,
+                    positional: #h_positional,
+                    required: false,
+                    multiple: #h_positional,
+                    trailing: false,
+                    default: ::core::option::Option::None,
+                    env: ::core::option::Option::None,
+                    choices: #h_choices,
+                }));
+            }
             let value = wrap(
                 quote!(__word.convert::<#ty>(#name)?),
                 quote!(__word.offset),
@@ -365,6 +396,45 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         if short.is_none() && longs.is_empty() {
             longs.push(kebab_case(&ident.to_string()));
+        }
+        {
+            let (doc, long_doc) = docs(&variant.attrs);
+            let (h_help, h_long_help) = (text(&doc), text(&long_doc));
+            let h_short = match short {
+                Some(c) => quote!(::core::option::Option::Some(#c)),
+                None => quote!(::core::option::Option::None),
+            };
+            let h_long = opt_str(longs.first().map(String::as_str));
+            let h_value = opt_str(
+                takes
+                    .is_some()
+                    .then(|| value_name.as_deref().unwrap_or("VALUE")),
+            );
+            let h_positional = false;
+            let h_choices = match takes {
+                Some(ty) => {
+                    let ty = spanned.unwrap_or(ty);
+                    quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
+                }
+                None => quote!(&[]),
+            };
+            help_items.push(quote!(::winnow_args::help::Item {
+                short: #h_short,
+                long: #h_long,
+                negate: ::core::option::Option::None,
+                value_name: #h_value,
+                help: #h_help,
+                long_help: #h_long_help,
+                heading: ::core::option::Option::None,
+                hide: false,
+                positional: #h_positional,
+                required: false,
+                multiple: #h_positional,
+                trailing: false,
+                default: ::core::option::Option::None,
+                env: ::core::option::Option::None,
+                choices: #h_choices,
+            }));
         }
         let body = match takes {
             None => quote! {
@@ -465,6 +535,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
             const PREFIXES: &'static [u8] = &[#(#prefixes),*];
+
+            const ITEMS: &'static [::winnow_args::help::Item] = &[#(#help_items),*];
 
             fn from_arg<'__i>(
                 __arg: &::winnow_args::Arg<'__i>,
@@ -2473,15 +2545,24 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     });
     let own_items = quote!(&[#(#help_items),*]);
-    let items = if flattens.is_empty() {
+    // Ours, then the flattened structs', then the sequence enum's.
+    let more: Vec<TokenStream2> = flattens
+        .iter()
+        .map(|(_, ty)| quote!(<#ty as ::winnow_args::Args>::HELP.items))
+        .chain(
+            sequence
+                .iter()
+                .map(|(_, ty)| quote!(<#ty as ::winnow_args::Occurrence>::ITEMS)),
+        )
+        .collect();
+    let items = if more.is_empty() {
         own_items
     } else {
-        let tys: Vec<&Type> = flattens.iter().map(|(_, ty)| ty).collect();
         quote!({
             const __OWN: &[::winnow_args::help::Item] = #own_items;
-            const __N: usize = __OWN.len() #(+ <#tys as ::winnow_args::Args>::HELP.items.len())*;
+            const __N: usize = __OWN.len() #(+ #more.len())*;
             const __ALL: [::winnow_args::help::Item; __N] = ::winnow_args::__private::concat_items::<__N>(
-                &[__OWN, #(<#tys as ::winnow_args::Args>::HELP.items),*],
+                &[__OWN, #(#more),*],
             );
             &__ALL
         })

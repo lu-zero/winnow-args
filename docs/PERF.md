@@ -1089,3 +1089,30 @@ with mold's parser against 554; options alone 11 520 against 505, since
 winnow-args dispatches a name once where mold tries up to 290 matchers in
 turn; input files alone 388 against 516, the value being copied out of the
 command line into an owned `OsString` (`FromArg` returns owned values).
+
+## 48. The examples: brush's builtins and mold's command line
+
+`examples/brush_builtins.rs` (17 of brush's builtins as subcommands) and
+`examples/ld.rs` (mold's whole option set as one `Occurrence` sequence, with
+`@file`) print what they parse; `tools/examples.py` regenerates them from the
+two ports. With `PARSE_N=n` they parse `n` times and print nothing. Warm
+instructions a parse, `release`, subcommand dispatch included:
+
+| line | instructions |
+|---|---|
+| `pwd -P` | 347 |
+| `cd -P /tmp` | 519 |
+| `unset -fv x` | 822 |
+| `declare -i +x n=1` | 947 |
+| `test -n x` | 972 |
+| `set -eu +x -o pipefail` | 1 094 |
+| `kill -s TERM 1234` | 1 196 |
+| `echo -n a b c` | 1 242 |
+| `printf -v x %s a` | 1 246 |
+| `read -rp prompt -t 2.5 a b` | 1 699 |
+| `ld -shared -o out.so a.o` | 1 067 (266 a word) |
+| `ld`, 18 words of options, libraries and inputs | 5 868 (326 a word) |
+| `ld`, a 2 495-word link line | 524 a word |
+
+A sequence enum's variants are now listed in help (`Occurrence::ITEMS`),
+after the struct's own flags.
