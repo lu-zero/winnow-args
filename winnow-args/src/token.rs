@@ -179,6 +179,17 @@ impl<'i> Arg<'i> {
         Ok(input.take_word())
     }
 
+    /// Whether a value is attached to this flag in its own word:
+    /// `--name=value`, `-nvalue`. Asked before reading it.
+    #[inline(always)]
+    pub fn has_attached_value(&self, input: &Argv<'i>) -> bool {
+        match self {
+            Arg::Long(LongFlag { value, .. }) => value.is_some(),
+            Arg::Short(_) => input.mode() == Mode::Bundle,
+            _ => false,
+        }
+    }
+
     /// [`Arg::read_value`] under `options`: which detached words it may take.
     #[inline(always)]
     pub fn read_value_with(

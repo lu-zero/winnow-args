@@ -195,6 +195,14 @@ pub trait Occurrence: Sized {
     /// dash, for a `long_only` parent.
     fn is_long(name: &[u8]) -> bool;
 
+    /// A flag no variant names, as the `#[arg(unknown)]` variant; `None` if
+    /// there is none. Asked by a parent whose field is
+    /// `#[arg(sequence, unknown)]`.
+    fn from_unknown(word: &token::Word<'_>) -> Result<Option<Self>, Error> {
+        let _ = word;
+        Ok(None)
+    }
+
     /// Whether `letter` is a variant's short flag, and whether it takes a
     /// value: how a parent with an `unknown` field tells an unknown bundle.
     fn short(letter: char) -> Option<bool> {

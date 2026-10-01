@@ -136,6 +136,23 @@ where
     }
 }
 
+/// A value with where it was found: an `Occurrence` variant holding a
+/// `Spanned<T>` gets the flag's (or word's) offset and whether the value was
+/// attached (`-zfoo`, `--name=value`) or the next word (`-z foo`).
+///
+/// For errors that point at an item of a sequence (`--pop-state` with nothing
+/// pushed), and for messages that echo the spelling given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Spanned<T> {
+    /// The value.
+    pub value: T,
+    /// Byte offset of the flag, or of the word for a positional, as
+    /// [`Argv::offset`](crate::Argv::offset) counts.
+    pub offset: usize,
+    /// Whether the value was in the flag's own word.
+    pub attached: bool,
+}
+
 /// An integer in C syntax, as linkers and assemblers read one: `0x`/`0X` hex,
 /// a leading `0` for octal, otherwise decimal, with a sign for signed types.
 /// `--image-base=0x400000`, `-z max-page-size=0x1000`, `-Ttext=010000`.
