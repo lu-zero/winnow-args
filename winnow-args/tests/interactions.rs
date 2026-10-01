@@ -1,4 +1,4 @@
-//! Feature interactions an adversarial review found wrong, kept right.
+//! Features in pairs: flatten, sequence, `+` options, globals and the built-in help flags.
 #![cfg(feature = "derive")]
 
 use winnow::stream::BStr;

@@ -425,7 +425,7 @@ pub fn number<'i>(input: &mut Argv<'i>) -> Result<Word<'i>, Error> {
 
 /// Whether a detached word would be read as a flag rather than a value.
 #[inline(always)]
-fn is_flag_like(word: &[u8]) -> bool {
+pub(crate) fn is_flag_like(word: &[u8]) -> bool {
     word.len() > 1 && word[0] == b'-'
 }
 
