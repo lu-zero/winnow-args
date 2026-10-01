@@ -1826,7 +1826,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let (sequence_slot, sequence_arg, sequence_build) = match &sequence {
         Some((ident, ty)) => (
-            quote!(let mut __sequence: ::std::vec::Vec<#ty> = ::std::vec::Vec::new();),
+            // Room for one item a word: a linker's line is mostly inputs.
+            quote! {
+                let mut __sequence: ::std::vec::Vec<#ty> =
+                    ::std::vec::Vec::with_capacity(__input.words_left());
+            },
             quote! {
                 if let ::core::option::Option::Some(__item) =
                     <#ty as ::winnow_args::Occurrence>::from_arg(&__arg, __input)?

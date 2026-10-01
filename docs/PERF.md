@@ -1070,3 +1070,22 @@ instructions a word of UTF-8 validation (`String::from_arg`), which a parser
 over `String`s skips and winnow-args, over bytes and without `unsafe`, does
 not; and the word list itself, which brush's adapter now keeps on the stack
 for up to 16 words.
+
+## 47. A whole linker's command line as one sequence (mold)
+
+mold's options carry order everywhere (last one wins across different
+spellings, `--as-needed` and friends apply to what follows), so its port is
+one `Occurrence` enum with a variant per spelling, `#[arg(sequence, unknown)]`
+on the only field, and mold's own handling folded over the items. What it
+needed: value options on variants (`allow_hyphen_values` for every value,
+`require_equals` and `default_missing` for `--build-id[=x]`), `keep_equals`
+(`-L=dir`), `skip` variants for `-z` keywords, an `unknown` variant that keeps
+`--lto-O3` in place, and `Spanned` values to tell `-zfoo` from `-z foo` in a
+message. The sequence `Vec` is sized from the words left (one item a word):
+on mold's input-heavy lines, 15 instructions a word fewer.
+
+Over a bare `--version`, instructions a word: a 2 496-word link line 3 333
+with mold's parser against 554; options alone 11 520 against 505, since
+winnow-args dispatches a name once where mold tries up to 290 matchers in
+turn; input files alone 388 against 516, the value being copied out of the
+command line into an owned `OsString` (`FromArg` returns owned values).
