@@ -244,39 +244,44 @@ unstripped release build has no clap symbol; uucore is 65 KB), so it stays a
 compile-time dependency, by choice. The optional coreutils builtins are
 uutils' clap-based tools.
 
-Measured against its own base (`args-abstracted-on-main`, clap), release
-builds, pinned (node 3, core 96):
+Measured against its own base (`args-abstracted-on-main`, clap) and
+usage-port (`ab991c00`, the same base with usage-rs), release builds, pinned
+(node 3, core 96):
 
-- Binary: clap 6 904 560, winnow 6 464 048 bytes (−430 KiB).
-- three-way.py, 15 samples, bash / clap / winnow: startup 2.38 / 4.54 /
-  4.48 ms; config-lint-500 31.7 / 116.8 / 70.3 ms (0.60×); deploy-sim
-  20.7 / 56.4 / 52.1 ms; wordops 307 / 160 / 154 ms; interp-loop
-  146 / 295 / 257 ms (no builtin parsing there: layout, not the parser).
+- Binary: clap 6 904 560, usage 6 733 808, winnow 6 464 048 bytes.
+- three-way.py, 15 samples, bash / clap / usage / winnow (ms): startup
+  2.35 / 4.51 / 4.49 / 4.48; config-lint-500 24.3 / 118.1 / 72.6 / 62.6;
+  deploy-sim 21.2 / 55.4 / 52.5 / 53.6; wordops 302 / 160 / 152 / 156.
+  interp-loop (no builtin parsing) 149 / 294 / 236 / 255 is an artifact:
+  a byte-identical copy of the script at another path gives usage 1.697 G
+  and winnow 1.675 G instructions (1.688 G / 1.814 G at the original path);
+  the gap follows the path, not the parser.
 - Per call, 100 000 iterations in a function, loop included (`:` is the
-  loop: 2.3 / 4.1 / 3.9 µs), bash / clap / winnow, µs:
+  loop), µs:
 
-  | command | bash | clap | winnow |
-  |---|---|---|---|
-  | `set -f +f` | 3.1 | 132.5 | 5.9 |
-  | `declare -i n=1` | 3.2 | 31.5 | 6.5 |
-  | `local` | 2.4 | 27.7 | 4.4 |
-  | `compgen -W "a b" a` | 4.3 | 25.8 | 9.3 |
-  | `ulimit -n` | 3.3 | 17.9 | 6.3 |
-  | `shopt -q extglob` | 2.8 | 12.5 | 6.3 |
-  | `unset -v x` | 2.9 | 11.1 | 6.0 |
-  | `getopts ab o -a` | 3.2 | 11.1 | 7.1 |
-  | `cd .` | 5.6 | 11.2 | 6.6 |
-  | `kill -0 $$` | 3.3 | 10.6 | 7.2 |
-  | `command true` | 2.7 | 10.3 | 6.2 |
-  | `[ a = a ]` | 3.1 | 9.4 | 7.2 |
-  | `printf %s x` | 3.2 | 8.7 | 6.6 |
-  | `echo -n` | 2.6 | 8.1 | 5.1 |
-  | `export E=1` | 2.8 | 7.9 | 5.3 |
-  | `trap -p` | 2.8 | 7.8 | 5.1 |
-  | `test -n x` | 2.9 | 7.5 | 6.0 |
-  | `shift 0` | 2.6 | 6.8 | 5.1 |
-  | `type -t ls` | 10.7 | 20.4 | 14.4 |
-  | `read -r v <<<x` | 11.0 | 19.0 | 12.1 |
+  | command | bash | clap | usage | winnow |
+  |---|---|---|---|---|
+  | `:` | 2.3 | 4.1 | 4.0 | 4.0 |
+  | `set -f +f` | 3.1 | 132.0 | 83.2 | 5.8 |
+  | `declare -i n=1` | 3.2 | 31.4 | 6.7 | 6.5 |
+  | `local` | 2.4 | 27.6 | 4.6 | 4.5 |
+  | `compgen -W "a b" a` | 4.2 | 25.6 | 9.6 | 9.2 |
+  | `ulimit -n` | 3.3 | 18.1 | 6.6 | 6.4 |
+  | `shopt -q extglob` | 2.9 | 12.6 | 6.6 | 6.2 |
+  | `unset -v x` | 2.9 | 11.3 | 6.2 | 6.1 |
+  | `getopts ab o -a` | 3.2 | 11.1 | 7.7 | 7.2 |
+  | `cd .` | 5.6 | 11.2 | 6.6 | 6.3 |
+  | `kill -0 $$` | 3.3 | 10.6 | 7.5 | 7.2 |
+  | `command true` | 2.7 | 10.3 | 6.4 | 6.2 |
+  | `[ a = a ]` | 3.0 | 9.4 | 7.7 | 7.2 |
+  | `printf %s x` | 3.2 | 8.6 | 6.6 | 6.6 |
+  | `echo -n` | 2.6 | 8.1 | 5.4 | 5.1 |
+  | `export E=1` | 2.8 | 7.9 | 5.2 | 5.2 |
+  | `trap -p` | 2.9 | 7.8 | 5.2 | 5.0 |
+  | `test -n x` | 2.9 | 7.6 | 6.2 | 6.0 |
+  | `shift 0` | 2.6 | 6.7 | 5.2 | 5.0 |
+  | `type -t ls` | 10.6 | 20.3 | 14.8 | 14.5 |
+  | `read -r v <<<x` | 11.1 | 19.0 | 12.5 | 12.2 |
 
 - [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
