@@ -7,6 +7,11 @@ file per engine (`brush-builtins/src/<builtin>/{clap,bpaf,usage}.rs`), picked
 by a cargo feature (`parser-clap`, `parser-bpaf`, `parser-usage`); a
 `parser-winnow` feature and `winnow.rs` files would follow the same pattern.
 
+Phases 1 to 6 were done on a local branch, `winnow-args-engine`, in that
+one-file-per-engine layout; it has since been dropped, and the commits it
+names below are gone. Phase 7 is the current port: `winnow-port`, on brush's
+engine-neutral contracts.
+
 Legend: `[x]` winnow-args covers it today (the feature that does is named),
 `[ ]` not yet. Behaviour is bash 5.3's, checked by running it.
 
