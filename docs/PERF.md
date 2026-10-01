@@ -1058,3 +1058,15 @@ few hundred bytes; the unused impls are not linked.
 Not yet: `T`'s names in the parent's duplicate check (the parent's own arms
 win), rules naming `T`'s flags, and a flattened struct with positionals,
 a subcommand, keywords or `global` flags.
+
+## 46. A positional `Vec` sized once
+
+A `Vec` positional reserves room for every word left (`Argv::words_left`) on
+its first value, instead of growing from empty: one allocation of the right
+size for the usual tail of operands. On brush's `printf -v x FMT A a 3`
+parse, 20 instructions fewer (2 247 → 2 227 with the bench's setup). Against
+usage-port's hand-written `printf` parser, what is left is about 100
+instructions a word of UTF-8 validation (`String::from_arg`), which a parser
+over `String`s skips and winnow-args, over bytes and without `unsafe`, does
+not; and the word list itself, which brush's adapter now keeps on the stack
+for up to 16 words.
