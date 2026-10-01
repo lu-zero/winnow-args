@@ -283,6 +283,15 @@ usage-port (`ab991c00`, the same base with usage-rs), release builds, pinned
   | `type -t ls` | 10.6 | 20.3 | 14.8 | 14.5 |
   | `read -r v <<<x` | 11.1 | 19.0 | 12.5 | 12.2 |
 
+After `ef4941e` (positional `Vec` sized once) and brush `f3b149ee` (the
+adapter's word list on the stack), instructions per script, averaged over
+four copies at different paths, usage / winnow: wordops 498.0 M / 498.7 M,
+config-lint-500 427.1 M / 413.2 M, deploy-sim 26.41 M / 26.26 M. Per call:
+`echo a b c d e f` 77 990 / 73 431; `printf -v x` with 1, 6 and 12 operands
+54 784 / 54 407, 86 258 / 86 696, 129 751 / 131 919: usage-port parses
+`printf` by hand over `String`s, winnow validates each operand's UTF-8
+(about 100 to 200 instructions a word, under 2 % of `printf`).
+
 - [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
 - [x] Every builtin; `-x`/`+x` pairs are `Option<bool>` fields
