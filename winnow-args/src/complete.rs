@@ -239,6 +239,8 @@ impl Walk {
     }
 
     fn flag_names(&self, current: &str, out: &mut Completions) {
+        // `--` typed: only long names fit.
+        let shorts = !current.starts_with("--");
         for item in self.flags().filter(|i| !i.hide) {
             if let Some(long) = item.long {
                 push(out, &format!("--{long}"), item.help, current);
@@ -246,21 +248,19 @@ impl Walk {
             if let Some(negate) = item.negate {
                 push(out, &format!("--{negate}"), item.help, current);
             }
-            if let Some(short) = item.short
-                && !current.starts_with("--")
-            {
+            if let Some(short) = item.short.filter(|_| shorts) {
                 push(out, &format!("-{short}"), item.help, current);
             }
         }
         let command = self.command;
         if command.help_flag {
-            if command.help_short && !current.starts_with("--") {
+            if command.help_short && shorts {
                 push(out, "-h", "Print help", current);
             }
             push(out, "--help", "Print help", current);
         }
         if command.version.is_some() {
-            if !current.starts_with("--") {
+            if shorts {
                 push(out, "-V", "Print version", current);
             }
             push(out, "--version", "Print version", current);
@@ -365,11 +365,16 @@ pub fn render(completions: &Completions, shell: Shell) -> String {
         }
         out.push('\n');
     }
+    ask_for_files(completions, &mut out);
+    out
+}
+
+/// The line that asks the shell for file names, when they fit.
+fn ask_for_files(completions: &Completions, out: &mut String) {
     if completions.files {
         out.push_str(FILES);
         out.push('\n');
     }
-    out
 }
 
 /// bash replaces only the part of the word after its last `=` or `:`: the
@@ -385,10 +390,7 @@ fn render_bash(completions: &Completions, typed: &str, replaced: &str) -> String
         out.push_str(c.value.get(cut..).unwrap_or(&c.value));
         out.push('\n');
     }
-    if completions.files {
-        out.push_str(FILES);
-        out.push('\n');
-    }
+    ask_for_files(completions, &mut out);
     out
 }
 
@@ -406,7 +408,7 @@ fn split_line(line: &str) -> Vec<String> {
     while let Some(c) = chars.next() {
         match (quote, c) {
             (Some(q), c) if c == q => quote = None,
-            (Some('"'), '\\') => {
+            (Some('"') | None, '\\') => {
                 if let Some(next) = chars.next() {
                     word.get_or_insert_default().push(next);
                 }
@@ -416,19 +418,11 @@ fn split_line(line: &str) -> Vec<String> {
                 quote = Some(c);
                 word.get_or_insert_default();
             }
-            (None, '\\') => {
-                if let Some(next) = chars.next() {
-                    word.get_or_insert_default().push(next);
-                }
-            }
             (None, c) if c.is_whitespace() => words.extend(word.take()),
             (None, c) => word.get_or_insert_default().push(c),
         }
     }
-    match word {
-        Some(word) => words.push(word),
-        None => words.push(String::new()),
-    }
+    words.push(word.unwrap_or_default());
     words
 }
 

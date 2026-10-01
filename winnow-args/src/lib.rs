@@ -351,9 +351,17 @@ macro_rules! __text {
 
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::env;
     pub use crate::error::Error;
+    pub use crate::help::concat_items;
     pub use crate::stream::Argv;
+    pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
+    pub use crate::value::{ChoiceError, FromArg};
     pub use crate::{Globals, Subcommand, globals, inherit};
+    pub use winnow::stream::BStr;
+    pub type BoxError = crate::error::BoxError;
+
+    use crate::token::is_flag_like;
 
     /// The flags of a struct that another flattens (`#[arg(flatten)]`):
     /// derived for every `Args` struct that has flags only (no positionals,
@@ -375,7 +383,7 @@ pub mod __private {
         /// Bind `arg` if it is one of these flags; `Ok(false)` if not.
         fn bind<'i>(
             slots: &mut Self::Slots,
-            arg: &crate::Arg<'i>,
+            arg: &Arg<'i>,
             input: &mut Argv<'i>,
         ) -> Result<bool, Error>;
 
@@ -391,8 +399,6 @@ pub mod __private {
         /// Apply environment variables, defaults and rules, and build the value.
         fn finish(slots: Self::Slots, input: &Argv<'_>) -> Result<Self, Error>;
     }
-
-    pub use crate::help::concat_items;
 
     /// `help a b …`: the long help of the command the words name, below `root`.
     pub fn help_word(root: &'static crate::help::Command, input: &mut Argv<'_>) -> Error {
@@ -441,7 +447,7 @@ pub mod __private {
     pub fn unknown_bundle<'i>(
         input: &mut Argv<'i>,
         known: impl Fn(char) -> Option<bool>,
-    ) -> Option<crate::token::Word<'i>> {
+    ) -> Option<Word<'i>> {
         let front = input.front();
         let short = input.mode() == crate::stream::Mode::Word
             && front.len() > 2
@@ -451,15 +457,11 @@ pub mod __private {
             return None;
         }
         let offset = input.offset();
-        Some(crate::token::Word {
+        Some(Word {
             value: input.take_word(),
             offset,
             after_separator: false,
         })
-    }
-
-    fn is_flag_like(word: &[u8]) -> bool {
-        word.len() > 1 && word[0] == b'-'
     }
 
     /// A `#[arg(keywords)]` field: each value `flag` took (`-z now`) parsed as
@@ -498,9 +500,4 @@ pub mod __private {
         }
         Ok(())
     }
-    pub use crate::env;
-    pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
-    pub use crate::value::{ChoiceError, FromArg};
-    pub use winnow::stream::BStr;
-    pub type BoxError = crate::error::BoxError;
 }

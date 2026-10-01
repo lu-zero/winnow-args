@@ -240,7 +240,6 @@ pub fn derive_value_enum(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// `FromArg` as one `match` on the value's bytes.
 /// `from_arg`: a `match` on the long name and one on the letter, each arm
 /// building its variant; `from_word`: the positional variant, if any.
 fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -257,10 +256,6 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut seen = std::collections::HashMap::new();
     // What help lists: one row a variant, in declaration order.
     let mut help_items = Vec::new();
-    let opt_str = |s: Option<&str>| match s {
-        Some(s) => quote!(::core::option::Option::Some(#s)),
-        None => quote!(::core::option::Option::None),
-    };
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
     // variant's default.
     let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
@@ -387,33 +382,14 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
             let name = value_name.unwrap_or_else(|| ident.to_string().to_uppercase());
             if positional {
-                let (doc, long_doc) = docs(&variant.attrs);
-                let (h_help, h_long_help) = (text(&doc), text(&long_doc));
-                let (h_short, h_long) = (opt_str(None), opt_str(None));
-                let h_value = opt_str(Some(&name));
-                let h_positional = true;
-                let (h_aliases, h_require_equals) = (quote!(&[]), false);
-                let h_choices = quote!(<#ty as ::winnow_args::FromArg>::CHOICES);
-                help_items.push(quote!(::winnow_args::help::Item {
-                    short: #h_short,
-                    long: #h_long,
-                    aliases: #h_aliases,
-                    negate: ::core::option::Option::None,
-                    value_name: #h_value,
-                    help: #h_help,
-                    long_help: #h_long_help,
-                    heading: ::core::option::Option::None,
-                    hide: false,
-                    positional: #h_positional,
-                    required: false,
-                    multiple: #h_positional,
-                    trailing: false,
-                    default: ::core::option::Option::None,
-                    env: ::core::option::Option::None,
-                    choices: #h_choices,
-                    require_equals: #h_require_equals,
-                    global: false,
-                }));
+                help_items.push(occurrence_item(
+                    variant,
+                    None,
+                    &[],
+                    Some(&name),
+                    quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
+                    false,
+                ));
             }
             let value = wrap(
                 quote!(__word.convert::<#ty>(#name)?),
@@ -440,50 +416,23 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
         }
-        {
-            let (doc, long_doc) = docs(&variant.attrs);
-            let (h_help, h_long_help) = (text(&doc), text(&long_doc));
-            let h_short = match short {
-                Some(c) => quote!(::core::option::Option::Some(#c)),
-                None => quote!(::core::option::Option::None),
-            };
-            let h_long = opt_str(longs.first().map(String::as_str));
-            let h_value = opt_str(
-                takes
-                    .is_some()
-                    .then(|| value_name.as_deref().unwrap_or("VALUE")),
-            );
-            let h_positional = false;
-            let more = longs.iter().skip(1);
-            let (h_aliases, h_require_equals) = (quote!(&[#(#more),*]), require_equals);
-            let h_choices = match takes {
-                Some(ty) => {
-                    let ty = spanned.unwrap_or(ty);
-                    quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
-                }
-                None => quote!(&[]),
-            };
-            help_items.push(quote!(::winnow_args::help::Item {
-                short: #h_short,
-                long: #h_long,
-                aliases: #h_aliases,
-                negate: ::core::option::Option::None,
-                value_name: #h_value,
-                help: #h_help,
-                long_help: #h_long_help,
-                heading: ::core::option::Option::None,
-                hide: false,
-                positional: #h_positional,
-                required: false,
-                multiple: #h_positional,
-                trailing: false,
-                default: ::core::option::Option::None,
-                env: ::core::option::Option::None,
-                choices: #h_choices,
-                require_equals: #h_require_equals,
-                global: false,
-            }));
-        }
+        let choices = match takes {
+            Some(ty) => {
+                let ty = spanned.unwrap_or(ty);
+                quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
+            }
+            None => quote!(&[]),
+        };
+        help_items.push(occurrence_item(
+            variant,
+            short,
+            &longs,
+            takes
+                .is_some()
+                .then(|| value_name.as_deref().unwrap_or("VALUE")),
+            choices,
+            require_equals,
+        ));
         let body = match takes {
             None => quote! {
                 __arg.check_switch()?;
@@ -573,12 +522,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     });
-    let is_long = if single_dash.is_empty() {
-        quote!(false)
-    } else {
-        let names = byte_patterns(&single_dash);
-        quote!(matches!(__name, #names))
-    };
+    let is_long = matches_name(&single_dash);
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
@@ -632,6 +576,46 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
+/// An `Occurrence` variant's row in help: a flag by `short` and `longs`, or
+/// the positional when it has neither.
+fn occurrence_item(
+    variant: &syn::Variant,
+    short: Option<char>,
+    longs: &[String],
+    value_name: Option<&str>,
+    choices: TokenStream2,
+    require_equals: bool,
+) -> TokenStream2 {
+    let (doc, long_doc) = docs(&variant.attrs);
+    let (help, long_help) = (text(&doc), text(&long_doc));
+    let positional = short.is_none() && longs.is_empty();
+    let short = opt_char(short);
+    let long = opt_str(longs.first().map(String::as_str));
+    let aliases = longs.iter().skip(1);
+    let value_name = opt_str(value_name);
+    quote!(::winnow_args::help::Item {
+        short: #short,
+        long: #long,
+        aliases: &[#(#aliases),*],
+        negate: ::core::option::Option::None,
+        value_name: #value_name,
+        help: #help,
+        long_help: #long_help,
+        heading: ::core::option::Option::None,
+        hide: false,
+        positional: #positional,
+        required: false,
+        multiple: #positional,
+        trailing: false,
+        default: ::core::option::Option::None,
+        env: ::core::option::Option::None,
+        choices: #choices,
+        require_equals: #require_equals,
+        global: false,
+    })
+}
+
+/// `FromArg` as one `match` on the value's bytes.
 fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let Data::Enum(data) = &input.data else {
         return Err(syn::Error::new(
@@ -703,7 +687,6 @@ struct Variant {
     about: String,
 }
 
-/// A variant's spellings, checked against `seen` for duplicates, and its help.
 /// How a variant's name is spelled when it gives none: an enum's
 /// `#[arg(rename_all = "…")]`.
 #[derive(Clone, Copy)]
@@ -761,6 +744,7 @@ fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
     Ok(case)
 }
 
+/// A variant's spellings, checked against `seen` for duplicates, and its help.
 fn variant_names<'a>(
     variant: &'a syn::Variant,
     seen: &mut Vec<(String, &'a Ident)>,
@@ -853,12 +837,38 @@ fn docs(attrs: &[syn::Attribute]) -> (String, String) {
     (short, long)
 }
 
+/// `Some("s")` or `None`, spelled out.
+fn opt_str(s: Option<&str>) -> TokenStream2 {
+    match s {
+        Some(s) => quote!(::core::option::Option::Some(#s)),
+        None => quote!(::core::option::Option::None),
+    }
+}
+
+/// `Some('c')` or `None`, spelled out.
+fn opt_char(c: Option<char>) -> TokenStream2 {
+    match c {
+        Some(c) => quote!(::core::option::Option::Some(#c)),
+        None => quote!(::core::option::Option::None),
+    }
+}
+
 /// `b"a" | b"b"`.
-fn byte_patterns(names: &[String]) -> TokenStream2 {
+fn byte_patterns<S: AsRef<str>>(names: &[S]) -> TokenStream2 {
     let literals = names
         .iter()
-        .map(|n| LitByteStr::new(n.as_bytes(), Span::call_site()));
+        .map(|n| LitByteStr::new(n.as_ref().as_bytes(), Span::call_site()));
     quote!(#(#literals)|*)
+}
+
+/// Whether `__name` is one of `names`: `matches!(__name, b"a" | b"b")`.
+fn matches_name(names: &[String]) -> TokenStream2 {
+    if names.is_empty() {
+        quote!(false)
+    } else {
+        let names = byte_patterns(names);
+        quote!(matches!(__name, #names))
+    }
 }
 
 /// `alias = "x"` or `alias("x", "y")`.
@@ -886,11 +896,6 @@ fn kebab_case(ident: &str) -> String {
         }
     }
     out
-}
-
-/// A flag with neither a short nor a long spelling (only `plus`).
-fn short_none_long_none(f: &Field) -> bool {
-    f.short().is_none() && f.longs().is_empty()
 }
 
 /// An attribute for these derives: `#[arg(…)]`, or `#[winnow_args(…)]` on a
@@ -927,10 +932,10 @@ fn is_skipped(f: &syn::Field) -> bool {
 /// Whether one of the field's attributes is the bare word `name`.
 fn has_flag(f: &syn::Field, name: &str) -> bool {
     f.attrs.iter().filter(|a| is_ours(a)).any(|a| {
-        let mut skip = false;
+        let mut found = false;
         let _ = a.parse_nested_meta(|meta| {
             if meta.path.is_ident(name) {
-                skip = true;
+                found = true;
             } else if meta.input.peek(syn::Token![=]) {
                 meta.value()?.parse::<syn::Expr>()?;
             } else if meta.input.peek(syn::token::Paren) {
@@ -939,7 +944,7 @@ fn has_flag(f: &syn::Field, name: &str) -> bool {
             }
             Ok(())
         });
-        skip
+        found
     })
 }
 
@@ -1063,23 +1068,14 @@ struct Field {
 impl Field {
     /// This field's entry in `help::Command::items`.
     fn help_item(&self) -> TokenStream2 {
-        let opt_str = |s: Option<&str>| match s {
-            Some(s) => quote!(::core::option::Option::Some(#s)),
-            None => quote!(::core::option::Option::None),
-        };
-        let short = match self.short() {
-            Some(c) => quote!(::core::option::Option::Some(#c)),
-            None => quote!(::core::option::Option::None),
-        };
+        let short = opt_char(self.short());
         let long = opt_str(self.longs().first().copied());
         let aliases = self.longs().into_iter().skip(1);
         let negate = opt_str(self.negate.as_deref());
         let require_equals = self.require_equals;
-        let global = matches!(self.role, Role::Flag { global: true, .. });
-        let (positional, trailing) = match &self.role {
-            Role::Positional { double_dash, .. } => (true, *double_dash == DoubleDash::Required),
-            _ => (false, false),
-        };
+        let global = self.is_global();
+        let positional = self.is_positional();
+        let trailing = self.double_dash() == DoubleDash::Required;
         let display = self.display();
         let value_name = if positional {
             opt_str(Some(&display))
@@ -1089,8 +1085,10 @@ impl Field {
         let (help, long_help) = (text(&self.help), text(&self.long_help));
         let heading = opt_str(self.heading.as_deref());
         // A field spelled only `+c` has no `-`/`--` row to show.
-        let hide =
-            self.hide || matches!(self.role, Role::Flag { .. }) && short_none_long_none(self);
+        let hide = self.hide
+            || matches!(self.role, Role::Flag { .. })
+                && self.short().is_none()
+                && self.longs().is_empty();
         let required = matches!(self.kind, Kind::Required(_))
             && self.default.is_none()
             && self.env.is_none()
@@ -1159,9 +1157,7 @@ impl Field {
             }
         }
     }
-}
 
-impl Field {
     /// Reject `value` (a `&BStr`) outside `choices`, reported by `error(cause)`.
     fn check(
         &self,
@@ -1233,7 +1229,7 @@ impl Field {
         }
         let has = self.has();
         let not_displaced = displaced.then(|| {
-            let displaced = format_ident!("__displaced_{}", self.ident);
+            let displaced = displaced_flag(&self.ident);
             quote!(&& !#displaced)
         });
         let unset = quote!(!#has #not_displaced);
@@ -1328,9 +1324,7 @@ impl Field {
         );
         quote!({ #check #word.convert::<#ty>(#display)? })
     }
-}
 
-impl Field {
     /// How errors name the field: its long flag, else its short one, else its value name.
     fn display(&self) -> String {
         match &self.role {
@@ -1382,10 +1376,7 @@ impl Field {
     /// The pattern matching any long spelling, if there is one.
     fn long_pattern(&self) -> Option<TokenStream2> {
         let longs = self.longs();
-        let literals = longs
-            .iter()
-            .map(|l| LitByteStr::new(l.as_bytes(), Span::call_site()));
-        (!longs.is_empty()).then(|| quote!(#(#literals)|*))
+        (!longs.is_empty()).then(|| byte_patterns(&longs))
     }
 
     /// Whether a flag reads a value (rather than being a switch or a count).
@@ -1395,6 +1386,18 @@ impl Field {
 
     fn is_positional(&self) -> bool {
         matches!(self.role, Role::Positional { .. })
+    }
+
+    fn is_global(&self) -> bool {
+        matches!(self.role, Role::Flag { global: true, .. })
+    }
+
+    /// A positional's relation to `--`; `Optional` for anything else.
+    fn double_dash(&self) -> DoubleDash {
+        match self.role {
+            Role::Positional { double_dash, .. } => double_dash,
+            _ => DoubleDash::Optional,
+        }
     }
 }
 
@@ -1435,21 +1438,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // `#[arg(sequence, unknown)]`: unknown flags join the sequence, through
     // the enum's `#[arg(unknown)]` variant.
     let sequence_unknown = sequences.first().is_some_and(|f| has_flag(f, "unknown"));
-    let sequence = match sequences.first() {
-        Some(f) => {
-            let Some(ty) = last_segment(&f.ty)
-                .filter(|s| s.ident == "Vec")
-                .and_then(inner)
-            else {
-                return Err(syn::Error::new(
-                    f.ty.span(),
-                    "a `sequence` field is a `Vec<T>` of an `Occurrence` enum",
-                ));
-            };
-            Some((f.ident.clone().expect("named field"), ty.clone()))
-        }
-        None => None,
-    };
+    let sequence = vec_field(
+        sequences.first().copied(),
+        "a `sequence` field is a `Vec<T>` of an `Occurrence` enum",
+    )?;
+    let sequence_ty = sequence.as_ref().map(|(_, ty)| ty);
     // `#[arg(unknown)] unknown: Vec<T>`: flag-like words naming no flag.
     let unknowns: Vec<&syn::Field> = named.named.iter().filter(|f| is_unknown(f)).collect();
     if let Some(extra) = unknowns.get(1) {
@@ -1458,21 +1451,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "a struct has at most one `unknown` field",
         ));
     }
-    let unknown = match unknowns.first() {
-        Some(f) => {
-            let Some(ty) = last_segment(&f.ty)
-                .filter(|s| s.ident == "Vec")
-                .and_then(inner)
-            else {
-                return Err(syn::Error::new(
-                    f.ty.span(),
-                    "an `unknown` field is a `Vec<T>`",
-                ));
-            };
-            Some((f.ident.clone().expect("named field"), ty.clone()))
-        }
-        None => None,
-    };
+    let unknown = vec_field(
+        unknowns.first().copied(),
+        "an `unknown` field is a `Vec<T>`",
+    )?;
     // `#[arg(flatten)] common: T`: `T`'s flags, parsed as if declared here.
     let flattens: Vec<(Ident, Type)> = named
         .named
@@ -1487,20 +1469,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     }
     check_duplicates(&fields)?;
-    let dd = |f: &Field| match f.role {
-        Role::Positional { double_dash, .. } => double_dash,
-        _ => DoubleDash::Optional,
-    };
     // A `double_dash = "required"` positional is outside the ordinary sequence:
     // every word after `--` goes to it, and no word before.
     let positionals: Vec<&Field> = fields
         .iter()
-        .filter(|f| f.is_positional() && dd(f) != DoubleDash::Required)
+        .filter(|f| f.is_positional() && f.double_dash() != DoubleDash::Required)
         .collect();
     check_positional_order(&positionals)?;
     let trailing: Vec<&Field> = fields
         .iter()
-        .filter(|f| dd(f) == DoubleDash::Required)
+        .filter(|f| f.double_dash() == DoubleDash::Required)
         .collect();
     if let Some(extra) = trailing.get(1) {
         return Err(syn::Error::new(
@@ -1513,7 +1491,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let preserving: Vec<usize> = positionals
         .iter()
         .enumerate()
-        .filter(|(_, f)| dd(f) == DoubleDash::Preserve)
+        .filter(|(_, f)| f.double_dash() == DoubleDash::Preserve)
         .map(|(i, _)| i)
         .collect();
     if let (Some(t), false) = (trailing, preserving.is_empty()) {
@@ -1587,11 +1565,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #ident.push(__value);
                 }
             }
-            _ if f.tristate => quote! {
-                __arg.check_switch()?;
-                #ident = ::core::option::Option::Some(true);
-            },
-            Kind::Switch if f.negate.is_some() => quote! {
+            _ if f.tristate || f.negate.is_some() => quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(true);
             },
@@ -1645,11 +1619,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote!(#stored #displace)
     };
 
-    let long_arms = fields.iter().filter_map(|f| {
-        let pattern = f.long_pattern()?;
-        let body = store(f);
-        Some(quote!(#pattern => { #body }))
-    });
     let negated = |f: &Field| {
         let no = LitByteStr::new(f.negate.as_ref()?.as_bytes(), Span::call_site());
         let ident = slot(&f.ident);
@@ -1663,16 +1632,36 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
         ))
     };
-    let negated_arms = fields.iter().filter_map(|f| {
-        let (pattern, body) = negated(f)?;
-        Some(quote!(#pattern => { #body }))
-    });
-    let long_arms = long_arms.chain(negated_arms);
-    let short_arms = fields.iter().filter_map(|f| {
-        let pattern = f.short_pattern()?;
-        let body = store(f);
-        Some(quote!(#pattern => { #body }))
-    });
+    // A `+c` occurrence: a tristate's `Some(false)`, else what `-c` stores.
+    let plus = |f: &Field| {
+        let letter = LitChar::new(f.plus?, Span::call_site());
+        let body = if f.tristate {
+            let ident = slot(&f.ident);
+            let displace = rules.displace(&fields, f);
+            quote!(#ident = ::core::option::Option::Some(false); #displace)
+        } else {
+            store(f)
+        };
+        Some((quote!(#letter), body))
+    };
+    // The long (negations last), short and `+` arms of the fields `keep`
+    // selects, each body ending in `tail`.
+    type Part<'a> = &'a dyn Fn(&Field) -> Option<(TokenStream2, TokenStream2)>;
+    let arms = |keep: &dyn Fn(&Field) -> bool, tail: TokenStream2| {
+        let of = |part: Part<'_>| -> Vec<TokenStream2> {
+            fields
+                .iter()
+                .filter(|f| keep(f))
+                .filter_map(part)
+                .map(|(pattern, body)| quote!(#pattern => { #body #tail }))
+                .collect()
+        };
+        let mut long = of(&|f| Some((f.long_pattern()?, store(f))));
+        long.extend(of(&negated));
+        let short = of(&|f| Some((f.short_pattern()?, store(f))));
+        (long, short, of(&plus))
+    };
+    let (long_arms, short_arms, plus_arms) = arms(&|_| true, quote!());
 
     let unexpected = quote!(return ::core::result::Result::Err(__arg.unexpected()));
     let subcommands: Vec<&Field> = fields
@@ -1709,7 +1698,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let arms = positionals.iter().enumerate().map(|(i, f)| {
             let ident = slot(&f.ident);
             let display = LitStr::new(&f.display(), Span::call_site());
-            let stop = (dd(f) == DoubleDash::Automatic || f.stop_flags)
+            let stop = (f.double_dash() == DoubleDash::Automatic || f.stop_flags)
                 .then(|| quote!(__input.stop_flags();));
             match &f.kind {
                 Kind::Optional(ty) | Kind::Required(ty) => {
@@ -1803,41 +1792,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let route = subcommand.map(|f| {
         let ident = slot(&f.ident);
-        let ty = match &f.kind {
-            Kind::Optional(ty) | Kind::Required(ty) => ty,
-            _ => unreachable!("rejected for subcommands in `field`"),
-        };
+        let ty = subcommand_type(f);
         let not_filled = track_filled.then(|| quote!(!__filled &&));
-        let is_global = |f: &&Field| matches!(f.role, Role::Flag { global: true, .. });
-        let global_longs = fields.iter().filter(is_global).filter_map(|f| {
-            let pattern = f.long_pattern()?;
-            let body = store(f);
-            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
-        });
-        let global_negated = fields.iter().filter(is_global).filter_map(|f| {
-            let (pattern, body) = negated(f)?;
-            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
-        });
-        let global_longs = global_longs.chain(global_negated);
-        let global_shorts = fields.iter().filter(is_global).filter_map(|f| {
-            let pattern = f.short_pattern()?;
-            let body = store(f);
-            Some(quote!(#pattern => { #body return ::core::result::Result::Ok(true); }))
-        });
-        let global_plus = fields.iter().filter(is_global).filter_map(|f| {
-            let letter = LitChar::new(f.plus?, Span::call_site());
-            let ident = slot(&f.ident);
-            let displace = rules.displace(&fields, f);
-            let body = if f.tristate {
-                quote!(#ident = ::core::option::Option::Some(false); #displace)
-            } else {
-                store(f)
-            };
-            Some(quote!(#letter => { #body return ::core::result::Result::Ok(true); }))
-        });
+        let (global_longs, global_shorts, global_plus) = arms(
+            &Field::is_global,
+            quote!(return ::core::result::Result::Ok(true);),
+        );
         // The subcommand sees this struct's globals first, then its ancestors'.
-        let (inherit, handler) = if fields.iter().any(|f| is_global(&f)) {
-            let shorts = fields.iter().filter(is_global).flat_map(|f| {
+        let (inherit, handler) = if fields.iter().any(Field::is_global) {
+            let shorts = fields.iter().filter(|f| f.is_global()).flat_map(|f| {
                 let takes_value = f.takes_value();
                 f.shorts().into_iter().map(move |c| {
                     let c = LitChar::new(c, Span::call_site());
@@ -1930,7 +1893,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     });
-    let sequence_word = sequence.as_ref().map(|(_, ty)| {
+    let sequence_word = sequence_ty.map(|ty| {
         quote! {
             if let ::core::option::Option::Some(__item) =
                 <#ty as ::winnow_args::Occurrence>::from_word(&__word)?
@@ -2004,14 +1967,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // A word of several short flags (`-sS`), where the enum wants to know:
     // once its first letter is read, whoever took it, the `bundle` item goes
     // before the items of its letters.
-    let bundle_start = sequence.as_ref().map(|_| {
+    let bundle_start = sequence_ty.map(|_| {
         quote! {
             let __bundle_word = __input.front();
             let __bundle_start = __input.mode() == ::winnow_args::stream::Mode::Word;
             let __bundle_at = __sequence.len();
         }
     });
-    let bundle_end = sequence.as_ref().map(|(_, ty)| {
+    let bundle_end = sequence_ty.map(|ty| {
         quote! {
             if <#ty as ::winnow_args::Occurrence>::BUNDLES
                 && __bundle_start
@@ -2051,16 +2014,41 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let slot = flat_slot(ident);
         quote!(#ident: <#ty as __wa::Flatten>::finish(#slot, __input)?,)
     });
-    let flatten_shorts = flattens.iter().map(|(_, ty)| {
-        quote! {
-            __c if <#ty as __wa::Flatten>::short(__c).is_some() => {
-                <#ty as __wa::Flatten>::short(__c)
-            }
-        }
-    });
-    let flatten_longs = flattens
+    let flatten_shorts: Vec<TokenStream2> = flattens
         .iter()
-        .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
+        .map(|(_, ty)| {
+            quote! {
+                __c if <#ty as __wa::Flatten>::short(__c).is_some() => {
+                    <#ty as __wa::Flatten>::short(__c)
+                }
+            }
+        })
+        .collect();
+    let flatten_longs: Vec<TokenStream2> = flattens
+        .iter()
+        .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)))
+        .collect();
+    // Whether each of our letters takes a value, as `short` answers.
+    let own_shorts: Vec<TokenStream2> = fields
+        .iter()
+        .filter_map(|f| {
+            let letters = f.short_pattern()?;
+            let takes_value = f.takes_value();
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
+        })
+        .collect();
+    // The long names one dash may spell under `long_only`, and the letters
+    // that never start one.
+    let own_longs: Vec<String> = fields
+        .iter()
+        .filter(|f| !f.two_dashes)
+        .flat_map(|f| spellings(f).into_iter().map(str::to_owned))
+        .collect();
+    let prefixes: Vec<u8> = fields
+        .iter()
+        .filter(|f| f.prefix)
+        .filter_map(|f| f.short().map(|c| c as u8))
+        .collect();
     let flatten_prefixes = flattens.iter().map(|(_, ty)| {
         quote!(&& !__name.first().is_some_and(|__c| <#ty as __wa::Flatten>::is_prefix(*__c)))
     });
@@ -2077,17 +2065,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ));
         }
     }
-    let plus_arms = fields.iter().filter_map(|f| {
-        let letter = LitChar::new(f.plus?, Span::call_site());
-        let ident = slot(&f.ident);
-        let displace = rules.displace(&fields, f);
-        let body = if f.tristate {
-            quote!(#ident = ::core::option::Option::Some(false); #displace)
-        } else {
-            store(f)
-        };
-        Some(quote!(#letter => { #body }))
-    });
     let plus_match = plus_options.then(|| {
         quote! {
             __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
@@ -2202,14 +2179,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // checked before any binds; a long word or a single letter once no arm or
     // global took it.
     // An `unknown` field takes those words instead of the positionals.
+    // Only the first letter of a word reaches the short arm's sink: the bundle
+    // check vouched for the letters of a longer one.
     let (lenient_bundle, save_token, unknown_flag) = if unknown_flags_value
         || unknown.is_some()
         || sequence_unknown
     {
         // With nothing to take a word, `positional_match` always returns.
         let next = (!positionals.is_empty() || trailing.is_some()).then(|| quote!(continue;));
-        let (sink, sink_next) = match (&unknown, sequence.as_ref().filter(|_| sequence_unknown)) {
-            (_, Some((_, ty))) => (
+        let (sink, sink_next) = match (&unknown, sequence_ty.filter(|_| sequence_unknown)) {
+            (_, Some(ty)) => (
                 quote! {
                     match <#ty as ::winnow_args::Occurrence>::from_unknown(&__word)? {
                         ::core::option::Option::Some(__item) => __sequence.push(__item),
@@ -2235,7 +2214,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 quote!(#next),
             ),
         };
-        let theirs = match sequence.as_ref().map(|(_, ty)| ty) {
+        let theirs = match sequence_ty {
             Some(ty) => quote! {
                 __c => match <#ty as ::winnow_args::Occurrence>::short(__c) {
                     ::core::option::Option::None => __globals.short(__c),
@@ -2244,11 +2223,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
             None => quote!(_ => __globals.short(__c),),
         };
-        let own = fields.iter().filter_map(|f| {
-            let letters = f.short_pattern()?;
-            let takes_value = f.takes_value();
-            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
-        });
         let builtin = help_short
             .is_some()
             .then(|| quote!('h' => ::core::option::Option::Some(false),))
@@ -2261,7 +2235,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         (
             quote! {
                 if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
-                    #(#own)*
+                    #(#own_shorts)*
                     #(#builtin)*
                     #(#flatten_shorts)*
                     #theirs
@@ -2283,36 +2257,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     } else {
         (quote!(), quote!(), quote!(#unexpected;))
     };
-    let single_dash_longs = |fields: &[Field]| -> Vec<String> {
-        let mut names: Vec<String> = fields
-            .iter()
-            .filter(|f| !f.two_dashes)
-            .flat_map(|f| spellings(f).into_iter().map(str::to_owned))
-            .collect();
+    let mut names = Vec::new();
+    if long_only {
+        names.clone_from(&own_longs);
         names.extend(help_long.is_some().then(|| "help".to_owned()));
         names.extend(version_long.is_some().then(|| "version".to_owned()));
-        names
-    };
-    let names = if long_only {
-        single_dash_longs(&fields)
-    } else {
-        Vec::new()
-    };
-    let sequence_ty = sequence.as_ref().map(|(_, ty)| ty);
+    }
     let long_only_lex =
         long_only && (!names.is_empty() || sequence_ty.is_some() || !flattens.is_empty());
     let lex = if long_only_lex {
-        let prefixes: Vec<u8> = fields
-            .iter()
-            .filter(|f| f.prefix)
-            .filter_map(|f| f.short().map(|c| c as u8))
-            .collect();
-        let own = if names.is_empty() {
-            quote!(false)
-        } else {
-            let names = byte_patterns(&names);
-            quote!(matches!(__name, #names))
-        };
+        let own = matches_name(&names);
         let (their_names, their_prefixes) = match sequence_ty {
             Some(ty) => (
                 quote!(|| <#ty as ::winnow_args::Occurrence>::is_long(__name)),
@@ -2324,10 +2278,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ),
             None => (quote!(), quote!()),
         };
-        let not_prefixed = (!prefixes.is_empty()).then(|| {
-            let prefixes = prefixes.iter().map(|b| quote!(#b));
-            quote!(!matches!(__name.first(), ::core::option::Option::Some(#(#prefixes)|*)) &&)
-        });
+        let not_prefixed = (!prefixes.is_empty()).then(
+            || quote!(!matches!(__name.first(), ::core::option::Option::Some(#(#prefixes)|*)) &&),
+        );
         quote! {
             match __wa::long_only(__input, |__name| {
                 #not_prefixed (#own #their_names #(#flatten_longs)*) #their_prefixes #(#flatten_prefixes)*
@@ -2348,9 +2301,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         lenient_bundle
     };
 
-    // Only the first letter of a word can be unknown here: the bundle check
-    // vouched for the letters of a longer one.
-    let unknown_short = unknown_flag.clone();
     let help_version = match &version {
         Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
         _ => quote!(::core::option::Option::None),
@@ -2361,10 +2311,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .map(|f| f.help_item());
     let (help_subcommands, subcommand_required) = match subcommand {
         Some(f) => {
-            let ty = match &f.kind {
-                Kind::Optional(ty) | Kind::Required(ty) => ty,
-                _ => unreachable!("rejected for subcommands in `field`"),
-            };
+            let ty = subcommand_type(f);
             (
                 quote!(<#ty as ::winnow_args::Args>::HELP.subcommands),
                 matches!(f.kind, Kind::Required(_)),
@@ -2387,7 +2334,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
-        let value = match &f.kind {
+        match &f.kind {
             Kind::Required(ty) if f.keywords => {
                 let display = LitStr::new(&f.display(), Span::call_site());
                 quote!(#ident: __wa::keywords::<#ty>(&#slot, #display, __input.offset())?)
@@ -2416,8 +2363,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
             }
-        };
-        quote!(#value)
+        }
     });
     let build: Vec<TokenStream2> = build.collect();
     // Every field read once after building, as clap's and usage's derives do:
@@ -2425,22 +2371,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // not dead code in the user's crate. No runtime work after optimization.
     let field_reads: Vec<TokenStream2> = fields
         .iter()
-        .map(|f| {
-            let ident = &f.ident;
-            quote!(let _ = &__built.#ident;)
-        })
-        .chain(skipped.iter().map(|ident| quote!(let _ = &__built.#ident;)))
-        .chain(
-            sequence
-                .iter()
-                .chain(unknown.iter())
-                .map(|(ident, _)| quote!(let _ = &__built.#ident;)),
-        )
-        .chain(
-            flattens
-                .iter()
-                .map(|(ident, _)| quote!(let _ = &__built.#ident;)),
-        )
+        .map(|f| &f.ident)
+        .chain(skipped.iter().copied())
+        .chain(sequence.iter().chain(&unknown).map(|(ident, _)| ident))
+        .chain(flattens.iter().map(|(ident, _)| ident))
+        .map(|ident| quote!(let _ = &__built.#ident;))
         .collect();
     let flatten_build: Vec<TokenStream2> = flatten_build.collect();
     // Flags only: no positionals, subcommand, `sequence`, `unknown`,
@@ -2452,16 +2387,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         && unknown.is_none()
         && !unknown_flags_value
         && input.generics.params.is_empty()
-        && !fields
-            .iter()
-            .any(|f| f.keywords || matches!(f.role, Role::Flag { global: true, .. }));
+        && !fields.iter().any(|f| f.keywords || f.is_global());
     let flatten_impl = flattenable.then(|| {
         let vis = &input.vis;
         let slots_name = format_ident!("__{}WinnowArgsSlots", name);
         let displaced_idents: Vec<Ident> = fields
             .iter()
             .filter(|f| rules.is_displaced(&fields, f))
-            .map(|f| format_ident!("__displaced_{}", f.ident))
+            .map(|f| displaced_flag(&f.ident))
             .collect();
         let nested: Vec<(Ident, &Type)> = flattens
             .iter()
@@ -2487,28 +2420,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let nested_inits = nested
             .iter()
             .map(|(n, _)| quote!(#n: ::core::default::Default::default(),));
-        let arm = |pattern: TokenStream2, body: TokenStream2| quote!(#pattern => { #body true });
-        let bind_long = fields
-            .iter()
-            .filter_map(|f| Some(arm(f.long_pattern()?, store(f))));
-        let bind_negated = fields.iter().filter_map(|f| {
-            let (pattern, body) = negated(f)?;
-            Some(arm(pattern, body))
-        });
-        let bind_short = fields
-            .iter()
-            .filter_map(|f| Some(arm(f.short_pattern()?, store(f))));
-        let bind_plus = fields.iter().filter_map(|f| {
-            let letter = LitChar::new(f.plus?, Span::call_site());
-            let ident = slot(&f.ident);
-            let displace = rules.displace(&fields, f);
-            let body = if f.tristate {
-                quote!(#ident = ::core::option::Option::Some(false); #displace)
-            } else {
-                store(f)
-            };
-            Some(arm(quote!(#letter), body))
-        });
+        let (bind_long, bind_short, bind_plus) = arms(&|_| true, quote!(true));
         let bind_nested: TokenStream2 = nested
             .iter()
             .map(|(n, ty)| {
@@ -2526,41 +2438,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } else {
             quote!(__wa::Arg::Short(__flag) if __flag.plus => #bind_nested { false },)
         };
-        let letters = fields.iter().filter_map(|f| {
-            let letters = f.short_pattern()?;
-            let takes_value = f.takes_value();
-            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
-        });
-        let nested_shorts = nested.iter().map(|(_, ty)| {
-            quote! {
-                __c if <#ty as __wa::Flatten>::short(__c).is_some() => {
-                    <#ty as __wa::Flatten>::short(__c)
-                }
-            }
-        });
-        let longs: Vec<String> = fields
-            .iter()
-            .filter(|f| !f.two_dashes)
-            .flat_map(|f| spellings(f).into_iter().map(str::to_owned))
-            .collect();
-        let own_longs = if longs.is_empty() {
+        let own_longs = matches_name(&own_longs);
+        let own_prefixes = if prefixes.is_empty() {
             quote!(false)
         } else {
-            let patterns = byte_patterns(&longs);
-            quote!(matches!(__name, #patterns))
-        };
-        let nested_longs = nested
-            .iter()
-            .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_long(__name)));
-        let prefix_letters: Vec<u8> = fields
-            .iter()
-            .filter(|f| f.prefix)
-            .filter_map(|f| f.short().map(|c| c as u8))
-            .collect();
-        let own_prefixes = if prefix_letters.is_empty() {
-            quote!(false)
-        } else {
-            quote!(matches!(__c, #(#prefix_letters)|*))
+            quote!(matches!(__c, #(#prefixes)|*))
         };
         let nested_prefixes = nested
             .iter()
@@ -2609,7 +2491,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     let __bound = match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#bind_long)*
-                            #(#bind_negated)*
                             _ => #bind_nested { false }
                         },
                         #plus
@@ -2626,8 +2507,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 fn short(__c: char) -> ::core::option::Option<bool> {
                     use ::winnow_args::__private as __wa;
                     match __c {
-                        #(#letters)*
-                        #(#nested_shorts)*
+                        #(#own_shorts)*
+                        #(#flatten_shorts)*
                         _ => ::core::option::Option::None,
                     }
                 }
@@ -2639,7 +2520,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
                 fn is_long(__name: &[u8]) -> bool {
                     use ::winnow_args::__private as __wa;
-                    #own_longs #(#nested_longs)*
+                    #own_longs #(#flatten_longs)*
                 }
 
                 fn finish(
@@ -2666,10 +2547,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     });
     let own_items = quote!(&[#(#help_items),*]);
     // A sequence enum with a positional variant takes every word.
-    let positional_clash = sequence
-        .as_ref()
+    let positional_clash = sequence_ty
         .filter(|_| !positionals.is_empty() || trailing.is_some())
-        .map(|(_, ty)| {
+        .map(|ty| {
             quote! {
                 const _: () = assert!(
                     !<#ty as ::winnow_args::Occurrence>::POSITIONAL,
@@ -2682,9 +2562,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .iter()
         .map(|(_, ty)| quote!(<#ty as ::winnow_args::Args>::HELP.items))
         .chain(
-            sequence
+            sequence_ty
                 .iter()
-                .map(|(_, ty)| quote!(<#ty as ::winnow_args::Occurrence>::ITEMS)),
+                .map(|ty| quote!(<#ty as ::winnow_args::Occurrence>::ITEMS)),
         )
         .collect();
     let items = if more.is_empty() {
@@ -2752,7 +2632,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #(#short_arms)*
                             #help_short
                             #version_short
-                            _ => #sequence_arg #flatten_arg #late_short if !__globals.bind(&__arg, __input)? { #unknown_short },
+                            _ => #sequence_arg #flatten_arg #late_short if !__globals.bind(&__arg, __input)? { #unknown_flag },
                         },
                         #separator_arm
                         #word_arm
@@ -2787,8 +2667,7 @@ struct Group {
     multiple: bool,
 }
 
-/// `#[arg(...)]` on the struct: groups, and the word that restarts parsing.
-/// Options declared on the struct rather than on a field.
+/// `#[arg(...)]` on the struct: options declared there rather than on a field.
 #[derive(Default)]
 struct StructOptions {
     groups: Vec<Group>,
@@ -2822,38 +2701,31 @@ struct StructOptions {
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     let mut options = StructOptions::default();
-    let mut texts = StructOptions::default();
-    let groups = &mut options.groups;
-    let (restart, default_subcommand, help) = (
-        &mut options.restart_token,
-        &mut options.default_subcommand,
-        &mut options.arg_required_else_help,
-    );
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("restart_token") {
-                *restart = Some(meta.value()?.parse::<LitStr>()?.value());
+                options.restart_token = Some(meta.value()?.parse::<LitStr>()?.value());
                 return Ok(());
             }
             if meta.path.is_ident("default_subcommand") {
-                *default_subcommand = Some(meta.value()?.parse::<LitStr>()?.value());
+                options.default_subcommand = Some(meta.value()?.parse::<LitStr>()?.value());
                 return Ok(());
             }
             if meta.path.is_ident("arg_required_else_help") {
-                *help = true;
+                options.arg_required_else_help = true;
                 return Ok(());
             }
             if meta.path.is_ident("long_only") {
-                texts.long_only = true;
+                options.long_only = true;
                 return Ok(());
             }
             if meta.path.is_ident("plus_options") {
-                texts.plus_options = true;
+                options.plus_options = true;
                 return Ok(());
             }
             if meta.path.is_ident("unknown_flags") {
                 let mode = meta.value()?.parse::<LitStr>()?;
-                texts.unknown_flags_value = match mode.value().as_str() {
+                options.unknown_flags_value = match mode.value().as_str() {
                     "value" => true,
                     "error" => false,
                     _ => {
@@ -2869,11 +2741,11 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 Ok(meta.value()?.parse::<LitStr>()?.value())
             };
             if meta.path.is_ident("name") {
-                texts.name = text(&meta)?;
+                options.name = text(&meta)?;
                 return Ok(());
             }
             if meta.path.is_ident("version") {
-                texts.version = Some(if meta.input.peek(syn::Token![=]) {
+                options.version = Some(if meta.input.peek(syn::Token![=]) {
                     let version = meta.value()?.parse::<LitStr>()?;
                     quote!(#version)
                 } else {
@@ -2882,8 +2754,8 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             for (key, slot) in [
-                ("about", &mut texts.about),
-                ("long_about", &mut texts.long_about),
+                ("about", &mut options.about),
+                ("long_about", &mut options.long_about),
             ] {
                 if meta.path.is_ident(key) {
                     *slot = Some(text(&meta)?);
@@ -2891,8 +2763,8 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 }
             }
             for (key, slot) in [
-                ("after_help", &mut texts.after_help),
-                ("after_long_help", &mut texts.after_long_help),
+                ("after_help", &mut options.after_help),
+                ("after_long_help", &mut options.after_long_help),
             ] {
                 if meta.path.is_ident(key) {
                     *slot = text(&meta)?;
@@ -2900,12 +2772,12 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 }
             }
             for (key, slot) in [
-                ("disable_help_flag", &mut texts.disable_help_flag),
-                ("disable_help_short", &mut texts.disable_help_short),
-                ("disable_version_flag", &mut texts.disable_version_flag),
+                ("disable_help_flag", &mut options.disable_help_flag),
+                ("disable_help_short", &mut options.disable_help_short),
+                ("disable_version_flag", &mut options.disable_version_flag),
                 (
                     "disable_help_subcommand",
-                    &mut texts.disable_help_subcommand,
+                    &mut options.disable_help_subcommand,
                 ),
             ] {
                 if meta.path.is_ident(key) {
@@ -2938,7 +2810,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                     }
                 }
             }
-            groups.push(Group {
+            options.groups.push(Group {
                 name,
                 required,
                 multiple,
@@ -2946,19 +2818,6 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             Ok(())
         })?;
     }
-    options.name = texts.name;
-    options.version = texts.version;
-    options.about = texts.about;
-    options.long_about = texts.long_about;
-    options.after_help = texts.after_help;
-    options.after_long_help = texts.after_long_help;
-    options.disable_help_flag = texts.disable_help_flag;
-    options.disable_help_short = texts.disable_help_short;
-    options.disable_version_flag = texts.disable_version_flag;
-    options.disable_help_subcommand = texts.disable_help_subcommand;
-    options.unknown_flags_value = texts.unknown_flags_value;
-    options.long_only = texts.long_only;
-    options.plus_options = texts.plus_options;
     Ok(options)
 }
 
@@ -3066,7 +2925,7 @@ impl Rules {
             .enumerate()
             .filter(|(i, _)| !self.beats[*i].is_empty())
             .map(|(_, f)| {
-                let displaced = format_ident!("__displaced_{}", f.ident);
+                let displaced = displaced_flag(&f.ident);
                 quote!(let mut #displaced = false;)
             })
             .collect()
@@ -3078,11 +2937,11 @@ impl Rules {
         if self.beats[i].is_empty() {
             return quote!();
         }
-        let standing = format_ident!("__displaced_{}", f.ident);
+        let standing = displaced_flag(&f.ident);
         let clears = self.beats[i].iter().map(|&j| {
             let other = &fields[j];
             let slot = slot(&other.ident);
-            let displaced = format_ident!("__displaced_{}", other.ident);
+            let displaced = displaced_flag(&other.ident);
             let clear = match &other.kind {
                 _ if other.keywords => quote!(#slot.clear();),
                 Kind::Switch if other.negate.is_some() => {
@@ -3205,6 +3064,30 @@ impl Rules {
         });
         quote!(#(#plain)* #(#unless)* #(#one_of)* #(#requires)*)
     }
+}
+
+/// A `Vec<T>` field's name and `T`; `shape` is the error for any other type.
+fn vec_field(f: Option<&syn::Field>, shape: &str) -> syn::Result<Option<(Ident, Type)>> {
+    let Some(f) = f else {
+        return Ok(None);
+    };
+    let ty = last_segment(&f.ty)
+        .filter(|s| s.ident == "Vec")
+        .and_then(inner)
+        .ok_or_else(|| syn::Error::new(f.ty.span(), shape))?;
+    Ok(Some((f.ident.clone().expect("named field"), ty.clone())))
+}
+
+/// The enum of a subcommand field.
+fn subcommand_type(f: &Field) -> &Type {
+    match &f.kind {
+        Kind::Optional(ty) | Kind::Required(ty) => ty,
+        _ => unreachable!("rejected for subcommands in `field`"),
+    }
+}
+
+fn displaced_flag(ident: &Ident) -> Ident {
+    format_ident!("__displaced_{}", ident)
 }
 
 fn index_of(fields: &[Field], f: &Field) -> usize {
@@ -3653,10 +3536,10 @@ fn inner(segment: &syn::PathSegment) -> Option<&Type> {
 }
 
 fn kind(ty: &Type) -> Kind {
+    if is_bool(ty) {
+        return Kind::Switch;
+    }
     if let Some(last) = last_segment(ty) {
-        if last.ident == "bool" && last.arguments.is_none() {
-            return Kind::Switch;
-        }
         if let Some(inner) = inner(last) {
             if last.ident == "Option" {
                 return Kind::Optional(inner.clone());
