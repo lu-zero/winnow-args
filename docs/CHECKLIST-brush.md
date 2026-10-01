@@ -291,6 +291,10 @@ config-lint-500 427.1 M / 413.2 M, deploy-sim 26.41 M / 26.26 M. Per call:
 54 784 / 54 407, 86 258 / 86 696, 129 751 / 131 919: usage-port parses
 `printf` by hand over `String`s, winnow validates each operand's UTF-8
 (about 100 to 200 instructions a word, under 2 % of `printf`).
+With `printf` parsed by hand too (brush `c541c37b`), moving the
+operands out of the word list instead of copying them: 53 877, 85 775 and
+127 587 instructions for 1, 6 and 12 operands, under usage-port's at each;
+wordops 497.9 M against usage-port's 498.4 M.
 
 - [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
