@@ -229,13 +229,20 @@ port (`bg`, `fg`, `cd`, `umask`, `type`, `shopt`, `suspend`, `unset`, `bind`,
 
 ## Phase 7: on brush's engine-neutral contracts
 
-brush's `usage-port` branch (`../brush-upstream`) has brush-core's
-engine-neutral `FromArgs`/`HelpContent` and a usage-rs adapter. Local branch
-`winnow-port` (`../brush-winnow-port`, off `usage-port`) replaces usage-rs
-with winnow-args throughout: `2364dbf0` (builtins, the `brush-builtin-winnow`
-adapter), `38972f2f` (brush's own command line, brushctl, `save`, gen; the
-usage adapter removed). usage-rs is gone from the lockfile; clap remains only
-under uucore (`printf`'s formatter).
+brush's `args-abstracted-on-main` (`bb0b35b1`) has brush-core's
+engine-neutral `FromArgs`/`HelpContent` and moves clap out of brush-core.
+Local branch `winnow-port` (`../brush-winnow-port`) sits directly on it:
+`6648e1aa` (the `brush-builtin-winnow` adapter), `072dda5a` (every builtin),
+`c495e548` (brush's own command line, brushctl, gen, xtask, migration
+guides). The earlier route through usage-port is kept as
+`winnow-port-on-usage`.
+
+clap is left in the dependency graph only through uucore, which `printf`
+formats with and which requires clap in every release (0.10 to 0.12); its
+`format` module does not use it. No clap code reaches the binary (an
+unstripped release build has no clap symbol; uucore is 65 KB), so it stays a
+compile-time dependency, by choice. The optional coreutils builtins are
+uutils' clap-based tools.
 
 - [x] `brush-builtin-winnow`: `winnow_builtin!(T)`, `trailing_args = f`,
       `declarations = f`, as `usage_builtin!`; bash-shaped errors.
