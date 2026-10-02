@@ -112,7 +112,7 @@ from_str!(
 /// `str::parse`, and its error becomes the invalid value's cause.
 ///
 /// For a type from another crate, which can implement neither [`FromArg`]
-/// here nor derive [`ValueEnum`](crate::ValueEnum) (a `strum` enum, say).
+/// here nor derive `ValueEnum` (a `strum` enum, say).
 ///
 /// ```
 /// use winnow_args::FromArg;

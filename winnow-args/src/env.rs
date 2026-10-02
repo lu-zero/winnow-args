@@ -34,7 +34,6 @@ pub fn with_env<R>(vars: &[(&str, &str)], f: impl FnOnce() -> R) -> R {
 
 /// Whether [`with_env`] stands in for the environment on this thread: then
 /// the process's surroundings, the terminal included, are not consulted either.
-#[cfg_attr(not(feature = "terminal-size"), allow(dead_code))]
 pub(crate) fn overridden() -> bool {
     OVERRIDE.with(|o| o.borrow().is_some())
 }
