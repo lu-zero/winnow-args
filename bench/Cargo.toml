@@ -1,7 +1,7 @@
 # The same tiny CLI — `example -v/--verbose -p/--path=PATH` — in each framework,
 # measured the way ../usage/benches/gate measures its mise shadows: one binary per
 # framework that parses its own argv PARSE_N times, so N=1 minus N=0 under
-# cachegrind is one cold parse in a fresh process. See tasks/perf.sh.
+# cachegrind is one cold parse in a fresh process. See `just perf`.
 [package]
 name = "bench"
 version = "0.0.0"

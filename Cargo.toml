@@ -36,7 +36,7 @@ debug = 1
 
 # One codegen unit and fat LTO: sizes and instruction counts that do not move
 # with codegen-unit partitioning (docs/PERF.md step 27). `PROFILE=release-lto
-# tasks/perf.sh`.
+# just perf`.
 [profile.release-lto]
 inherits = "release"
 codegen-units = 1

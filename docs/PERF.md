@@ -5,7 +5,7 @@ every line in `bench/argv.txt`, and keeps the earlier lines so the cost of
 merely *carrying* a feature shows up next to the cost of *using* it.
 `bench/tests/agree.rs` checks every framework parses every line to the same fields.
 
-Method (`tasks/perf.sh`, aarch64 host):
+Method (`just perf`, aarch64 host):
 
 - **instr**: one cold parse, `PARSE_N=1` minus `PARSE_N=0`, `perf stat -e
   instructions:u` median of 31 runs (valgrind can't run here); ±~150 noise.
@@ -71,7 +71,7 @@ itself, incremented with `saturating_add`; the combinators fold `switch()`.
 | bpaf 0.10 | 4645| +779 | 6117 | +782 | 6842 |
 | clap 4    | 2735| −100 | 3942 | +60  | 3510 |
 
-Warm ns (min). Instructions and cold times are in the `tasks/perf.sh` output
+Warm ns (min). Instructions and cold times are in the `just perf` output
 and track the same way: wa 553 / 1840 / 726 instr against usage's 1382 / 3938 / 1953.
 
 Only bpaf pays to carry a count (~780 ns, its `req_flag(()).count()` repeat
@@ -451,7 +451,7 @@ and dropping no selector. It compiled after four fixes the toy CLI had not
 needed: a repeated `long` as another spelling, `help` on a variant,
 `required` on a switch, and `double_dash = "automatic"` next to `"required"`
 (mise's `run`), which needed `Mode::Values` so an automatic stop is not
-mistaken for a `--`. `SUITE=mise tasks/perf.sh` runs it against usage's own
+mistaken for a `--`. `SUITE=mise just perf` runs it against usage's own
 shadows, unmodified. `bench/tests/mise.rs` checks that the benchmark line binds
 the same fields in all four, and that usage and winnow-args accept and reject
 the same 19 varied lines.
@@ -727,7 +727,7 @@ with its prose and 16 % larger without. Size comparisons from here on use the
 ## 28. A `release-lto` profile: one codegen unit, fat LTO
 
 `[profile.release-lto]` inherits `release` with `codegen-units = 1` and
-`lto = "fat"`; `PROFILE=release-lto tasks/perf.sh` builds and measures with it
+`lto = "fat"`; `PROFILE=release-lto just perf` builds and measures with it
 (the header line names the profile). `release` stays the default, so earlier
 entries remain comparable with new default runs.
 
@@ -1148,7 +1148,7 @@ The measured lines are unchanged: 2 186 and 3 476 warm instructions.
 
 At `a6f3e92`, pinned to one core (node 3), `release` unless said.
 
-**Frameworks** (`tasks/perf.sh`; instructions for one cold parse, and warm
+**Frameworks** (`just perf`; instructions for one cold parse, and warm
 nanoseconds a parse). winnow-args takes about half of usage's instructions on
 every line of both suites:
 
@@ -1217,8 +1217,8 @@ Per call, µs, loop included (`:` is the loop):
 | 2 501 input files | 388, about 1.0 ms | 517, about 1.0 ms |
 
 The run times are a millisecond of process, within noise of each other for
-the input files; the instruction counts are the measure. `tasks/bench-ld.sh`
-and `tasks/bench-shell.sh` reproduce the mold and brush tables.
+the input files; the instruction counts are the measure. `just bench-ld`
+and `just bench-shell` reproduce the mold and brush tables.
 
 **The examples** (`PARSE_N`, warm instructions a parse): `pwd -P` 347,
 `cd -P /tmp` 519, `unset -fv x` 824, `declare -i +x n=1` 947, `test -n x` 971,
