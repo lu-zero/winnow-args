@@ -2861,7 +2861,7 @@ struct StructOptions {
     default_subcommand: Option<String>,
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
-    /// The program name for the usage line; argv[0] when empty.
+    /// The program name for the usage line; `argv[0]` when empty.
     name: String,
     /// `-V`/`--version` text: a literal, or `CARGO_PKG_VERSION`.
     version: Option<TokenStream2>,
