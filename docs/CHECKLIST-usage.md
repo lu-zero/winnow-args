@@ -94,7 +94,7 @@ for a ruling.
       paths to offer (ours: files, or not)
 - [ ] `complete = f`: a completion function for a value
 - [ ] Descriptions on value candidates
-- [~] Scripts: bash and zsh tested end to end; fish, elvish, PowerShell never
+- [~] Scripts: answers tested, bash and zsh tried by hand; fish, elvish, PowerShell never
       run in their shells
 
 ## Configuration

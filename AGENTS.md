@@ -9,7 +9,7 @@ cargo fmt --all -- --check
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 just --list                       # the tasks below, from the justfile
 just check                        # every feature set and profile, warning-free
-just perf [argv...]               # cold-parse comparison, see docs/DESIGN.md
+just perf [argv...]               # cold-parse comparison, see docs/PERF.md
 PROFILE=release-lto just perf     # one codegen unit + fat LTO: for sizes
 just bench-examples               # warm instructions per parse, the two examples
 just bench-shell NAME=SHELL…      # a builtin call, and scripts, in bash-compatible shells
@@ -57,7 +57,8 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
 
 - `winnow-args` — runtime. `stream` (the `Argv` stream over `&[&BStr]`
   words), `token` (lexer and flag continuations), `combinator` (bpaf-style
-  occurrence parsers), `value` (`FromArg`), `error`.
+  occurrence parsers), `value` (`FromArg`), `error`; off the parse path,
+  `help`, `color`, `complete`, `response` and `env`.
 - `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
   `token::arg`. Generated code only uses `winnow_args::__private`.
 - `bench` — the same CLI in usage, winnow-args, bpaf 0.10 and clap (unpublished).

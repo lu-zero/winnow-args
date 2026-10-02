@@ -92,7 +92,6 @@ completion hints, configuration, spec output) is listed in
 - [x] `conflicts`, `overrides`, `requires`, struct-level `group("name", required,
       multiple)` + `group = "name"`, `required`, `required_unless`; exclusivity
       judged on what was supplied, requiredness on what has a value
-- [ ] Selectors naming an ancestor's global flag (usage resolves those at runtime)
 - [ ] `requires_if`, `required_if_eq`, `default_if`, `exclusive`
 - [x] `default_missing`: bare flag or flag-like next word
       gives the missing default; `Named::argument_or`, `Arg::read_value_or`
@@ -185,8 +184,8 @@ completion hints, configuration, spec output) is listed in
 - [x] A cargo feature to leave help data out: `help-text` (default) keeps the prose;
       without it help keeps its structure (`__text!` expands to `""`)
 - [x] Shell completions: `complete::script` for bash, zsh, fish, elvish,
-      PowerShell, answered by the program (`Args::completion_request`); bash and
-      zsh run end to end
+      PowerShell, answered by the program (`Args::completion_request`); the
+      answers are tested, the bash and zsh scripts were tried by hand
 - [ ] The fish, elvish and PowerShell scripts run in their shells
 - [ ] Emit a usage KDL spec
 
@@ -219,7 +218,7 @@ completion hints, configuration, spec output) is listed in
       generator from the KDL spec)
 - [x] mise at full scale: `xtask gen mise-shadow` translates usage's shadow;
       `SUITE=mise just perf`; `bench/tests/mise.rs` checks agreement
-- [ ] Binary size: 1.61 MB stripped against usage's 1.17 MB for mise; share the
+- [ ] Binary size: 1.70 MB stripped against usage's 1.18 MB for mise (PERF.md step 50); share the
       lexer and continuations across structs instead of inlining them everywhere
 - [ ] A `gen-shadow` backend in usage's xtask, so the shadow comes from the KDL
       spec directly rather than from usage's shadow
@@ -228,7 +227,7 @@ completion hints, configuration, spec output) is listed in
 
 Parsing semantics, all done, by use count: `conflicts` 77, `overrides` 37,
 `requires` 23, `group` 20, `double_dash` 13, `required` 10, `required_unless` 7,
-`value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
+usage's `value_optional`/`default_missing` 3, `restart_token` 2, `default_subcommand` 1,
 `arg_required_else_help` 1; plus `-h/--help` and `-V/--version` everywhere
 (`disable_help_flag` 3, `disable_version_flag` 1).
 
@@ -249,5 +248,6 @@ parses; each needs a home before the shadow is a faithful copy.
 - [x] `value_enum`: not needed; the field's type supplies `[possible values]`
 - [ ] `mount`: dynamic subcommands discovered by running a command (mise's tasks)
 - [ ] `var`: explicit "repeatable" (winnow-args infers it from `Vec<T>`)
-- [ ] Selectors naming an ancestor's global flag (resolved at compile time today,
-      so the converter drops them and reports how many)
+- [ ] Selectors naming an ancestor's global flag: ours resolve at compile time,
+      within the struct, so the converter drops them and reports how many; usage
+      resolves them at runtime

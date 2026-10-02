@@ -307,7 +307,7 @@ wordops 497.9 M against usage-port's 498.4 M.
       `--help` without `-h` (`disable_help_short`).
 - [x] Completion scripts (bash, zsh, fish, elvish, PowerShell) answered by
       `brush __complete_word__ --shell S --line L` from the help data
-      (`winnow_args::complete`); bash and zsh checked end to end.
+      (`winnow_args::complete`); bash and zsh tried by hand.
 - [x] gen: man page and markdown from `CommandLineArgs::HELP`.
 - [x] Compat suite 2106 of 2572, 0 failed (as usage-port); integration 48/48.
 - [x] Release binary 6 472 000 bytes against usage-port's 6 733 808 (−256 KiB).
