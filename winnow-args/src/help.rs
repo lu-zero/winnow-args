@@ -136,16 +136,59 @@ pub const fn items_clash(parts: &[&[Item]]) -> bool {
         }
         true
     }
+    /// Whether `item` answers to the letter.
+    const fn has_short(item: &Item, letter: char) -> bool {
+        if matches!(item.short, Some(c) if c == letter) {
+            return true;
+        }
+        let mut i = 0;
+        while i < item.more_shorts.len() {
+            if item.more_shorts[i] == letter {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+    /// Whether `item` answers to the long name: its own, its negation, an alias.
+    const fn has_long(item: &Item, name: Option<&str>) -> bool {
+        if same(item.long, name) || same(item.negate, name) {
+            return true;
+        }
+        let mut i = 0;
+        while i < item.aliases.len() {
+            if same(Some(item.aliases[i]), name) {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
     const fn clash(a: &Item, b: &Item) -> bool {
         if a.positional || b.positional {
             return false;
         }
-        let shorts = matches!((a.short, b.short), (Some(x), Some(y)) if x == y);
-        shorts
-            || same(a.long, b.long)
-            || same(a.long, b.negate)
-            || same(a.negate, b.long)
-            || same(a.negate, b.negate)
+        if matches!(a.short, Some(c) if has_short(b, c)) {
+            return true;
+        }
+        let mut i = 0;
+        while i < a.more_shorts.len() {
+            if has_short(b, a.more_shorts[i]) {
+                return true;
+            }
+            i += 1;
+        }
+        if has_long(b, a.long) || has_long(b, a.negate) {
+            return true;
+        }
+        let mut i = 0;
+        while i < a.aliases.len() {
+            if has_long(b, Some(a.aliases[i])) {
+                return true;
+            }
+            i += 1;
+        }
+        false
     }
     let mut p = 0;
     while p < parts.len() {
@@ -740,7 +783,7 @@ fn section(
     out.push('\n');
     let longest = rows.iter().map(|(left, _)| left.width).max().unwrap_or(0);
     let available = width.saturating_sub(4);
-    let column = longest.min(available * 2 / 5);
+    let column = longest.min(available / 5 * 2 + available % 5 * 2 / 5);
     // Where descriptions start, and how much room they get (never too little to read).
     let (indent, room) = if long {
         (10, width.saturating_sub(10).max(20))

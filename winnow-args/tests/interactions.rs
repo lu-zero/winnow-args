@@ -216,3 +216,118 @@ fn a_declared_help_flag_leaves_no_built_in_row() {
         .unwrap();
     assert_eq!(text.matches("      --help").count(), 1, "{text}");
 }
+
+#[derive(Occurrence, Debug, PartialEq)]
+enum Step {
+    #[arg(short = 'n')]
+    DryRun,
+}
+
+/// Lenient, with a sequence: the built-in `-h` is tried after the enum's
+/// flags, and is still a known letter of a bundle.
+#[derive(Args, Debug)]
+#[arg(unknown_flags = "value")]
+struct LenientSequence {
+    #[arg(short)]
+    verbose: bool,
+    #[arg(sequence)]
+    items: Vec<Step>,
+    #[arg(positional)]
+    files: Vec<String>,
+}
+
+#[test]
+fn a_late_built_in_letter_is_known_in_a_bundle() {
+    assert_eq!(kind::<LenientSequence>(&["-vh"]), ErrorKind::HelpRequested);
+    assert_eq!(kind::<LenientSequence>(&["-hv"]), ErrorKind::HelpRequested);
+    let ok: LenientSequence = parse(&["-nv"]).unwrap();
+    assert!(ok.verbose);
+    assert_eq!(ok.items, [Step::DryRun]);
+    // A letter nobody knows still makes the word a value.
+    assert_eq!(parse::<LenientSequence>(&["-vQ"]).unwrap().files, ["-vQ"]);
+}
+
+/// Lenient, flattening: no flattened `-h`, so the built-in one answers.
+#[derive(Args, Debug)]
+#[arg(unknown_flags = "value")]
+struct LenientFlatten {
+    #[arg(flatten)]
+    common: Common,
+    #[arg(positional)]
+    files: Vec<String>,
+}
+
+#[test]
+fn a_built_in_letter_after_a_flattened_one_asks_for_help() {
+    assert_eq!(kind::<LenientFlatten>(&["-vh"]), ErrorKind::HelpRequested);
+    assert_eq!(kind::<LenientFlatten>(&["-hv"]), ErrorKind::HelpRequested);
+}
+
+#[derive(Args, Debug, PartialEq)]
+struct Formats {
+    #[arg(long, overrides("--yaml"))]
+    json: Option<String>,
+    #[arg(long, required)]
+    yaml: Option<String>,
+}
+
+#[test]
+fn the_flag_that_overrode_a_required_one_satisfies_it() {
+    let f: Formats = parse(&["--yaml=b", "--json=a"]).unwrap();
+    assert_eq!((f.json.as_deref(), f.yaml), (Some("a"), None));
+    assert_eq!(kind::<Formats>(&[]), ErrorKind::MissingRequired);
+}
+
+/// A rule may name a flag by any of its letters.
+#[derive(Args, Debug)]
+struct Spelled {
+    #[arg(long, requires("-L"))]
+    both: bool,
+    #[arg(short = 'l', short = 'L', long)]
+    list: bool,
+}
+
+#[test]
+fn a_rule_resolves_a_second_short() {
+    assert_eq!(kind::<Spelled>(&["--both"]), ErrorKind::MissingRequired);
+    assert!(parse::<Spelled>(&["--both", "-L"]).unwrap().list);
+}
+
+#[derive(Args, Debug)]
+struct Aliased {
+    #[arg(long = "own", alias = "shared")]
+    own: bool,
+    #[arg(short = 'y', short = 'x')]
+    two: bool,
+}
+
+#[derive(Args, Debug)]
+struct Plainly {
+    #[arg(long)]
+    shared: bool,
+}
+
+#[derive(Args, Debug)]
+struct SecondShort {
+    #[arg(short = 'x')]
+    x: bool,
+}
+
+#[test]
+fn the_clash_check_sees_aliases_and_second_shorts() {
+    use winnow_args::help::items_clash;
+    assert!(items_clash(&[Aliased::HELP.items, Plainly::HELP.items]));
+    assert!(items_clash(&[SecondShort::HELP.items, Aliased::HELP.items]));
+    assert!(!items_clash(&[
+        Plainly::HELP.items,
+        SecondShort::HELP.items
+    ]));
+}
+
+#[test]
+fn any_width_renders() {
+    for width in [1, 5, usize::MAX - 3, usize::MAX] {
+        let page = winnow_args::help::render_width(Formats::HELP, &["x"], false, width);
+        assert!(page.contains("--json"), "{width}");
+    }
+}
