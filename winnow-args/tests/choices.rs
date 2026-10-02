@@ -169,8 +169,10 @@ enum Spelled {
 
 #[test]
 fn the_winnow_args_attribute_name_works_too() {
-    use winnow_args::FromArg as _;
+    use winnow_args::FromArg;
+    let parse = |s: &str| Spelled::from_arg(BStr::new(s)).ok();
     assert_eq!(Spelled::CHOICES, ["arrayvar", "file"]);
-    assert_eq!(Spelled::ArrayVar, Spelled::ArrayVar);
-    let _ = Spelled::FileName;
+    assert_eq!(parse("arrayvar"), Some(Spelled::ArrayVar));
+    assert_eq!(parse("file"), Some(Spelled::FileName));
+    assert_eq!(parse("filename"), None);
 }
