@@ -1146,7 +1146,7 @@ The measured lines are unchanged: 2 186 and 3 476 warm instructions.
 
 ## 50. A full pass, after the review
 
-At `1995a74`, pinned to one core (node 3), `release` unless said.
+At `32c485d`, pinned to one core (node 3), `release` unless said.
 
 **Frameworks** (`tasks/perf.sh`; instructions for one cold parse, and warm
 nanoseconds a parse). winnow-args takes about half of usage's instructions on
