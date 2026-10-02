@@ -90,7 +90,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       judged on what was supplied, requiredness on what has a value
 - [ ] Selectors naming an ancestor's global flag (usage resolves those at runtime)
 - [ ] `requires_if`, `required_if_eq`, `default_if`, `exclusive`
-- [x] `default_missing` (+ `value_optional`): bare flag or flag-like next word
+- [x] `default_missing`: bare flag or flag-like next word
       gives the missing default; `Named::argument_or`, `Arg::read_value_or`
 - [x] Struct-level `restart_token`: positionals restart, flags resume and keep values
 

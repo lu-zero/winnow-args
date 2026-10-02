@@ -79,7 +79,7 @@ its own.
       swallow an input file. (`require_equals`;
       `thinlto_index_only_takes_its_value_after_equals`)
 - [x] Optional values: `--build-id` alone is `fast` (wild), `--build-id=sha1`.
-      (`value_optional` + `default_missing` + `require_equals`; `mold: build-id`)
+      (`default_missing` + `require_equals`; `mold: build-id`)
 - [x] Options taking several following words (wild's three-parameter
       handler, Mach-O's `-platform_version macos 11.0 12.0`):
       `#[arg(values = 3)]` on a `Vec` flag; the words after the first are taken

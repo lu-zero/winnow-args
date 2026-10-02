@@ -11,6 +11,9 @@ use crate::color::Paint;
 pub use crate::color::{Depth, Palette, Theme};
 
 /// One command's help: what it is, what it takes, what it contains.
+///
+/// Written by the derive, as [`Item`] and [`Sub`] are: fields are added as
+/// help learns to show more, so a hand-written one tracks the release.
 #[derive(Debug)]
 pub struct Command {
     /// The command's own name; empty for a root that leaves it to `argv[0]`.

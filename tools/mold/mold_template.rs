@@ -32,10 +32,10 @@ const EQ_ONLY: &[&str] = &[
 
 /// Parses `raw_cmdline`, which includes the program name.
 pub(crate) fn parse(raw_cmdline: &[Cow<'_, OsStr>]) -> Vec<Item> {
-    let words: Vec<&winnow_args::__private::BStr> = raw_cmdline
+    let words: Vec<&winnow_args::BStr> = raw_cmdline
         .iter()
         .skip(1)
-        .map(|word| winnow_args::__private::BStr::new(word.as_encoded_bytes()))
+        .map(|word| winnow_args::BStr::new(word.as_encoded_bytes()))
         .collect();
     match Cli::parse_from(&words) {
         Ok(cli) => cli.opts,

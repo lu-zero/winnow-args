@@ -16,10 +16,10 @@ struct Set {
     #[arg(short = 'x', plus = 'x')]
     xtrace: Option<bool>,
     /// `-o NAME`; a bare `-o` lists the options.
-    #[arg(short = 'o', value_optional, default_missing = "")]
+    #[arg(short = 'o', default_missing = "")]
     enable: Vec<String>,
     /// `+o NAME`; a bare `+o` lists them as commands.
-    #[arg(plus = 'o', value_optional, default_missing = "")]
+    #[arg(plus = 'o', default_missing = "")]
     disable: Vec<String>,
     #[arg(positional, double_dash = "preserve", stop_flags)]
     args: Vec<String>,

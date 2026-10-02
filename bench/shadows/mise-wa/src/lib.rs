@@ -2525,7 +2525,6 @@ pub struct GenerateBootstrapArgs {
     #[arg(
         long = "write",
         short = 'w',
-        value_optional,
         default_missing = "./bin/mise",
         value_name = "WRITE"
     )]
@@ -6091,7 +6090,6 @@ pub struct WatchArgs {
         long = "clear",
         short = 'c',
         help_heading = "Output",
-        value_optional,
         default_missing = "clear",
         value_name = "MODE"
     )]
@@ -6259,7 +6257,6 @@ pub struct WatchArgs {
     #[arg(
         long = "poll",
         alias = "force-poll",
-        value_optional,
         default_missing = "30s",
         value_name = "INTERVAL"
     )]

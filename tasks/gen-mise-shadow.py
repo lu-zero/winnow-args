@@ -23,7 +23,7 @@ DROP = {"effect", "author", "bin", "mount", "value_enum", "var", "hide_default_v
 KEEP = {
     "long", "short", "alias", "alias_hidden", "value_name", "help", "long_help", "after_long_help",
     "help_heading", "hide", "global", "count", "subcommand", "default", "env", "delimiter", "choices",
-    "double_dash", "required", "value_optional", "default_missing", "restart_token", "group",
+    "double_dash", "required", "default_missing", "restart_token", "group",
     "disable_help_flag", "disable_version_flag", "default_subcommand", "about", "long_about",
     "conflicts", "overrides", "requires", "required_unless",
 }

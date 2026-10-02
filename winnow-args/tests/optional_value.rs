@@ -16,7 +16,7 @@ enum Clear {
 
 #[derive(Args, Debug, PartialEq, Default)]
 struct Cli {
-    #[arg(short, long, value_optional, default_missing = "always")]
+    #[arg(short, long, default_missing = "always")]
     color: Option<String>,
     #[arg(short, long)]
     verbose: bool,

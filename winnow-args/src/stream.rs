@@ -23,6 +23,7 @@ pub fn words<S: AsRef<OsStr>>(args: &[S]) -> Vec<&BStr> {
 
 /// Where in the grammar a position is.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Mode {
     /// At the start of a word, and flags are still recognized.
     Word,
