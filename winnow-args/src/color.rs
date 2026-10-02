@@ -139,7 +139,7 @@ impl Ansi {
 
     /// The SGR foreground code: 30–37, 90–97.
     const fn code(self) -> u8 {
-        let i = self as u8;
+        let i = self.index();
         if i < 8 { 30 + i } else { 90 + i - 8 }
     }
 
@@ -235,12 +235,40 @@ fn distance((r1, g1, b1): (u8, u8, u8), (r2, g2, b2): (u8, u8, u8)) -> u32 {
     2 * d(r1, r2) + 4 * d(g1, g2) + 3 * d(b1, b2)
 }
 
-/// The nearest basic color.
+/// The nearest basic color: by hue when the color has one, since a muted
+/// tint is nearer to gray by distance and a palette of tints would all come
+/// out as the same gray; a gray by distance.
 fn to_16(rgb: (u8, u8, u8)) -> Ansi {
-    Ansi::ALL
-        .into_iter()
-        .min_by_key(|a| distance(a.rgb(), rgb))
-        .unwrap_or(Ansi::White)
+    let (r, g, b) = (i32::from(rgb.0), i32::from(rgb.1), i32::from(rgb.2));
+    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
+    let chroma = max - min;
+    if chroma < 32 {
+        return Ansi::ALL
+            .into_iter()
+            .min_by_key(|a| distance(a.rgb(), rgb))
+            .unwrap_or(Ansi::White);
+    }
+    // The hue in degrees, then the nearest of the six at 0, 60, … 300.
+    let hue = if max == r {
+        (60 * (g - b) / chroma + 360) % 360
+    } else if max == g {
+        120 + 60 * (b - r) / chroma
+    } else {
+        240 + 60 * (r - g) / chroma
+    };
+    let (normal, bright) = match (hue + 30) / 60 % 6 {
+        0 => (Ansi::Red, Ansi::BrightRed),
+        1 => (Ansi::Yellow, Ansi::BrightYellow),
+        2 => (Ansi::Green, Ansi::BrightGreen),
+        3 => (Ansi::Cyan, Ansi::BrightCyan),
+        4 => (Ansi::Blue, Ansi::BrightBlue),
+        _ => (Ansi::Magenta, Ansi::BrightMagenta),
+    };
+    if distance(bright.rgb(), rgb) < distance(normal.rgb(), rgb) {
+        bright
+    } else {
+        normal
+    }
 }
 
 /// The nearest entry of the cube or the gray ramp (16–255): the basic colors
@@ -608,6 +636,23 @@ mod tests {
         out.clear();
         Paint::ansi(Ansi::Red).write(&mut out, Depth::None, "x");
         assert_eq!(out, "x");
+    }
+
+    #[test]
+    fn a_uniform_theme_maps_its_palette_down() {
+        let theme = Theme::uniform(Palette::DEFAULT_256);
+        assert_eq!(theme.palette(Depth::TrueColor), Palette::DEFAULT_256);
+        assert_eq!(theme.palette(Depth::Ansi256), Palette::DEFAULT_256);
+        // In 16 colors each role keeps its hue: none collapses to gray.
+        let shown = |paint: Paint| paint.fg.and_then(|c| c.at(Depth::Ansi16));
+        let palette = theme.palette(Depth::Ansi16);
+        let ansi = |a| Some(Color::Ansi(a));
+        assert_eq!(shown(palette.header), ansi(Ansi::Cyan));
+        assert_eq!(shown(palette.flag), ansi(Ansi::Green));
+        assert_eq!(shown(palette.placeholder), ansi(Ansi::Cyan));
+        assert_eq!(shown(palette.error), ansi(Ansi::Red));
+        assert_eq!(shown(palette.invalid), ansi(Ansi::Red));
+        assert_eq!(shown(palette.valid), ansi(Ansi::Green));
     }
 
     #[test]
