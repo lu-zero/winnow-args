@@ -9,6 +9,9 @@ members = [
     "bench/shadows/mise-clap",
     "bench/shadows/mise-wa",
 ]
+# Plain `cargo build`, `test`, `doc` and `run` are about the library; the
+# benches need `--workspace` or `-p bench`.
+default-members = ["winnow-args", "winnow-args-derive"]
 
 [workspace.package]
 version = "0.1.0"
