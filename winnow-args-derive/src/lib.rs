@@ -74,7 +74,7 @@ use syn::{
 ///
 /// # Values
 ///
-/// Field types are `bool` (a switch), an integer with `count`, `T`, `Option<T>` and `Vec<T>`, `T: FromArg`.
+/// A value is any `T: FromArg`; the field's type says how many, as the table above has it.
 ///
 /// - `count`: an integer counting occurrences.
 /// - `value_name = "…"`: the placeholder in help.

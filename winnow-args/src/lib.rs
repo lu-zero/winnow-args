@@ -71,8 +71,164 @@ pub use value::{ChoiceError, FromArg};
 /// UTF-8. What [`FromArg::from_arg`] is given.
 pub use winnow::stream::BStr;
 
+/// A command line as a struct: a field per flag or word.
+///
+/// ```
+/// use winnow_args::Args;
+///
+/// /// Copy files.
+/// #[derive(Args, Debug)]
+/// #[arg(name = "cp", version)]
+/// struct Cp {
+///     /// Explain what is done; repeat for more.
+///     #[arg(short, long, count)]
+///     verbose: u8,
+///     /// Overwrite without asking.
+///     #[arg(short, long, negate)]
+///     force: bool,
+///     /// Attributes to keep.
+///     #[arg(long, delimiter = ',')]
+///     preserve: Vec<String>,
+///     /// Jobs to run.
+///     #[arg(short, long, env = "CP_JOBS", default = "1")]
+///     jobs: usize,
+///     #[arg(positional)]
+///     source: String,
+///     #[arg(positional)]
+///     dest: Option<String>,
+/// }
+///
+/// let cp = Cp::try_parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
+/// assert_eq!((cp.verbose, cp.force, cp.jobs), (2, false, 1));
+/// assert_eq!(cp.preserve, ["mode", "links"]);
+/// assert_eq!((cp.source.as_str(), cp.dest.as_deref()), ("a", Some("b")));
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
+/// What a field's type means:
+///
+/// | Type | Flag | Positional |
+/// |---|---|---|
+/// | `bool` | a switch | |
+/// | integer, with `count` | how many times it was given | |
+/// | `T` | one value; an error if absent and without `env` or `default` | a required word |
+/// | `Option<T>` | one value, or `None` | an optional word |
+/// | `Vec<T>` | one value per occurrence | every word left |
+/// | `Option<bool>`, with `plus` | `-x` is `Some(true)`, `+x` `Some(false)` | |
+///
 #[cfg(feature = "derive")]
-pub use winnow_args_derive::{Args, Occurrence, Subcommand, ValueEnum};
+pub use winnow_args_derive::Args;
+
+/// Subcommands as an enum: a variant per word that selects one.
+///
+/// ```
+/// use winnow_args::{Args, Subcommand};
+///
+/// #[derive(Args, Debug, PartialEq)]
+/// struct Add {
+///     #[arg(positional)]
+///     paths: Vec<String>,
+/// }
+///
+/// #[derive(Subcommand, Debug, PartialEq)]
+/// enum Command {
+///     /// Stage files.
+///     Add(Add),
+///     /// Show what changed.
+///     #[arg(alias = "st")]
+///     Status,
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Git {
+///     /// Say less.
+///     #[arg(short, long, global)]
+///     quiet: bool,
+///     #[arg(subcommand)]
+///     command: Command,
+/// }
+///
+/// let git = Git::try_parse_from(["add", "-q", "a", "b"])?;
+/// assert!(git.quiet);
+/// assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
+/// assert_eq!(Git::try_parse_from(["st"])?.command, Command::Status);
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
+#[cfg(feature = "derive")]
+pub use winnow_args_derive::Subcommand;
+
+/// Flags and words kept in the order given, as an enum's variants.
+///
+/// ```
+/// use winnow_args::{Args, Occurrence};
+///
+/// #[derive(Occurrence, Debug, PartialEq)]
+/// enum Item {
+///     /// Link what follows only if needed.
+///     #[arg(long)]
+///     AsNeeded,
+///     /// Search for a library.
+///     #[arg(short = 'l', prefix)]
+///     Library(String),
+///     #[arg(positional, value_name = "FILE")]
+///     Input(String),
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Ld {
+///     #[arg(short, long)]
+///     output: Option<String>,
+///     #[arg(sequence)]
+///     items: Vec<Item>,
+/// }
+///
+/// let ld = Ld::try_parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
+/// assert_eq!(ld.output.as_deref(), Some("out"));
+/// assert_eq!(
+///     ld.items,
+///     [
+///         Item::Input("a.o".into()),
+///         Item::AsNeeded,
+///         Item::Library("m".into()),
+///         Item::Input("b.o".into()),
+///     ]
+/// );
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
+#[cfg(feature = "derive")]
+pub use winnow_args_derive::Occurrence;
+
+/// A value that is one of an enum's variants.
+///
+/// ```
+/// use winnow_args::{Args, ErrorKind, ValueEnum};
+///
+/// #[derive(ValueEnum, Debug, PartialEq)]
+/// enum Color {
+///     Always,
+///     #[arg(alias = "no")]
+///     Never,
+///     #[arg(name = "auto")]
+///     WhenTerminal,
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Cli {
+///     #[arg(long)]
+///     color: Option<Color>,
+/// }
+///
+/// assert_eq!(Cli::try_parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
+/// assert_eq!(Cli::try_parse_from(["--color", "no"])?.color, Some(Color::Never));
+/// let error = Cli::try_parse_from(["--color=red"]).unwrap_err();
+/// assert_eq!(error.kind(), ErrorKind::InvalidChoice);
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
+#[cfg(feature = "derive")]
+pub use winnow_args_derive::ValueEnum;
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
