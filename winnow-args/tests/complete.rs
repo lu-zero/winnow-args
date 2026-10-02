@@ -64,8 +64,19 @@ fn flags_after_a_dash() {
         ["--verbose", "--color", "--output", "--help"]
     );
     assert_eq!(values(&["--co"]), ["--color"]);
-    assert_eq!(values(&["-"]).len(), 7, "{:?}", values(&["-"]));
-    assert!(!values(&["--"]).contains(&"--secret".to_owned()));
+    // Every visible spelling, the hidden `--secret` left out.
+    assert_eq!(
+        values(&["-"]),
+        [
+            "--verbose",
+            "-v",
+            "--color",
+            "--output",
+            "-o",
+            "-h",
+            "--help"
+        ]
+    );
 }
 
 #[test]
