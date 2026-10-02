@@ -20,8 +20,8 @@ const CURSOR: &str = "let mut cursor = ArgCursor { args: raw_cmdline, index: 1 }
 const LOOP: &str = "while cursor.index < raw_cmdline.len() {";
 /// The value a flag given without one gets, to tell `--x` from `--x=`.
 const BARE: &str = "\\0";
-/// The arm of `-dynamic`, which the lexer leaves as an unknown flag.
-const DYNAMIC_ARM: usize = 217;
+/// How the arm of `-dynamic` tests for it; the lexer leaves it as an unknown flag.
+const DYNAMIC: &str = "cursor.text() == \"-dynamic\"";
 /// What the built-in parser alone uses.
 const LEGACY_ITEMS: &[&str] = &[
     "fn match_option<",
@@ -139,6 +139,8 @@ enum Matcher {
 struct Arm<'a> {
     matchers: Vec<(Matcher, Vec<Option<String>>)>,
     body: &'a [&'a str],
+    /// It is the arm of `-dynamic`.
+    dynamic: bool,
 }
 
 /// The option loop's arms, and the statements ahead of them (inputs, `--help`).
@@ -203,7 +205,11 @@ fn chain<'a>(lines: &'a [&'a str]) -> Result<Chain<'a>> {
         }
         matchers.sort_by_key(|(start, ..)| *start);
         let matchers = matchers.into_iter().map(|(_, m, g)| (m, g)).collect();
-        arms.push(Arm { matchers, body });
+        arms.push(Arm {
+            matchers,
+            body,
+            dynamic: header.contains(DYNAMIC),
+        });
 
         at = header_end + 1 + body_len;
         if lines[at] == "        }" {
@@ -675,9 +681,8 @@ impl<'a> Parser<'a> {
             out.push("        }".to_owned());
         }
 
-        if self.chain.arms.len() <= DYNAMIC_ARM {
-            return Err("mold's option chain is shorter than expected".into());
-        }
+        let dynamic = self.chain.arms.iter().position(|arm| arm.dynamic);
+        let dynamic = dynamic.ok_or("mold's cmdline.rs has no `-dynamic` arm")?;
         out.extend(
             [
                 "        Item::Grouped(value_os) => {",
@@ -693,7 +698,7 @@ impl<'a> Parser<'a> {
             ]
             .map(str::to_owned),
         );
-        out.extend(body(DYNAMIC_ARM, "        "));
+        out.extend(body(dynamic, "        "));
         out.extend(
             [
                 "            } else {",
