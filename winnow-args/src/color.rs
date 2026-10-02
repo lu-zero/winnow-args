@@ -29,6 +29,7 @@ impl Depth {
     /// environment:
     ///
     /// - a non-empty `NO_COLOR` means none, whatever else is set;
+    /// - `FORCE_COLOR=0` or `false` means none too;
     /// - `FORCE_COLOR` (`1`–`3`, or empty/`true` for 1) or `CLICOLOR_FORCE`
     ///   (not `0`) give color even to a pipe;
     /// - otherwise none for a pipe, `CLICOLOR=0`, `TERM=dumb`, or no `TERM`
@@ -47,9 +48,10 @@ impl Depth {
         }
         let forced = match text("FORCE_COLOR").as_deref() {
             Some("" | "true") => Depth::Ansi16,
-            Some("false" | "0") => Depth::None,
+            // A refusal, not "unset": nothing below turns color back on.
+            Some("false" | "0") => return Depth::None,
             Some(level) => match level.parse::<u8>() {
-                Ok(0) => Depth::None,
+                Ok(0) => return Depth::None,
                 Ok(1) | Err(_) => Depth::Ansi16,
                 Ok(2) => Depth::Ansi256,
                 Ok(_) => Depth::TrueColor,
