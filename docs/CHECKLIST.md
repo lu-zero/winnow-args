@@ -14,6 +14,10 @@ option zones, `echo`'s all-or-nothing option words) and
 [CHECKLIST-ld.md](./CHECKLIST-ld.md) (GNU `ld`'s command line for mold and wild:
 one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 
+What usage-rs offers beyond the argv grammar (attributes, command policies,
+completion hints, configuration, spec output) is listed in
+[CHECKLIST-usage.md](./CHECKLIST-usage.md).
+
 ## 0. Foundations
 
 - [x] Workspace: `winnow-args` (runtime), `winnow-args-derive` (proc-macro), `bench`
