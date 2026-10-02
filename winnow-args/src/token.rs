@@ -32,7 +32,7 @@ use crate::value::FromArg;
 /// ```
 /// use winnow::combinator::{dispatch, fail};
 /// use winnow::prelude::*;
-/// use winnow::stream::BStr;
+/// use winnow_args::BStr;
 /// use winnow_args::combinator::args;
 /// use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
 /// use winnow_args::{Argv, Error};
@@ -353,6 +353,9 @@ impl<'i> Word<'i> {
 
 /// How a flag takes a detached value, beyond the default of any word that is
 /// not flag-like.
+///
+/// More options may be added: build one from [`ValueOptions::DEFAULT`]
+/// (`ValueOptions { hyphen_values: true, ..ValueOptions::DEFAULT }`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ValueOptions {
     /// A negative number is a value, not a flag: `--offset -1`.
@@ -484,7 +487,7 @@ pub enum Kind {
 /// ```
 /// use winnow::combinator::{alt, dispatch, fail};
 /// use winnow::prelude::*;
-/// use winnow::stream::BStr;
+/// use winnow_args::BStr;
 /// use winnow_args::combinator::{args, positional, short};
 /// use winnow_args::token::{Kind, kind};
 /// use winnow_args::{Argv, Error};

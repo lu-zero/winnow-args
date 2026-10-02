@@ -18,7 +18,7 @@ pub mod wa_derive {
         pub toml: bool,
         #[arg(long, requires = "--json")]
         pub strict: bool,
-        #[arg(short, long, value_optional, default_missing = "./bin/mise")]
+        #[arg(short, long, default_missing = "./bin/mise")]
         pub write: Option<String>,
         #[arg(long, allow_negative_numbers)]
         pub offset: Option<i32>,

@@ -1,6 +1,6 @@
 //! Command line argument parsing built from [winnow] parsers.
 //!
-//! The command line is read as a slice of [`BStr`](winnow::stream::BStr) words
+//! The command line is read as a slice of [`BStr`] words
 //! through [`Argv`], a winnow [`Stream`](winnow::stream::Stream). Everything
 //! else is a winnow parser over it, in three layers:
 //!
@@ -67,6 +67,9 @@ pub use error::{Error, ErrorKind};
 pub use stream::{Argv, words};
 pub use token::Arg;
 pub use value::{ChoiceError, FromArg};
+/// A word of the command line, and a flag's value: bytes, not necessarily
+/// UTF-8. What [`FromArg::from_arg`] is given.
+pub use winnow::stream::BStr;
 
 #[cfg(feature = "derive")]
 pub use winnow_args_derive::{Args, Occurrence, Subcommand, ValueEnum};
@@ -118,7 +121,7 @@ pub trait Args: Sized {
     }
 
     /// Parse `words`, which should not include the program name.
-    fn parse_from(words: &[&winnow::stream::BStr]) -> Result<Self, Error> {
+    fn parse_from(words: &[&BStr]) -> Result<Self, Error> {
         Self::parse_argv(&mut Argv::new(words))
     }
 
@@ -309,6 +312,7 @@ where
 
 /// [`Globals`] that are `shorts` (letter, takes a value) and `bind`, then
 /// `parent`'s: what the derive hands a subcommand of a struct with global flags.
+#[doc(hidden)]
 pub fn inherit<'a, F>(
     shorts: &'static [(char, bool)],
     parent: &'a mut dyn Globals,

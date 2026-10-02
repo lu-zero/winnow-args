@@ -134,7 +134,7 @@ Done on the dropped `winnow-args-engine` branch (`c499caf0`, `fe431505`):
       `"set clearing args"`)
 - [x] Value letter ending a bundle takes the next word: `set -euxo pipefail`.
 - [x] Optional values: bare `set -o`/`set +o` list the options.
-      (`value_optional` + `default_missing`; `set: "set with no args"`)
+      (`default_missing`; `set: "set with no args"`)
 - [x] Assignments as operands for the declaration builtins (brush splits
       them off before parsing; `#[arg(skip)]` holds them, and
       `impl_winnow_args!(…, declarations = field)` stores them): `declare -i n=3`,

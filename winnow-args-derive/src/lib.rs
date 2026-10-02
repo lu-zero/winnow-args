@@ -82,8 +82,7 @@ use syn::{
 /// - `values = N`: each occurrence of a `Vec` flag takes `N` words, whatever they look like.
 /// - `choices("a", "b")`: the only values accepted.
 /// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order.
-/// - `default_missing = "…"`: the value of a flag given without one; `value_optional` is accepted with it, and needs it.
-/// - `require_equals`: the value only binds attached (`--name=v`, `-nv`).
+/// - `default_missing = "…"`: the value of a flag given without one, which makes its value optional.
 /// - `keep_equals`: a short flag's attached value keeps a leading `=` (`-L=dir`).
 /// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
 /// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
@@ -3330,7 +3329,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut env = None;
     let mut default = None;
     let mut double_dash = None;
-    let (mut default_missing, mut value_optional) = (None, false);
+    let mut default_missing = None;
     let mut negative_numbers = false;
     let mut hyphen_values = false;
     let mut require_equals = false;
@@ -3425,8 +3424,6 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 negative_numbers = true;
             } else if meta.path.is_ident("default_missing") {
                 default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
-            } else if meta.path.is_ident("value_optional") {
-                value_optional = true;
             } else if meta.path.is_ident("double_dash") {
                 let mode = meta.value()?.parse::<LitStr>()?;
                 double_dash = Some(match mode.value().as_str() {
@@ -3475,7 +3472,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `value_optional`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
+                     `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
                      `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
                 ));
             }
@@ -3492,9 +3489,6 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     } else {
         kind(&f.ty)
     };
-    if value_optional && default_missing.is_none() {
-        return error("`value_optional` needs `default_missing`: the value of a bare flag".into());
-    }
     if default_missing.is_some()
         && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
     {

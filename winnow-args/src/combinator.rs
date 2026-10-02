@@ -3,7 +3,7 @@
 //! ```
 //! use winnow::prelude::*;
 //! use winnow::combinator::alt;
-//! use winnow::stream::BStr;
+//! use winnow_args::BStr;
 //! use winnow_args::{Argv, Error, combinator::{args, short}};
 //!
 //! let verbose = short('v').long("verbose");
