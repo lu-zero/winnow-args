@@ -35,7 +35,7 @@ struct Cli {
     items: Vec<Item>,
 }
 
-#[allow(dead_code, reason = "the values are only printed")]
+#[allow(dead_code, reason = "the `-z` variants' values are only printed")]
 #[derive(Occurrence, Debug)]
 #[arg(allow_hyphen_values, keep_equals)]
 enum Item {

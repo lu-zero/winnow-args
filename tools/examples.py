@@ -79,7 +79,6 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-#[allow(dead_code, reason = "the values are only printed")]
 enum Builtin {
 @VARIANTS@
 }
@@ -110,7 +109,6 @@ a = src.index('#[derive(Occurrence)]')
 b = src.index('/// The whole command line')
 enum = src[a:b].rstrip() + '\n'
 enum = re.sub(r'\n    /// `--help`\.\n    #\[arg\(long = "help"\)\]\n    Help,', '', enum)
-enum = re.sub(r'\n    #\[expect\(dead_code, reason = "accepted and ignored"\)\]', '', enum)
 enum = enum.replace('#[derive(Occurrence)]', '#[derive(Occurrence, Debug)]').replace('pub(crate) enum', 'enum')
 a = src.index('/// The option a `-z` keyword stands for')
 b = src.index("/// An option's value as UTF-8")
@@ -180,7 +178,7 @@ struct Cli {
     items: Vec<Item>,
 }
 
-#[allow(dead_code, reason = "the values are only printed")]
+#[allow(dead_code, reason = "the `-z` variants' values are only printed")]
 @ENUM@
 @ZOPT@
 fn main() {

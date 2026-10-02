@@ -206,6 +206,16 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 hide: #hide,
             }
         });
+        // Read here, so a payload only printed is not dead code.
+        let read_payload = quote! {
+            |__item| match __item {
+                Self::#ident(__read) => {
+                    let _ = __read;
+                }
+                #[allow(unreachable_patterns)]
+                _ => {}
+            }
+        };
         let parse = match &variant.fields {
             Fields::Unit => {
                 let index = subs.len() - 1;
@@ -224,9 +234,12 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     Some(inner) => quote! {
                         <#inner as ::winnow_args::Args>::parse_argv_with(__input, __globals)
                             .map(|v| Self::#ident(::std::boxed::Box::new(v)))
+                            .inspect(#read_payload)
                     },
                     None => quote! {
-                        <#ty as ::winnow_args::Args>::parse_argv_with(__input, __globals).map(Self::#ident)
+                        <#ty as ::winnow_args::Args>::parse_argv_with(__input, __globals)
+                            .map(Self::#ident)
+                            .inspect(#read_payload)
                     },
                 }
             }
@@ -529,6 +542,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     Some(&name),
                     quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
                     false,
+                    false,
                 ));
             }
             let value = wrap(
@@ -536,9 +550,18 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 quote!(__word.offset),
                 quote!(false),
             );
-            *slot = Some(quote! {
-                ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident(#value)))
-            });
+            *slot = Some(quote!({
+                let __item = Self::#ident(#value);
+                // Read here, so a value only printed is not dead code.
+                match &__item {
+                    Self::#ident(__read) => {
+                        let _ = __read;
+                    }
+                    #[allow(unreachable_patterns)]
+                    _ => {}
+                }
+                ::core::result::Result::Ok(::core::option::Option::Some(__item))
+            }));
             continue;
         }
         if short.is_none() && longs.is_empty() {
@@ -572,6 +595,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 .then(|| value_name.as_deref().unwrap_or("VALUE")),
             choices,
             require_equals,
+            default_missing.is_some(),
         ));
         let body = match takes {
             None => quote! {
@@ -612,7 +636,18 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 quote! {
                     #attached
                     let __value = #read;
-                    ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident(#value)))
+                    {
+                    let __item = Self::#ident(#value);
+                    // Read here, so a value only printed is not dead code.
+                    match &__item {
+                        Self::#ident(__read) => {
+                            let _ = __read;
+                        }
+                        #[allow(unreachable_patterns)]
+                        _ => {}
+                    }
+                    ::core::result::Result::Ok(::core::option::Option::Some(__item))
+                }
                 }
             }
         };
@@ -725,6 +760,7 @@ fn occurrence_item(
     value_name: Option<&str>,
     choices: TokenStream2,
     require_equals: bool,
+    optional_value: bool,
 ) -> TokenStream2 {
     let (doc, long_doc) = docs(&variant.attrs);
     let (help, long_help) = (text(&doc), text(&long_doc));
@@ -752,6 +788,10 @@ fn occurrence_item(
         choices: #choices,
         require_equals: #require_equals,
         global: false,
+        more_shorts: &[],
+        plus: ::core::option::Option::None,
+        optional_value: #optional_value,
+        values: 1,
     })
 }
 
@@ -1224,11 +1264,11 @@ impl Field {
         };
         let (help, long_help) = (text(&self.help), text(&self.long_help));
         let heading = opt_str(self.heading.as_deref());
-        // A field spelled only `+c` has no `-`/`--` row to show.
-        let hide = self.hide
-            || matches!(self.role, Role::Flag { .. })
-                && self.short().is_none()
-                && self.longs().is_empty();
+        let hide = self.hide;
+        let more_shorts = self.short_aliases.iter();
+        let plus = opt_char(self.plus);
+        let optional_value = self.default_missing.is_some();
+        let values = self.values;
         let required = matches!(self.kind, Kind::Required(_))
             && self.default.is_none()
             && self.env.is_none()
@@ -1266,6 +1306,10 @@ impl Field {
                 choices: #choices,
                 require_equals: #require_equals,
                 global: #global,
+                more_shorts: &[#(#more_shorts),*],
+                plus: #plus,
+                optional_value: #optional_value,
+                values: #values,
             }
         }
     }
