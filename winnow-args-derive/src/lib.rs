@@ -29,7 +29,7 @@ use syn::{
 ///
 /// Naming and help:
 ///
-/// - `name = "…"`: the program name in usage and completion scripts; `argv[0]` when empty.
+/// - `name = "…"`: the program name in usage (`argv[0]` when empty) and in completion scripts, which need it.
 /// - `version`, `version = "…"`: supply `-V`/`--version`; bare, the crate's `CARGO_PKG_VERSION`.
 /// - `about`, `long_about`, `after_help`, `after_long_help`: help text; the first two default to the doc comment.
 /// - `disable_help_flag`, `disable_help_short` (`--help` only), `disable_version_flag`,
@@ -47,7 +47,9 @@ use syn::{
 ///
 /// # Field roles
 ///
-/// A field is a flag unless it is one of these:
+/// A field is a flag unless it is one of these. `sequence` and `unknown` are for tools whose flags
+/// mean something by their order (see `Occurrence`); most programs need the first three. `flatten`,
+/// `sequence`, `unknown` and `skip` take no other option.
 ///
 /// - `positional`: a word. `T` is required, `Option<T>` optional, `Vec<T>` every word left; in that order.
 /// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
@@ -74,15 +76,18 @@ use syn::{
 ///
 /// # Values
 ///
-/// A value is any `T: FromArg`; the field's type says how many, as the table above has it.
+/// A value is any `T: FromArg`; the field's type says how many, as the table on `winnow_args::Args` has it.
 ///
 /// - `count`: an integer counting occurrences.
 /// - `value_name = "…"`: the placeholder in help.
 /// - `delimiter = ','`: split each value of a `Vec` field.
 /// - `values = N`: each occurrence of a `Vec` flag takes `N` words, whatever they look like.
 /// - `choices("a", "b")`: the only values accepted.
-/// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order.
+/// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order; an `Option<T>`
+///   field then holds `Some`. A switch's variable is true unless empty, `0`, `false`, `no` or `off`.
 /// - `default_missing = "…"`: the value of a flag given without one, which makes its value optional.
+/// - `require_equals`: the value only attached (`--name=v`, `-nv`); with `default_missing`, a bare flag
+///   leaves the next word alone.
 /// - `keep_equals`: a short flag's attached value keeps a leading `=` (`-L=dir`).
 /// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
 /// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
@@ -121,7 +126,8 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 /// Derive `Subcommand` (and `Args`, so the enum can be the whole command line) for an enum of subcommands.
 ///
 /// A variant is a unit, or holds one `Args` type, which may be `Box`ed; a parent struct holds the enum in
-/// a `subcommand` field. The doc comments are the help text.
+/// a `subcommand` field. The doc comments are the help text. As a whole command line the enum has no
+/// name, version or about: wrap it in a struct for those, and for completion scripts.
 ///
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
@@ -382,7 +388,7 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
 /// - Variant: `name = "…"`: the value that selects it.
 /// - Variant: `alias = "…"`, `alias("…", …)`: other accepted values; `alias_hidden` is the same, not listed.
-/// - Variant: `hide`: accepted, but not listed as possible.
+/// - Variant: `hide`: accepted, but named neither in help nor in errors.
 /// - Variant: `help = "…"`, `long_help = "…"`: accepted and unused.
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
@@ -808,7 +814,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let case = rename_all(input)?;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
-    let (mut choices, mut visible) = (Vec::new(), Vec::new());
+    let mut visible = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -823,9 +829,8 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } = variant_names(variant, &mut names, case)?;
         let name = LitStr::new(&spellings[0], Span::call_site());
         if !hide {
-            visible.push(name.clone());
+            visible.push(name);
         }
-        choices.push(name);
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
         arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
@@ -842,7 +847,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 match &**__value {
                     #(#arms)*
                     _ => ::core::result::Result::Err(::std::boxed::Box::new(
-                        ::winnow_args::ChoiceError { choices: &[#(#choices),*] },
+                        ::winnow_args::ChoiceError { choices: Self::CHOICES },
                     )),
                 }
             }
@@ -1128,6 +1133,29 @@ fn has_flag(f: &syn::Field, name: &str) -> bool {
         });
         found
     })
+}
+
+/// A `skip`, `flatten`, `sequence` or `unknown` field takes no other option
+/// (`sequence, unknown` aside): none of them would be read.
+fn role_alone(f: &syn::Field) -> syn::Result<()> {
+    let role = ["skip", "flatten", "sequence", "unknown"]
+        .into_iter()
+        .find(|role| has_flag(f, role));
+    let Some(role) = role else {
+        return Ok(());
+    };
+    for attr in f.attrs.iter().filter(|a| is_ours(a)) {
+        attr.parse_nested_meta(|meta| {
+            let alone =
+                meta.path.is_ident(role) || (role == "sequence" && meta.path.is_ident("unknown"));
+            if alone {
+                Ok(())
+            } else {
+                Err(meta.error(format!("a `{role}` field takes no other `arg` options")))
+            }
+        })?;
+    }
+    Ok(())
 }
 
 /// `T` in `Box<T>`.
@@ -1600,6 +1628,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Args` needs a struct with named fields",
         ));
     };
+    for f in &named.named {
+        role_alone(f)?;
+    }
     let fields = named
         .named
         .iter()
@@ -3471,9 +3502,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
-                     `positional`, `value_name`, `double_dash`, `subcommand`, `delimiter`, `choices`, `env`, `default`, \
-                     `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, `stop_flags`, `plus`, `skip`, `keywords`, \
-                     `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`",
+                     `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
+                     `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
+                     `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
+                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
+                     `group`, `help`, `long_help`, `help_heading`, `hide`",
                 ));
             }
             Ok(())

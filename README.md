@@ -5,6 +5,10 @@ parsers. The command line is a slice of byte-string words (`Argv`), so nothing
 is copied or joined and a non-UTF-8 argument is no special case; a derived
 parser is one loop with a `match` on each flag's name.
 
+```
+cargo add winnow-args
+```
+
 ```rust
 use std::path::PathBuf;
 use winnow_args::Args;
@@ -26,6 +30,9 @@ fn main() {
     println!("{cli:?}");
 }
 ```
+
+Tests call `Cli::try_parse_from(["-v", "a"])`, without the program name. The
+crate docs list the entry points and map clap's attributes to these.
 
 ## What it covers
 
@@ -58,12 +65,12 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 ```
 
 `brush_builtins` and `ld` print what they parse, and say what to expect with
-`--help`. They are generated (`cargo run -p xtask -- gen examples`) from two ports:
+`--help`. They are generated (`just gen examples BRUSH_DIR MOLD_DIR`) from two ports:
 
 - [brush](https://github.com/reubeno/brush), a bash-compatible shell: every
   builtin and the shell's own command line. Its compatibility suite is
-  unchanged; a builtin's arguments cost 1 to 5 µs to handle where clap takes 4
-  to 130.
+  unchanged; a builtin call costs at most 11 µs over an empty loop, where
+  clap's takes up to 127 (`docs/PERF.md`, step 50).
 - [mold](https://github.com/rui314/mold), a linker: its whole option set
   behind a feature, its test suite unchanged; a link line parses in a sixth of
   the instructions of mold's own parser.

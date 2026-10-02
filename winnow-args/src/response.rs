@@ -26,6 +26,10 @@
 //! let words: Vec<&[u8]> = words.iter().map(|w| w.as_ref()).collect();
 //! assert_eq!(words, [&b"-shared"[..], b"-o", b"my out", b"main.o", b"-lc"]);
 //! ```
+//!
+//! A program expands its arguments, then parses the words with
+//! [`Args::parse_from`](crate::Args::parse_from) where it would call `parse()`;
+//! nothing turns `@file` on but that call. `examples/ld.rs` does it.
 
 use std::ffi::OsStr;
 use std::fmt;

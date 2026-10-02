@@ -20,9 +20,38 @@
 //! - a flag's value (`--color <TAB>`, `--color=<TAB>`), from its choices, or
 //!   files when it has none;
 //! - elsewhere, subcommand names and a positional's choices, or files.
+//!
+//! In a program, the callback is answered first and the script is printed on
+//! request, here by a flag of its own:
+//!
+#![cfg_attr(feature = "derive", doc = "```no_run")]
+#![cfg_attr(not(feature = "derive"), doc = "```ignore")]
+//! use winnow_args::Args;
+//! use winnow_args::complete::Shell;
+//!
+//! #[derive(Args)]
+//! #[arg(name = "tool")]
+//! struct Cli {
+//!     /// Print a completion script: `source <(tool --completions bash)`.
+//!     #[arg(long, value_name = "SHELL")]
+//!     completions: Option<Shell>,
+//! }
+//!
+//! let args: Vec<_> = std::env::args_os().skip(1).collect();
+//! if let Some(answer) = Cli::completion_request(&args) {
+//!     print!("{answer}");
+//!     return;
+//! }
+//! let cli = Cli::parse();
+//! if let Some(shell) = cli.completions {
+//!     print!("{}", Cli::completion_script(shell));
+//! }
+//! ```
 
 use std::ffi::OsString;
 use std::fmt::Write as _;
+
+use winnow::stream::BStr;
 
 use crate::help::{Command, Item};
 
@@ -72,6 +101,21 @@ impl Shell {
     /// The shell named `name`, if a script can be written for it.
     pub fn from_name(name: &str) -> Option<Shell> {
         Shell::ALL.iter().copied().find(|s| s.as_str() == name)
+    }
+}
+
+/// So a program's own `--completions <SHELL>` flag can be a `Shell`.
+impl crate::FromArg for Shell {
+    const CHOICES: &'static [&'static str] = &["bash", "zsh", "fish", "elvish", "powershell"];
+
+    fn from_arg(value: &BStr) -> Result<Self, crate::error::BoxError> {
+        let name = std::str::from_utf8(value).ok();
+        match name.and_then(Shell::from_name) {
+            Some(shell) => Ok(shell),
+            None => Err(Box::new(crate::ChoiceError {
+                choices: Self::CHOICES,
+            })),
+        }
     }
 }
 

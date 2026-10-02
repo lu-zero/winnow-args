@@ -176,3 +176,24 @@ fn the_winnow_args_attribute_name_works_too() {
     assert_eq!(parse("file"), Some(Spelled::FileName));
     assert_eq!(parse("filename"), None);
 }
+
+#[derive(winnow_args::ValueEnum, Debug, PartialEq)]
+enum Mode {
+    Shown,
+    #[arg(hide)]
+    Secret,
+}
+
+#[derive(Args, Debug)]
+struct Modes {
+    #[arg(long)]
+    mode: Option<Mode>,
+}
+
+#[test]
+fn a_hidden_variant_is_accepted_but_never_offered() {
+    let parse = |line: &[&str]| Modes::try_parse_from(line).map(|m| m.mode);
+    assert_eq!(parse(&["--mode=secret"]).unwrap(), Some(Mode::Secret));
+    let e = parse(&["--mode=bogus"]).unwrap_err();
+    assert!(e.to_string().ends_with("expected one of shown"), "{e}");
+}

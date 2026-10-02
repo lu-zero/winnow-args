@@ -13,6 +13,29 @@ use crate::error::BoxError;
 /// only place a value can fail, so a command line that is not valid UTF-8 still
 /// parses — flags still match — and only a value that is actually converted to
 /// text can be rejected for it.
+///
+/// For a type that is [`FromStr`](std::str::FromStr), [`Parsed<T>`] needs no
+/// impl. Otherwise:
+///
+/// ```
+/// use winnow_args::error::BoxError;
+/// use winnow_args::{BStr, FromArg};
+///
+/// /// `WIDTHxHEIGHT`.
+/// struct Size(u32, u32);
+///
+/// impl FromArg for Size {
+///     fn from_arg(value: &BStr) -> Result<Self, BoxError> {
+///         let (w, h) = std::str::from_utf8(value)?
+///             .split_once('x')
+///             .ok_or("expected WIDTHxHEIGHT")?;
+///         Ok(Size(w.parse()?, h.parse()?))
+///     }
+/// }
+///
+/// let Size(w, h) = Size::from_arg(BStr::new("80x24")).unwrap();
+/// assert_eq!((w, h), (80, 24));
+/// ```
 pub trait FromArg: Sized {
     /// The values accepted, when there is a fixed set: help lists them as
     /// `[possible values: …]`. Empty by default; `#[derive(ValueEnum)]` fills

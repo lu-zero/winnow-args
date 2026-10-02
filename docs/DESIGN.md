@@ -125,7 +125,7 @@ accepting the same lines.
 Help is `static` data (`help::Command`) the derive emits beside the parser.
 Nothing reads it during a successful parse: `-h`/`--help` return it inside an
 error and `help::render` lays it out only then. Rendering wraps to
-`help::width()` (`COLUMNS`, else 100, clap's fallback) with usage's rule for
+`help::width()` (`COLUMNS`, else the terminal with `terminal-size`, else 100, clap's fallback) with usage's rule for
 the column (at most two fifths of the page; a wider item has its description
 on the next line). The wrapping borrows slices of the text, so a line that
 fits costs one scan.

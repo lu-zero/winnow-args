@@ -19,12 +19,13 @@
 //! use std::path::PathBuf;
 //! use winnow_args::Args;
 //!
+//! /// Look somewhere.
 //! #[derive(Args, Debug)]
 //! struct Cli {
-//!     /// -v, --verbose
+//!     /// Say more.
 //!     #[arg(short, long)]
 //!     verbose: bool,
-//!     /// -p, --path <PATH>
+//!     /// Where to look.
 //!     #[arg(short, long)]
 //!     path: Option<PathBuf>,
 //! }
@@ -35,12 +36,43 @@
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 //!
+//! # Entry points
+//!
+//! - [`Args::parse`] in `main`: help, version and errors are printed and the
+//!   process exits (0, or 2 on failure), as [`report`] does.
+//! - [`Args::try_parse_from`] in tests: the words after the program name
+//!   (clap's takes the name first), and an [`Error`] back. Help and version are
+//!   `Err` too ([`ErrorKind::HelpRequested`]), so hand an error to [`report`]
+//!   rather than `?` it out of `main`.
+//! - [`Args::parse_from`] when the words are already [`BStr`]s, as after
+//!   [`response::expand`].
+//! - [`Args::completion_request`] before any of them, for a program with
+//!   [`complete`] scripts.
+//!
+//! # From clap
+//!
+//! | clap | winnow-args |
+//! |---|---|
+//! | `#[derive(Parser)]`, `#[command(...)]` | `#[derive(Args)]`, `#[arg(...)]` on the struct |
+//! | `ArgAction::SetTrue` / `Count` | a `bool` field / `count` |
+//! | `default_value = "…"`, `env = "…"` | `default = "…"`, `env = "…"` |
+//! | `value_delimiter = ','`, `num_args = 2` | `delimiter = ','`, `values = 2` |
+//! | `conflicts_with = "x"`, `requires = "x"` | `conflicts("--x")`, `requires("--x")` |
+//! | `#[arg(value_enum)]` | nothing: the type derives `ValueEnum` |
+//! | `#[command(flatten)]`, `#[command(subcommand)]` | `#[arg(flatten)]`, `#[arg(subcommand)]` |
+//! | `Parser::try_parse_from(["prog", …])` | `Args::try_parse_from([…])`, no program name |
+//!
+//! Unknown flags are errors, a repeated single-value flag keeps the last
+//! value, and long names are never abbreviated.
+//!
 //! # Derive attributes
 //!
 //! The derives read `#[arg(...)]`, or `#[winnow_args(...)]` for a type whose other derives (clap's)
-//! claim `arg`. The page of each derive macro lists every attribute it accepts: `Args` (struct options,
-//! field roles such as `flatten`, `sequence` and `unknown`, flag names, values, positionals, rules,
-//! help), `Subcommand`, `ValueEnum` and `Occurrence`.
+//! claim `arg`. The page of each derive macro lists every attribute it accepts:
+//! `Args` (struct options, field roles such as `flatten`, flag names, values,
+//! positionals, rules, help), `Subcommand`, `ValueEnum`,
+//! and `Occurrence` for tools whose flags mean something by their order
+//! (a linker's `--as-needed a.o`).
 //!
 //! # Supporting modules
 //!
@@ -152,6 +184,11 @@ pub use winnow_args_derive::Args;
 /// assert!(git.quiet);
 /// assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
 /// assert_eq!(Git::try_parse_from(["st"])?.command, Command::Status);
+///
+/// match git.command {
+///     Command::Add(Add { paths }) => println!("staging {paths:?}"),
+///     Command::Status => println!("on branch main"),
+/// }
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
 ///
@@ -276,12 +313,30 @@ pub trait Args: Sized {
         complete::script(Self::HELP.name, shell)
     }
 
-    /// Parse `words`, which should not include the program name.
+    /// Parse `words`, which should not include the program name. Use
+    /// [`Args::try_parse_from`] unless the words are already [`BStr`]s.
     fn parse_from(words: &[&BStr]) -> Result<Self, Error> {
         Self::parse_argv(&mut Argv::new(words))
     }
 
-    /// Parse `args`, which should not include the program name.
+    /// Parse `args`, which should not include the program name (clap's
+    /// takes it first).
+    ///
+    /// ```
+    /// # #[cfg(feature = "derive")] {
+    /// use winnow_args::{Args, ErrorKind};
+    ///
+    /// #[derive(Args)]
+    /// struct Cli {
+    ///     #[arg(short, long)]
+    ///     verbose: bool,
+    /// }
+    ///
+    /// assert!(Cli::try_parse_from(["-v"]).unwrap().verbose);
+    /// let error = Cli::try_parse_from(["--loud"]).err().unwrap();
+    /// assert_eq!(error.kind(), ErrorKind::UnknownFlag);
+    /// # }
+    /// ```
     fn try_parse_from<I, S>(args: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -291,8 +346,9 @@ pub trait Args: Sized {
         Self::parse_from(&words(&args))
     }
 
-    /// Parse the process's arguments, reporting as [`report`] does: help and
-    /// version go to stdout, and the process exits with 0 or, on a failure, 2.
+    /// Parse the process's arguments; on help, version or a failure, print
+    /// and exit as [`report`] does. It answers no completion callback: call
+    /// [`Args::completion_request`] first if the program has [`complete`] scripts.
     fn parse() -> Self {
         let mut args = std::env::args_os();
         let program = Self::HELP.name;
@@ -324,6 +380,17 @@ pub fn report(error: &Error, program: &str) -> i32 {
 
 /// [`report`], painted with `theme`: its palette for the depth
 /// [`color::Depth::detect`] finds on the stream written to.
+///
+/// ```
+/// use winnow_args::color::{Paint, Palette, Theme};
+///
+/// // Bold, uncolored headers on 16-color terminals; the default elsewhere.
+/// const THEME: Theme = Theme {
+///     ansi16: Palette { header: Paint::NONE.bold(), ..Palette::DEFAULT },
+///     ..Theme::DEFAULT
+/// };
+/// # let _ = |e: &winnow_args::Error| winnow_args::report_with(e, "prog", &THEME);
+/// ```
 pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
     use std::io::IsTerminal as _;
     let stdout = || help::Style::themed(theme, std::io::stdout().is_terminal());

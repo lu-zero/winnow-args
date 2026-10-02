@@ -379,7 +379,7 @@ Warm ns (min), under load; compare within a row, not against step 12.
 
 ## 14. `default_missing` (`-w/--write[=PATH]`) and `restart_token`
 
-`default_missing = "…"` (with or without `value_optional`) makes a value-taking
+`default_missing = "…"` makes a value-taking
 flag's value optional, per usage's corpus: a bare `--write`, or one followed by
 a flag-like word, gives the missing default; `--write=x`, `-wx` and `--write x`
 give `x`. It is `Arg::read_value_or` — `read_value` with the missing default

@@ -235,3 +235,16 @@ fn words_given_unquoted_are_not_split_again() {
     let answer = Tool::completion_request(&args).unwrap();
     assert!(answer.starts_with("--color"), "{answer}");
 }
+
+#[test]
+fn a_shell_is_a_flag_value() {
+    #[derive(winnow_args::Args)]
+    struct Cli {
+        #[arg(long)]
+        completions: Option<Shell>,
+    }
+    let shell = |line: &[&str]| Cli::try_parse_from(line).map(|c| c.completions);
+    assert_eq!(shell(&["--completions", "zsh"]).unwrap(), Some(Shell::Zsh));
+    let e = shell(&["--completions", "tcsh"]).unwrap_err();
+    assert_eq!(e.kind(), winnow_args::ErrorKind::InvalidChoice);
+}
