@@ -452,6 +452,9 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 } else if meta.path.is_ident("unknown") {
                     is_unknown = true;
                 } else if meta.path.is_ident("short") {
+                    if short.is_some() {
+                        return Err(meta.error("an `Occurrence` variant has one `short`"));
+                    }
                     short = Some(meta.value()?.parse::<LitChar>()?.value());
                 } else if meta.path.is_ident("long") {
                     longs.push(if meta.input.peek(syn::Token![=]) {
@@ -2315,6 +2318,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // The row help prints is `--help`'s: a struct with its own has none.
     let help_flag = help_long.is_some();
     let help_short_flag = help_short.is_some();
+    let version_short_flag = version_short.is_some();
     // A flattened struct or a sequence enum may declare `-h`, `--help`, `-V`
     // or `--version` itself (ld's `-h SONAME`): the built-in ones are then
     // tried after them, not as arms before.
@@ -2407,15 +2411,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
             None => quote!(_ => __globals.short(__c),),
         };
-        let builtin = help_short
-            .is_some()
+        // Known letters whether their arms come first or late.
+        let builtin = help_short_flag
             .then(|| quote!('h' => ::core::option::Option::Some(false),))
             .into_iter()
-            .chain(
-                version_short
-                    .is_some()
-                    .then(|| quote!('V' => ::core::option::Option::Some(false),)),
-            );
+            .chain(version_short_flag.then(|| quote!('V' => ::core::option::Option::Some(false),)));
         (
             quote! {
                 if let ::core::option::Option::Some(__word) = __wa::unknown_bundle(__input, |__c| match __c {
@@ -3031,7 +3031,7 @@ impl Rules {
                             let mut chars = short.chars();
                             chars
                                 .next()
-                                .is_some_and(|c| chars.next().is_none() && f.short() == Some(c))
+                                .is_some_and(|c| chars.next().is_none() && f.shorts().contains(&c))
                         }
                         (None, None) => {
                             matches!(&f.role, Role::Positional { name, .. } if name == selector)
@@ -3040,10 +3040,18 @@ impl Rules {
                     },
                 )
                 .ok_or_else(|| {
-                    syn::Error::new(
-                        from.ident.span(),
-                        format!("`{selector}` names no flag or positional of this struct"),
-                    )
+                    // A rule is about a flag having a value, whichever way it was spelled.
+                    let negated = selector
+                        .strip_prefix("--")
+                        .and_then(|long| fields.iter().find(|f| f.negate.as_deref() == Some(long)));
+                    let message = match negated {
+                        Some(f) => format!(
+                            "`{selector}` is the negation of `{}`: name that flag instead",
+                            f.display()
+                        ),
+                        None => format!("`{selector}` names no flag or positional of this struct"),
+                    };
+                    syn::Error::new(from.ident.span(), message)
                 })
         };
         let mut rules = Rules {
@@ -3093,6 +3101,16 @@ impl Rules {
                     })?;
                 rules.members[g].push(i);
             }
+        }
+        if let Some((g, _)) = groups
+            .iter()
+            .zip(&rules.members)
+            .find(|(g, members)| g.required && members.is_empty())
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                format!("group `{}` is required, but no field is in it", g.name),
+            ));
         }
         Ok(rules)
     }
@@ -3207,16 +3225,27 @@ impl Rules {
                 _ => quote!(__wa::Error::missing_required(__input.offset(), #name)),
             }
         };
+        // A flag another one overrode was given its answer: it is not missing.
+        let displaced = |f: &Field| {
+            self.is_displaced(fields, f).then(|| {
+                let flag = displaced_flag(&f.ident);
+                quote!(&& !#flag)
+            })
+        };
         let plain = fields.iter().filter(|f| f.required).map(|f| {
-            let has = f.has();
+            let (has, displaced) = (f.has(), displaced(f));
             let error = missing(f);
-            quote!(if !#has { return ::core::result::Result::Err(#error); })
+            quote!(if !#has #displaced { return ::core::result::Result::Err(#error); })
         });
         let unless = self.required_unless.iter().map(|(i, others)| {
-            let has = fields[*i].has();
+            let (has, displaced) = (fields[*i].has(), displaced(&fields[*i]));
             let others = others.iter().map(|&j| fields[j].has());
             let error = missing(&fields[*i]);
-            quote!(if !#has #(&& !#others)* { return ::core::result::Result::Err(#error); })
+            quote! {
+                if !#has #displaced #(&& !#others)* {
+                    return ::core::result::Result::Err(#error);
+                }
+            }
         });
         let one_of = groups
             .iter()
