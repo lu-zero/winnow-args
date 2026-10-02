@@ -9,15 +9,42 @@ cargo fmt --all -- --check
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 tasks/perf.sh [argv...]           # cold-parse comparison, see docs/DESIGN.md
 PROFILE=release-lto tasks/perf.sh # one codegen unit + fat LTO: for sizes
+tasks/bench-examples.sh           # warm instructions per parse, the two examples
 tasks/check.sh                    # every feature set and profile, warning-free
 ```
 
 **Doctests:** plain `cargo test` runs them; `cargo nextest` does not. The
 `git commit` hook runs `cargo doc` with `-D warnings` and `cargo test --doc`.
 
-Benchmark numbers are only comparable when taken with `tasks/perf.sh` on the
-same host. It uses cachegrind where valgrind works and `perf stat` medians
-otherwise; say which one produced a number when quoting it.
+
+## Performance
+
+Parsing a command line is the product; these rules decide between designs.
+
+- **Fast beats lean.** Parse time comes first. A size reduction is taken only
+  if it costs no time; shared code is left to LTO to factor, not moved out of
+  line by hand (two such attempts were measured slower and reverted).
+- **A feature costs nothing to those who do not use it.** A struct that does
+  not declare it must generate the same loop as before: compare the bench
+  lines before and after, and say so in the commit.
+- **The hot path is the generated loop**, `token`, and `stream`: no
+  indirection, allocation or out-of-line helper there without a measurement.
+  `Argv` stays 32 bytes (asserted). Help, errors and completion are off the
+  path: write them for clarity.
+- **Measure, then quote.** Every feature gets an entry in
+  [`docs/PERF.md`](./docs/PERF.md) with its numbers; a `perf:` commit quotes
+  them. Prefer instruction counts to wall time, warm (`PARSE_N=n` minus
+  `PARSE_N=0`, divided by `n`) for the cost of a parse and cold
+  (`tasks/perf.sh`) for a process. Pin to one core; when a whole program is
+  measured, average over copies of the script at several paths.
+- **Numbers are only comparable on the same host and tool.** `tasks/perf.sh`
+  uses cachegrind where valgrind works and `perf stat` medians otherwise; say
+  which produced a number.
+
+What exists: `bench/` (the same CLI, and mise's, in winnow-args, usage, bpaf
+and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
+`tasks/perf.sh`, `tasks/bench-examples.sh`, and the downstream ports measured
+in `docs/CHECKLIST-brush.md` and `docs/CHECKLIST-ld.md` with their own tools.
 
 ## Architecture
 
