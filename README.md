@@ -72,7 +72,7 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 
 - `winnow-args/`: the runtime. `winnow-args-derive/`: the derives.
 - `bench/`: the same command lines in winnow-args, usage, bpaf and clap;
-  `tasks/perf.sh [argv...]` runs the comparison.
+  `just perf [argv...]` runs the comparison.
 - `xtask/`: the generators for the mold port, the examples and the mise shadow.
 - `docs/DESIGN.md`: why it is built this way; `docs/PERF.md`: measurements,
   one entry per feature.
@@ -86,7 +86,9 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 
 ## Development
 
+The tasks are recipes of [`just`](https://github.com/casey/just) (`just --list`).
+
 ```
 cargo test
-tasks/check.sh    # every feature set and profile, clippy, docs, tests
+just check    # every feature set and profile, clippy, docs, tests
 ```

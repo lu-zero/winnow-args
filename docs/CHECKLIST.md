@@ -214,7 +214,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [ ] Run usage's `binding` corpus vectors (needs a runtime/table-driven mode, or a
       generator from the KDL spec)
 - [x] mise at full scale: `xtask gen mise-shadow` translates usage's shadow;
-      `SUITE=mise tasks/perf.sh`; `bench/tests/mise.rs` checks agreement
+      `SUITE=mise just perf`; `bench/tests/mise.rs` checks agreement
 - [ ] Binary size: 1.61 MB stripped against usage's 1.17 MB for mise; share the
       lexer and continuations across structs instead of inlining them everywhere
 - [ ] A `gen-shadow` backend in usage's xtask, so the shadow comes from the KDL

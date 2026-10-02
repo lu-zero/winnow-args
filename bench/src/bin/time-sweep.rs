@@ -2,7 +2,7 @@
 //! short rounds, the estimator usage's `time-sweep` uses because noise from a
 //! loaded machine only ever adds time.
 //!
-//! Prints `name min_ns median_ns` per framework, for `tasks/perf.sh` to tabulate.
+//! Prints `name min_ns median_ns` per framework, for `just perf` to tabulate.
 
 use std::ffi::{OsStr, OsString};
 use std::hint::black_box;

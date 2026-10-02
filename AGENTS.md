@@ -7,18 +7,19 @@ cargo test --workspace            # unit, integration and doctests
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
-tasks/perf.sh [argv...]           # cold-parse comparison, see docs/DESIGN.md
-PROFILE=release-lto tasks/perf.sh # one codegen unit + fat LTO: for sizes
-tasks/bench-examples.sh           # warm instructions per parse, the two examples
-tasks/bench-shell.sh NAME=SHELL…  # a builtin call, and scripts, in bash-compatible shells
-tasks/bench-ld.sh NAME=LINKER…    # parsing a link line, per word
-tasks/check.sh                    # every feature set and profile, warning-free
-cargo run -p xtask -- gen --help  # regenerate the mold port, the examples, the mise shadow
+just --list                       # the tasks below, from the justfile
+just check                        # every feature set and profile, warning-free
+just perf [argv...]               # cold-parse comparison, see docs/DESIGN.md
+PROFILE=release-lto just perf     # one codegen unit + fat LTO: for sizes
+just bench-examples               # warm instructions per parse, the two examples
+just bench-shell NAME=SHELL…      # a builtin call, and scripts, in bash-compatible shells
+just bench-ld NAME=LINKER…        # parsing a link line, per word
+just gen --help                   # regenerate the mold port, the examples, the mise shadow
 ```
 
 **Doctests:** plain `cargo test` runs them; `cargo nextest` does not. There is
 no git hook: `.claude/hooks/` checks an agent's tool calls (rustdoc, comment
-and commit-message length), so a person runs `tasks/check.sh` before a commit.
+and commit-message length), so a person runs `just check` before a commit.
 
 
 ## Performance
@@ -39,17 +40,17 @@ Parsing a command line is the product; these rules decide between designs.
   [`docs/PERF.md`](./docs/PERF.md) with its numbers; a `perf:` commit quotes
   them. Prefer instruction counts to wall time, warm (`PARSE_N=n` minus
   `PARSE_N=0`, divided by `n`) for the cost of a parse and cold
-  (`tasks/perf.sh`) for a process. Pin to one core; when a whole program is
+  (`just perf`) for a process. Pin to one core; when a whole program is
   measured, average over copies of the script at several paths.
-- **Numbers are only comparable on the same host and tool.** `tasks/perf.sh`
+- **Numbers are only comparable on the same host and tool.** `just perf`
   uses cachegrind where valgrind works and `perf stat` medians otherwise; say
   which produced a number.
 
 What exists: `bench/` (the same CLI, and mise's, in winnow-args, usage, bpaf
 and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
-`tasks/perf.sh`, `tasks/bench-examples.sh`, and for the downstream ports
-`tasks/bench-shell.sh` (brush against bash and its other parsers) and
-`tasks/bench-ld.sh` (mold with and without the feature); their results are in
+`just perf`, `just bench-examples`, and for the downstream ports
+`just bench-shell` (brush against bash and its other parsers) and
+`just bench-ld` (mold with and without the feature); their results are in
 `docs/CHECKLIST-brush.md`, `docs/CHECKLIST-ld.md` and `docs/PERF.md`.
 
 ## Architecture
@@ -63,7 +64,7 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
 - `xtask` — the generators (unpublished): mold's parser from its own, the two
   examples from the brush and mold ports, our mise shadow from usage's. They
   edit text, so what they carry over stays verbatim; scripts are for running
-  tools (`tasks/`), not for writing Rust.
+  tools (the `justfile`), not for writing Rust.
 - **Read [`docs/DESIGN.md`](./docs/DESIGN.md) first**, and keep it updated as the
   design changes. [`docs/CHECKLIST.md`](./docs/CHECKLIST.md) tracks grammar
   coverage; tick items only when a test covers them.
@@ -179,7 +180,7 @@ something a past pass got wrong and had to clean up later.
 - `feat:` — new functionality
 - `fix:` — bug fix
 - `refactor:` — code restructuring without behaviour change
-- `perf:` — performance work (quote `tasks/perf.sh` numbers in the body)
+- `perf:` — performance work (quote `just perf` numbers in the body)
 - `docs:` — documentation only
 - `test:` — adding or updating tests
 - `ci:` — CI/CD changes
