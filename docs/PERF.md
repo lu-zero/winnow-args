@@ -445,7 +445,7 @@ records the subcommand's name. The text costs 6.7 KB of binary.
 ## 17. mise at full scale
 
 `tasks/gen-mise-shadow.py` translates usage's shadow of `mise.usage.kdl` (211
-commands, 35 subcommand enums, 23 value enums) into winnow-args' vocabulary,
+commands, 40 subcommand enums, 23 value enums) into winnow-args' vocabulary,
 dropping only metadata that does not affect parsing (listed in the checklist)
 and dropping no selector. It compiled after four fixes the toy CLI had not
 needed: a repeated `long` as another spelling, `help` on a variant,

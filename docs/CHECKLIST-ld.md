@@ -35,8 +35,9 @@ Legend: `[x]` winnow-args covers it today (the feature that does is named),
 ## Phase 1: GNU's dash rules
 
 A lexer mode, since the default (usage's grammar) differs on every point here:
-`#[arg(long_only)]` on the struct, `token::long_only` for combinators
-(`tests/long_only.rs`).
+`#[arg(long_only)]` on the struct (`tests/long_only.rs`), which lexes with
+`token::long_only`; that function is public for combinators, with no test of
+its own.
 
 - [x] Long options take one dash or two: `-shared` = `--shared`,
       `-soname x` = `--soname x`. (mold `match_option`, wild `strip_option`;
@@ -141,7 +142,8 @@ A lexer mode, since the default (usage's grammar) differs on every point here:
 `response::expand(&args, &mut ResponseFiles)` (`tests/response.rs`).
 
 - [x] `@file` expands to the file's words, recursively (nesting is capped at
-      10 files deep and 4096 files in all), with quotes and backslashes; `@` is not a flag character.
+      10 files deep and 4096 files in all), with quotes and backslashes; `@`
+      is not a flag character.
       (`mold: response-file`, `response-file2`, `response-file-quoting`;
       wild `test_parse_recursive_file_option`, `test_arguments_from_string`,
       `test_parse_overlapping_file_and_inline_options`)
