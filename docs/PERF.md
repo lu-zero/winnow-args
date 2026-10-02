@@ -1214,7 +1214,11 @@ Per call, µs, loop included (`:` is the loop):
 |---|---|---|
 | 2 496-word link line | 3 333, 1.73 ms | 558, 0.99 ms |
 | 2 751 option words | 11 521, 3.83 ms | 516, 1.20 ms |
-| 2 501 input files | 388, 2.89 ms | 517, 3.16 ms |
+| 2 501 input files | 388, about 1.0 ms | 517, about 1.0 ms |
+
+The run times are a millisecond of process, within noise of each other for
+the input files; the instruction counts are the measure. `tasks/bench-ld.sh`
+and `tasks/bench-shell.sh` reproduce the mold and brush tables.
 
 **The examples** (`PARSE_N`, warm instructions a parse): `pwd -P` 347,
 `cd -P /tmp` 519, `unset -fv x` 824, `declare -i +x n=1` 947, `test -n x` 971,
