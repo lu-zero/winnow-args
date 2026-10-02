@@ -1235,4 +1235,5 @@ hidden), `-l, -L` for a second `short`, `--inspect=<PORT>` under
 The derives also read an enum variant's value where they build it (a
 `Subcommand` payload, an `Occurrence` value), as they do struct fields, so one
 that is only printed is not dead code. Help is off the parse path, and the
-read is a borrow the optimizer drops: the bench lines are unchanged.
+read is a borrow the optimizer drops: the bench lines measure 2 165 and
+3 434 warm instructions (2 186 and 3 476 before).
