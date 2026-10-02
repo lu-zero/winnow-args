@@ -1,4 +1,4 @@
-# Generated source: tasks/gen-mise-shadow.py translates usage's mise shadow.
+# Generated source: `cargo run -p xtask -- gen mise-shadow` translates usage's mise shadow.
 [package]
 name = "shadow-mise-wa"
 version = "0.0.0"

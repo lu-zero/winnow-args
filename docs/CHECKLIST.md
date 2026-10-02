@@ -213,7 +213,7 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       cannot run (this aarch64 host)
 - [ ] Run usage's `binding` corpus vectors (needs a runtime/table-driven mode, or a
       generator from the KDL spec)
-- [x] mise at full scale: `tasks/gen-mise-shadow.py` translates usage's shadow;
+- [x] mise at full scale: `xtask gen mise-shadow` translates usage's shadow;
       `SUITE=mise tasks/perf.sh`; `bench/tests/mise.rs` checks agreement
 - [ ] Binary size: 1.61 MB stripped against usage's 1.17 MB for mise; share the
       lexer and continuations across structs instead of inlining them everywhere
@@ -235,7 +235,7 @@ side-effect annotation, 198 uses).
 
 ## Metadata the mise shadow carries that winnow-args drops
 
-`tasks/gen-mise-shadow.py` drops these, since none of them changes how a line
+`xtask gen mise-shadow` drops these, since none of them changes how a line
 parses; each needs a home before the shadow is a faithful copy.
 
 - [ ] `effect` (198 uses): usage's per-command side-effect annotation (`read`,

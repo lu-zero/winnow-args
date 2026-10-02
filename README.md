@@ -58,7 +58,7 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 ```
 
 `brush_builtins` and `ld` print what they parse, and say what to expect with
-`--help`. They are generated (`tools/examples.py`) from two ports:
+`--help`. They are generated (`cargo run -p xtask -- gen examples`) from two ports:
 
 - [brush](https://github.com/reubeno/brush), a bash-compatible shell: every
   builtin and the shell's own command line. Its compatibility suite is
@@ -73,7 +73,7 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 - `winnow-args/`: the runtime. `winnow-args-derive/`: the derives.
 - `bench/`: the same command lines in winnow-args, usage, bpaf and clap;
   `tasks/perf.sh [argv...]` runs the comparison.
-- `tools/`: the generators for the mold port and the examples.
+- `xtask/`: the generators for the mold port, the examples and the mise shadow.
 - `docs/DESIGN.md`: why it is built this way; `docs/PERF.md`: measurements,
   one entry per feature.
 

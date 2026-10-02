@@ -1,5 +1,5 @@
 //! A shadow of `mise.usage.kdl` in winnow-args' vocabulary, translated from
-//! usage's shadow by `tasks/gen-mise-shadow.py`.
+//! usage's shadow by `cargo run -p xtask -- gen mise-shadow`.
 //!
 //! Do not edit: regenerate it. It exists to be compiled and parsed against, so
 //! that the parser can be measured at a real CLI's scale rather than a toy one.

@@ -26,7 +26,7 @@ usage-argv = { version = "6.11", features = ["spec"] }
 usage-derive = "6.11"
 # mise at full scale: usage's shadows of `mise.usage.kdl`, vendored unmodified in
 # shadows/, and ours (`shadow-mise-wa`, translated from usage's by
-# tasks/gen-mise-shadow.py).
+# `cargo run -p xtask -- gen mise-shadow`).
 shadow-mise = { path = "shadows/mise" }
 shadow-mise-clap = { path = "shadows/mise-clap" }
 shadow-mise-bpaf010 = { path = "shadows/mise-bpaf010" }

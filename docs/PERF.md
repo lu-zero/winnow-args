@@ -444,7 +444,7 @@ records the subcommand's name. The text costs 6.7 KB of binary.
 
 ## 17. mise at full scale
 
-`tasks/gen-mise-shadow.py` translates usage's shadow of `mise.usage.kdl` (211
+`xtask gen mise-shadow` translates usage's shadow of `mise.usage.kdl` (211
 commands, 40 subcommand enums, 23 value enums) into winnow-args' vocabulary,
 dropping only metadata that does not affect parsing (listed in the checklist)
 and dropping no selector. It compiled after four fixes the toy CLI had not
@@ -1094,7 +1094,7 @@ command line into an owned `OsString` (`FromArg` returns owned values).
 
 `examples/brush_builtins.rs` (17 of brush's builtins as subcommands) and
 `examples/ld.rs` (mold's whole option set as one `Occurrence` sequence, with
-`@file`) print what they parse; `tools/examples.py` regenerates them from the
+`@file`) print what they parse; `xtask gen examples` regenerates them from the
 two ports. With `PARSE_N=n` they parse `n` times and print nothing. Warm
 instructions a parse, `release`, subcommand dispatch included:
 
