@@ -1,0 +1,10 @@
+# Generators for the sources derived from other trees: `cargo run -p xtask -- gen --help`.
+[package]
+name = "xtask"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+winnow-args = { workspace = true, features = ["help-text"] }
+regex = "1"

@@ -13,6 +13,7 @@ tasks/bench-examples.sh           # warm instructions per parse, the two example
 tasks/bench-shell.sh NAME=SHELL…  # a builtin call, and scripts, in bash-compatible shells
 tasks/bench-ld.sh NAME=LINKER…    # parsing a link line, per word
 tasks/check.sh                    # every feature set and profile, warning-free
+cargo run -p xtask -- gen --help  # regenerate the mold port, the examples, the mise shadow
 ```
 
 **Doctests:** plain `cargo test` runs them; `cargo nextest` does not. There is
@@ -59,6 +60,10 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
 - `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
   `token::arg`. Generated code only uses `winnow_args::__private`.
 - `bench` — the same CLI in usage, winnow-args, bpaf 0.10 and clap (unpublished).
+- `xtask` — the generators (unpublished): mold's parser from its own, the two
+  examples from the brush and mold ports, our mise shadow from usage's. They
+  edit text, so what they carry over stays verbatim; scripts are for running
+  tools (`tasks/`), not for writing Rust.
 - **Read [`docs/DESIGN.md`](./docs/DESIGN.md) first**, and keep it updated as the
   design changes. [`docs/CHECKLIST.md`](./docs/CHECKLIST.md) tracks grammar
   coverage; tick items only when a test covers them.

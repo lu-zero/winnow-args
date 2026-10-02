@@ -116,7 +116,7 @@ At mise's full scale (211 commands) the derive runs `mise use -g node@20` in
 4 045 instructions and ~345 ns warm, against usage's 7 702 and ~797 ns; clap
 needs 4.9 M instructions. Its stripped binary is 45 % larger than usage's.
 
-The mise shadow is generated from usage's (`tasks/gen-mise-shadow.py`), so
+The mise shadow is generated from usage's (`xtask gen mise-shadow`), so
 both parse the same 211-command CLI, and `bench/tests/mise.rs` holds them to
 accepting the same lines.
 

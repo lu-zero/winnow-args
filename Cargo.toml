@@ -8,6 +8,7 @@ members = [
     "bench/shadows/mise-bpaf010",
     "bench/shadows/mise-clap",
     "bench/shadows/mise-wa",
+    "xtask",
 ]
 # Plain `cargo build`, `test`, `doc` and `run` are about the library; the
 # benches need `--workspace` or `-p bench`.
