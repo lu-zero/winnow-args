@@ -1143,3 +1143,82 @@ what follows; each is fixed with a test in `tests/interactions.rs`,
   field first) and is gone.
 
 The measured lines are unchanged: 2 186 and 3 476 warm instructions.
+
+## 50. A full pass, after the review
+
+At `1995a74`, pinned to one core (node 3), `release` unless said.
+
+**Frameworks** (`tasks/perf.sh`; instructions for one cold parse, and warm
+nanoseconds a parse). winnow-args takes about half of usage's instructions on
+every line of both suites:
+
+| line | usage | winnow-args | bpaf | clap |
+|---|---|---|---|---|
+| `-v --path /tmp/x` | 3 108 / 288 ns | 1 687 / 130 ns | 127 919 / 15 505 ns | 118 262 / 12 986 ns |
+| `-v --path /tmp/x a b c` | 5 723 / 528 | 2 921 / 205 | 144 708 / 17 531 | 136 585 / 15 218 |
+| `-v --path /tmp/x -I a -I b -I c` | 6 620 / 580 | 3 117 / 216 | 150 419 / 18 311 | 148 884 / 16 185 |
+| `-v --path /tmp/x use -g node@20` | 5 198 / 505 | 2 532 / 203 | 157 816 / 19 521 | 157 148 / 17 917 |
+| `-v --path /tmp/x -j 8` | 3 151 / 304 | 729 / 73 | 130 380 / 15 822 | 126 593 / 13 801 |
+| mise: `use -g node@20` | 7 702 / 797 | 4 045 / 345 | 1 195 104 / 165 320 | 4 943 626 / 753 161 |
+| mise: `-C /tmp install node@20 python@3.12` | 9 447 / 941 | 5 845 / 457 | 1 178 933 / 163 963 | 4 959 812 / 755 825 |
+| mise: `ls --json` | 6 244 / 622 | 3 647 / 295 | 1 183 121 / 164 622 | 4 972 815 / 752 448 |
+| mise: `settings set color false` | 6 720 / 726 | 3 822 / 288 | 1 206 373 / 168 281 | 5 235 116 / 790 096 |
+
+Stripped mise binaries: usage 1 175 192, winnow-args 1 698 184, clap
+2 237 312, bpaf 2 969 592 bytes.
+
+**brush** (`winnow-port` at `14a60423` on this library, against its clap base
+and usage-port). Binaries: clap 6 904 560, usage 6 733 808, winnow 6 475 280
+bytes. Scripts, wall time over 15 samples and instructions averaged over four
+paths:
+
+| script | bash | clap | usage | winnow |
+|---|---|---|---|---|
+| startup | 2.39 ms | 4.55 | 4.47 | 4.44 |
+| config-lint-500 | 24.6 ms | 115.5 (735 M) | 73.1 (426 M) | 71.7 (410 M) |
+| deploy-sim | 20.9 ms | 55.5 (35 M) | 54.5 (26 M) | 54.1 (26 M) |
+| wordops | 303 ms | 159.1 (506 M) | 157.3 (498 M) | 157.4 (497 M) |
+| interp-loop | 148 ms | 292.3 (1 997 M) | 263.6 (1 815 M) | 260.1 (1 808 M) |
+
+Per call, µs, loop included (`:` is the loop):
+
+| command | bash | clap | usage | winnow |
+|---|---|---|---|---|
+| `:` | 2.3 | 4.4 | 4.0 | 3.9 |
+| `set -f +f` | 3.1 | 131.2 | 82.0 | 5.8 |
+| `declare -i n=1` | 3.2 | 31.4 | 6.8 | 6.6 |
+| `local` | 2.4 | 27.8 | 4.6 | 4.4 |
+| `compgen -W "a b" a` | 4.3 | 25.9 | 9.8 | 9.1 |
+| `ulimit -n` | 3.3 | 18.1 | 6.6 | 6.5 |
+| `shopt -q extglob` | 2.9 | 12.5 | 6.5 | 6.3 |
+| `unset -v x` | 2.9 | 11.2 | 6.2 | 6.0 |
+| `getopts ab o -a` | 3.2 | 11.0 | 7.7 | 7.3 |
+| `cd .` | 5.6 | 11.0 | 6.5 | 6.6 |
+| `kill -0 $$` | 3.3 | 10.6 | 7.4 | 7.0 |
+| `command true` | 2.7 | 10.3 | 6.4 | 6.3 |
+| `[ a = a ]` | 3.0 | 9.4 | 7.7 | 7.5 |
+| `printf %s x` | 3.2 | 8.7 | 6.5 | 6.5 |
+| `echo -n` | 2.6 | 8.1 | 5.3 | 5.2 |
+| `export E=1` | 2.8 | 7.9 | 5.3 | 5.2 |
+| `trap -p` | 2.9 | 7.8 | 5.2 | 5.1 |
+| `test -n x` | 2.9 | 7.6 | 6.2 | 6.0 |
+| `shift 0` | 2.6 | 6.7 | 5.1 | 5.1 |
+| `type -t ls` | 10.6 | 20.5 | 14.8 | 14.5 |
+| `read -r v <<<x` | 11.1 | 18.8 | 12.6 | 12.3 |
+
+**mold** (`winnow-args-cmdline` at `6b5e54ad`). Binaries: 63 798 752 built-in,
+63 879 464 with the feature (+79 KiB). Instructions a word over a bare
+`--version`, and the whole run (parse, then exit at `--version`):
+
+| line | built-in | winnow-args |
+|---|---|---|
+| 2 496-word link line | 3 333, 1.73 ms | 558, 0.99 ms |
+| 2 751 option words | 11 521, 3.83 ms | 516, 1.20 ms |
+| 2 501 input files | 388, 2.89 ms | 517, 3.16 ms |
+
+**The examples** (`PARSE_N`, warm instructions a parse): `pwd -P` 347,
+`cd -P /tmp` 519, `unset -fv x` 824, `declare -i +x n=1` 947, `test -n x` 971,
+`set -eu +x -o pipefail` 1 094, `kill -s TERM 1234` 1 196, `echo -n a b c`
+1 241, `printf -v x %s a` 1 246, `read -rp prompt -t 2.5 a b` 1 699;
+`ld -shared -o out.so a.o` 1 064, 18 mixed `ld` words 5 837 (324 a word), a
+2 495-word link line 526 a word.
