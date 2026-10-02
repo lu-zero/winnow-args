@@ -20,3 +20,10 @@ missing_docs = "allow"
 
 [lints.clippy]
 large_enum_variant = "allow"
+
+# The doc comments are mise's help text, not rustdoc.
+[lints.rustdoc]
+broken_intra_doc_links = "allow"
+bare_urls = "allow"
+invalid_html_tags = "allow"
+invalid_rust_codeblocks = "allow"
