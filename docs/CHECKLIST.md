@@ -21,14 +21,15 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       re-split; words may hold spaces or NUL
 - [x] Custom `Stream` (`Argv`) whose tokens are words and whose checkpoint is the
       whole state, including the lexer mode (word start / inside a short bundle /
-      after `--`), so `alt` backtracking is sound
+      after `--` / flags stopped without one), so `alt` backtracking is sound
 - [x] Offsets count bytes plus one separator per word, so reading one letter of
       a bundle is progress for `repeat`
 - [x] Error type implements `ParserError` + `ModalError` directly (no `ErrMode`
       wrapper); backtracking errors do not allocate
 - [x] No `unsafe` in `winnow-args`
 - [ ] `no_std` + `alloc` (winnow supports it; only `Args::parse` needs std)
-- [x] No allocation per parse when the caller holds `&[&OsStr]` (Unix)
+- [x] No word is copied; a caller that holds `&[&BStr]` allocates nothing
+      (from `&[&OsStr]`, one `Vec` of borrowed words)
 
 ## 1. Long options
 
@@ -167,7 +168,9 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
 - [ ] A subcommand's help lists the global flags it inherits (clap does;
       `tool use -h` in `examples/help.rs` omits `-v`)
 - [x] Color: `help::Style` (`PLAIN`, `COLORED` — greens and cyans, no yellow, env, default
-      and possible values highlighted, dim frames, bold `code` — and `CLAP`), chosen by `NO_COLOR`, `CLICOLOR_FORCE` and whether the stream is a terminal
+      and possible values highlighted, dim frames, bold `code` — and `CLAP`),
+      chosen by `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE` and whether the
+      stream is a terminal
 - [x] Color depth: `color::Depth::detect` (16, 256, 24-bit from `COLORTERM`, `TERM`,
       `TERM_PROGRAM`, `FORCE_COLOR`, `CLICOLOR`); a `Theme` has a palette per
       depth, and deeper colors map to the nearest one; `report_with`
@@ -205,8 +208,8 @@ one- or two-dash long options, `-z` keywords, order-dependent state, `@file`).
       minus N=0 instruction counts, same argv for every framework
 - [x] Timings next to the counts: cold (first parse in a fresh process, median
       over processes) and warm (min / median in a hot loop)
-- [x] Compared against usage (the zero-alloc reference), bpaf 0.10 (local
-      checkout) and clap 4; falls back to `perf stat` medians where valgrind
+- [x] Compared against usage (the zero-alloc reference), bpaf 0.10 (a pinned
+      git revision) and clap 4; falls back to `perf stat` medians where valgrind
       cannot run (this aarch64 host)
 - [ ] Run usage's `binding` corpus vectors (needs a runtime/table-driven mode, or a
       generator from the KDL spec)

@@ -15,8 +15,9 @@ tasks/bench-ld.sh NAME=LINKER…    # parsing a link line, per word
 tasks/check.sh                    # every feature set and profile, warning-free
 ```
 
-**Doctests:** plain `cargo test` runs them; `cargo nextest` does not. The
-`git commit` hook runs `cargo doc` with `-D warnings` and `cargo test --doc`.
+**Doctests:** plain `cargo test` runs them; `cargo nextest` does not. There is
+no git hook: `.claude/hooks/` checks an agent's tool calls (rustdoc, comment
+and commit-message length), so a person runs `tasks/check.sh` before a commit.
 
 
 ## Performance

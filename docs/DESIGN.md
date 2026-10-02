@@ -22,8 +22,9 @@ The goal: bpaf's composition shape, winnow's combinators, usage's cost.
 `Argv` borrows argv as `&[&BStr]` and is a winnow `Stream` whose tokens are
 words. Nothing is copied or joined, a word is never re-split (`"a b"` stays
 one value), and any byte, NUL included, may appear in a word. On Unix,
-`&OsStr` → `&BStr` is free (`as_encoded_bytes`), so a caller that already
-holds `&[&OsStr]`, as usage's harness does, parses with no allocation.
+`&OsStr` → `&BStr` is free (`as_encoded_bytes`), so no word is copied; the
+list of words itself is one `Vec` (`stream::words`), which a caller that
+already holds `&[&BStr]` skips.
 
 Offsets are counted as if each word were followed by one separator. So a
 position inside a short bundle is still one number, which shrinks as the lexer
@@ -35,8 +36,9 @@ see whole words; `next_slice` must not split a word.
 
 A word position alone can't say whether we are part-way through `-vp` or past
 `--`. `Argv` carries the byte position inside the current word and
-`Mode::{Word, Bundle, Stopped}`, and its checkpoint is a copy of the whole
-(small, `Copy`) struct.
+`Mode::{Word, Bundle, Stopped, Values}` (`Values`: flags stopped without a
+`--`, by `double_dash = "automatic"` or `stop_flags`), and its checkpoint is a
+copy of the whole (small, `Copy`) struct.
 
 Two winnow facts drove this:
 
@@ -47,8 +49,8 @@ Two winnow facts drove this:
 
 ## Lexer, then continuation
 
-`token::arg` reads exactly one item: `Long { name, value }`, `Short(char)`,
-`Word`, or `Separator`. It never decides whether a flag takes a value. The
+`token::arg` reads exactly one item: `Long { name, value }`,
+`Short { letter, plus }`, `Word`, or `Separator`. It never decides whether a flag takes a value. The
 caller knows the flag and finishes it:
 
 - `Arg::read_value`: attached `=value`, the rest of a bundle (minus one `=`), or
@@ -80,8 +82,8 @@ product and usage's `Partial` work too.
    `Named` implements `Parser<Argv, Arg, Error>` for one occurrence; `args`
    repeats the item and then reports leftovers precisely. `dispatch!` on
    `token::kind` keeps words away from the flag branches. Inside the flag
-   `alt`, each branch still re-lexes, so flag cost grows with the flag count. winnow's `alt` takes at most 9
-   parsers; a larger flag set nests them.
+   `alt`, each branch still re-lexes, so flag cost grows with the flag count.
+   winnow's `alt` takes at most 9 parsers; a larger flag set nests them.
 2. **Name dispatch.** One `dispatch!` on `token::arg`, with arms such as
    `a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. }))`.
    rustc compiles the names into a `match`, and each item is lexed once.
@@ -98,21 +100,21 @@ progress check, and a separator branch. `Named` also adds a re-lex and a
 rewind per non-matching flag.
 
 Layout matters as much as instruction count here (see PERF.md step 5):
-`token::arg` is `#[inline]` so its `Result<Arg, Error>` never goes through
-memory. `Arg`'s continuations are `&self` methods. `Argv` is kept at 32
+`token::arg` is `#[inline(always)]` so its `Result<Arg, Error>` never goes
+through memory. `Arg`'s continuations are `&self` methods. `Argv` is kept at 32
 bytes because the combinators copy it on every checkpoint.
 
 ## Numbers
 
 Measurements, method and per-feature deltas live in [PERF.md](./PERF.md).
-Headline, flags only: the derive is at ~0.3–0.4× usage's instructions and
-~⅓ of its warm time; the combinators are about level with usage, 3–4× slower
-than the derive warm, because each `alt` branch re-lexes the token.
+Headline, from the last full pass (step 50): the derive takes about half of
+usage's instructions (0.23–0.62×) and under half of its warm time; the
+combinators are at 0.8–0.9× of usage, slower than the derive because each `alt`
+branch re-lexes the token.
 
-At mise's full scale (211 commands, `docs/PERF.md` step 17) the derive runs
-`mise use -g node@20` in 3 810 instructions and ~320 ns warm, against usage's
-7 549 and ~783 ns; clap needs 4.9 M instructions. Its binary is 71 % larger
-than usage's under the `release-lto` profile (PERF.md step 28).
+At mise's full scale (211 commands) the derive runs `mise use -g node@20` in
+4 045 instructions and ~345 ns warm, against usage's 7 702 and ~797 ns; clap
+needs 4.9 M instructions. Its stripped binary is 45 % larger than usage's.
 
 The mise shadow is generated from usage's (`tasks/gen-mise-shadow.py`), so
 both parse the same 211-command CLI, and `bench/tests/mise.rs` holds them to
@@ -137,15 +139,17 @@ defaults, choices, the version) stays either way.
 Color is a `help::Style`: one paint per role — `header`, `program`, `flag`,
 `command`, `placeholder`, `env`, `default`, `choice`, `dim` (annotation labels,
 the brackets of an optional `[NAME]`, `...`), `code` (`` `quoted` `` spans in
-descriptions, backticks kept), and for errors `error`, `invalid`, `valid`. The default keeps to greens for what is
-typed and cyans/teals for structure and values, with no yellow: in 16 colors
+descriptions, backticks kept), and for errors `error`, `invalid`, `valid`.
+
+The default keeps to greens for what is typed and cyans/teals for structure and values, with no yellow: in 16 colors
 bold cyan headings, bold green flags and subcommands, cyan value names; in 256
 colors the tamer teal 73, green 71 and slate teal 109, with red 167, rose 174
 and sage 108 for errors (chosen for contrast on dark and light backgrounds,
 docs/PERF.md step 34). Annotations paint their values, not their labels: the
 environment variable cyan (teal 37), the default green (sea green 72), each
 possible value bright green (green 71), each on its own; wrapping skips escape
-sequences when counting columns. It follows usage's layout rules: the program
+sequences when measuring a line, and counts characters, as usage does (a wide
+or combining character is one). It follows usage's layout rules: the program
 plain, and only the name painted in `[NAME]`. `Palette::CLAP` reproduces clap
 4's default styles: no color in help (bold and underline only), color only in
 errors, and without clap's `color` feature nothing at all.
@@ -156,20 +160,22 @@ reads the environment the way `supports-color` and `anstyle-query` do. A
 `color::Theme` holds a palette for each depth, and the richest one the terminal
 can show is used. A color deeper than the terminal is mapped to the nearest one
 it has (the 256-color cube or gray ramp, then the basic 16 by weighted
-distance). The default theme uses only the 16 basic colors, whose look is the
-terminal theme's, so it suits light and dark backgrounds. Each paint is written
+distance). The default theme's 16-color palette uses only the basic colors,
+whose look is the terminal theme's, so it suits light and dark backgrounds.
+Each paint is written
 as one SGR sequence (`1;33`), so clap's `1` then `4` becomes `1;4`: the same on
 screen. Windows is out of scope for now: no console API, no Windows-only
-detection rules. Rendering
-builds each left-hand cell as painted text plus its visible width, so padding
+detection rules.
+
+Rendering builds each left-hand cell as painted text plus its visible width, so padding
 and wrapping never count escapes, and the painted page with its escapes
 stripped is the plain page. `render` and `render_help` stay plain strings;
-`report`, which knows the stream, picks `Style::auto` (`NO_COLOR`, then
-`CLICOLOR_FORCE`, then whether it is a terminal). No dependency: the escapes are
+`report`, which knows the stream, picks `Style::themed` for it (`NO_COLOR`,
+then `FORCE_COLOR`/`CLICOLOR_FORCE`, then whether it is a terminal). No dependency: the escapes are
 constants and `std::io::IsTerminal` answers the rest.
 
 ## Next steps
 
-See `CHECKLIST.md`: binary size (without help prose mise's shadow is still
-39 % larger than usage's with its prose, `release-lto`, `docs/PERF.md` step 28), usage's conformance corpus, then consolidating the
-draft history.
+See `CHECKLIST.md`: binary size (mise's shadow is larger than usage's even
+without help prose, `docs/PERF.md` steps 28–32), usage's conformance corpus,
+then consolidating the draft history.
