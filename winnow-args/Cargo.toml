@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["cli", "argument", "parser", "winnow", "derive"]
+categories = ["command-line-interface"]
 
 [features]
 default = ["derive", "help-text"]
