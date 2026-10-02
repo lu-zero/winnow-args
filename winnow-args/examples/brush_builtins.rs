@@ -29,7 +29,6 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-#[allow(dead_code, reason = "the values are only printed")]
 enum Builtin {
     /// Manage aliases within the shell.
     #[arg(name = "alias")]

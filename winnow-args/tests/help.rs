@@ -38,10 +38,6 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-#[expect(
-    dead_code,
-    reason = "the fields declare the parser; these tests assert on its help"
-)]
 enum Command {
     /// Installs a tool and adds the version to mise.toml
     #[arg(alias = "u")]
@@ -590,4 +586,46 @@ fn disable_help_short_keeps_only_the_long_help_flag() {
         "{text}"
     );
     assert!(!text.contains("-h,"), "{text}");
+}
+
+/// Every spelling and value form a flag can have, as help spells them.
+#[derive(Args, Debug)]
+#[arg(plus_options, disable_help_flag)]
+struct Spellings {
+    #[arg(short = 'e', plus = 'e')]
+    errexit: Option<bool>,
+    #[arg(short = 'o', value_name = "OPT")]
+    enable: Vec<String>,
+    #[arg(plus = 'o', value_name = "OPT")]
+    disable: Vec<String>,
+    #[arg(short = 'l', short = 'L')]
+    list: bool,
+    #[arg(long, require_equals, value_name = "PORT")]
+    inspect: Option<u16>,
+    #[arg(long, value_name = "WHEN", default_missing = "auto")]
+    pager: Option<String>,
+    #[arg(long, require_equals, value_name = "KIND", default_missing = "fast")]
+    build_id: Option<String>,
+    #[arg(long, values = 3, value_name = "V")]
+    platform: Vec<String>,
+}
+
+#[test]
+fn help_spells_every_form_of_a_flag() {
+    let text = winnow_args::help::render(Spellings::HELP, &["x"], false);
+    for row in [
+        "  -e, +e",
+        "  -o <OPT>...",
+        "  +o <OPT>...",
+        "  -l, -L",
+        "      --inspect=<PORT>",
+        "      --pager [<WHEN>]",
+        "      --build-id[=<KIND>]",
+        "      --platform <V> <V> <V>...",
+    ] {
+        assert!(
+            text.lines().any(|line| line.trim_end() == row),
+            "{row:?} in\n{text}"
+        );
+    }
 }

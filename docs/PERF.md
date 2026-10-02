@@ -1222,3 +1222,17 @@ Per call, µs, loop included (`:` is the loop):
 1 241, `printf -v x %s a` 1 246, `read -rp prompt -t 2.5 a b` 1 699;
 `ld -shared -o out.so a.o` 1 064, 18 mixed `ld` words 5 837 (324 a word), a
 2 495-word link line 526 a word.
+
+## 51. Help spells every form
+
+A flag's row now shows all its spellings and how its value is given: `-e, +e`
+for an `Option<bool>` with `plus`, `+o <OPT>` for a `+`-only flag (it was
+hidden), `-l, -L` for a second `short`, `--inspect=<PORT>` under
+`require_equals`, `--pager [<WHEN>]` and `--build-id[=<KIND>]` with
+`default_missing`, `--platform <V> <V> <V>` for `values = 3`
+(`help::Item::{more_shorts, plus, optional_value, values}`).
+
+The derives also read an enum variant's value where they build it (a
+`Subcommand` payload, an `Occurrence` value), as they do struct fields, so one
+that is only printed is not dead code. Help is off the parse path, and the
+read is a borrow the optimizer drops: the bench lines are unchanged.

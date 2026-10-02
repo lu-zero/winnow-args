@@ -76,6 +76,14 @@ pub struct Item {
     pub require_equals: bool,
     /// Also accepted by every subcommand below.
     pub global: bool,
+    /// Other letters it answers to: `-l`, `-L`.
+    pub more_shorts: &'static [char],
+    /// The letter of its `+c` spelling.
+    pub plus: Option<char>,
+    /// The value may be left out.
+    pub optional_value: bool,
+    /// Words each occurrence takes; 1 unless declared `values = N`.
+    pub values: usize,
 }
 
 impl Item {
@@ -99,6 +107,10 @@ impl Item {
         choices: &[],
         require_equals: false,
         global: false,
+        more_shorts: &[],
+        plus: None,
+        optional_value: false,
+        values: 1,
     };
 }
 
@@ -593,27 +605,38 @@ fn push_item_placeholder(cell: &mut Cell, style: Style, item: &Item) {
 
 fn flag_spec(item: &Item, style: Style) -> Cell {
     let mut spec = Cell::default();
-    match (item.short, item.long) {
-        (Some(s), long) => {
-            spec.push(style.flag(), &format!("-{s}"));
-            if let Some(l) = long {
-                spec.push(Ink::NONE, ", ");
-                spec.push(style.flag(), &format!("--{l}"));
-            }
+    // Every spelling: `-l, -L`, `-e, +e`, `+o`, `-v, --verbose`; a long name
+    // alone is indented to line up with those after a short one.
+    let shorts = item.short.iter().chain(item.more_shorts);
+    let mut names: Vec<String> = shorts.map(|s| format!("-{s}")).collect();
+    names.extend(item.plus.map(|c| format!("+{c}")));
+    if names.is_empty() && item.long.is_some() {
+        spec.push(Ink::NONE, "    ");
+    }
+    names.extend(item.long.map(|l| format!("--{l}")));
+    for (i, name) in names.iter().enumerate() {
+        if i > 0 {
+            spec.push(Ink::NONE, ", ");
         }
-        (None, Some(l)) => {
-            spec.push(Ink::NONE, "    ");
-            spec.push(style.flag(), &format!("--{l}"));
-        }
-        (None, None) => {}
+        spec.push(style.flag(), name);
     }
     if let Some(no) = item.negate {
         spec.push(Ink::NONE, " / ");
         spec.push(style.flag(), &format!("--{no}"));
     }
     if let Some(value) = item.value_name {
-        spec.push(Ink::NONE, " ");
-        spec.push(style.placeholder(), &format!("<{value}>"));
+        // `<V>`, `=<V>` when only attached, in brackets when optional, and
+        // once a word for `values = N`.
+        let value = vec![format!("<{value}>"); item.values.max(1)].join(" ");
+        let (open, close) = match (item.require_equals, item.optional_value) {
+            (true, true) => ("[=", "]"),
+            (true, false) => ("=", ""),
+            (false, true) => (" [", "]"),
+            (false, false) => (" ", ""),
+        };
+        spec.push(Ink::NONE, open);
+        spec.push(style.placeholder(), &value);
+        spec.push(Ink::NONE, close);
     }
     if item.multiple {
         spec.push(style.dim(), "...");

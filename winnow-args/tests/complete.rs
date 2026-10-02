@@ -33,7 +33,6 @@ struct Tool {
 }
 
 #[derive(Subcommand, Debug)]
-#[expect(dead_code, reason = "only the help data is completed")]
 enum Command {
     /// Build it.
     Build(Build),

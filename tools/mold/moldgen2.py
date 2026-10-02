@@ -160,8 +160,6 @@ def emit_enum(used_values):
       spell = ', '.join(sorted({('--' if sp.two_dashes else '-') + sp.base + (('=' + sp.literal) if sp.literal else '') for sp in v.sps}))
       out.append(f'    /// `{spell}`')
       out.append(f'    #[arg({", ".join(attrs)})]')
-      if not v.unit and v.name not in used_values:
-          out.append('    #[expect(dead_code, reason = "accepted and ignored")]')
       out.append(f'    {v.name}' + ('' if v.unit else '(OsString)') + ',')
   out.append("    /// `-z KEYWORD`, `-zKEYWORD`: mapped by [`z_opt`] as it is handled;\n    /// one that stays is unknown.\n    #[arg(short = 'z')]\n    Z(Spanned<OsString>),")
   for kw, (name, takes) in zvariants.items():
