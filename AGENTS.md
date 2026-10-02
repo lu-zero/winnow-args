@@ -10,6 +10,8 @@ RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
 tasks/perf.sh [argv...]           # cold-parse comparison, see docs/DESIGN.md
 PROFILE=release-lto tasks/perf.sh # one codegen unit + fat LTO: for sizes
 tasks/bench-examples.sh           # warm instructions per parse, the two examples
+tasks/bench-shell.sh NAME=SHELL…  # a builtin call, and scripts, in bash-compatible shells
+tasks/bench-ld.sh NAME=LINKER…    # parsing a link line, per word
 tasks/check.sh                    # every feature set and profile, warning-free
 ```
 
@@ -43,8 +45,10 @@ Parsing a command line is the product; these rules decide between designs.
 
 What exists: `bench/` (the same CLI, and mise's, in winnow-args, usage, bpaf
 and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
-`tasks/perf.sh`, `tasks/bench-examples.sh`, and the downstream ports measured
-in `docs/CHECKLIST-brush.md` and `docs/CHECKLIST-ld.md` with their own tools.
+`tasks/perf.sh`, `tasks/bench-examples.sh`, and for the downstream ports
+`tasks/bench-shell.sh` (brush against bash and its other parsers) and
+`tasks/bench-ld.sh` (mold with and without the feature); their results are in
+`docs/CHECKLIST-brush.md`, `docs/CHECKLIST-ld.md` and `docs/PERF.md`.
 
 ## Architecture
 
