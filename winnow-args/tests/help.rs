@@ -629,3 +629,15 @@ fn help_spells_every_form_of_a_flag() {
         );
     }
 }
+
+#[test]
+fn auto_styles_follow_the_environment_of_their_stream() {
+    // Under `with_env` neither stream counts as a terminal: plain unless forced.
+    assert_eq!(with_env(&[], Style::auto), Style::PLAIN);
+    assert_eq!(with_env(&[], Style::auto_stderr), Style::PLAIN);
+    let forced = [("FORCE_COLOR", "1")];
+    let colored = with_env(&forced, || Style::auto_for(false));
+    assert_ne!(colored, Style::PLAIN);
+    assert_eq!(with_env(&forced, Style::auto), colored);
+    assert_eq!(with_env(&forced, Style::auto_stderr), colored);
+}
