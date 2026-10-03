@@ -43,6 +43,7 @@ instructions, and the warm time of one, on an aarch64 server:
 | usage | 5 683, 503 ns | 7 720, 782 ns |
 | clap | 136 514, 15.3 µs | 4 943 837, 753 µs |
 | bpaf 0.9 | 142 994, 15.0 µs | 21 966 400, 2.65 ms |
+| bpaf 0.10, pre-release (`844357f`) | 144 538, 17.3 µs | 1 196 466, 166 µs |
 
 The same lines are checked to parse to the same result in all four.
 [`benchmarks/`](./benchmarks/README.md) says how this is measured and how to

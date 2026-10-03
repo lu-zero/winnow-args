@@ -51,7 +51,8 @@ numactl -N 3 -m 3 taskset -c 96 just perf   # pinned, as the results below
 ```
 
 `bpaf010/` is a crate of its own, outside the workspace: bpaf 0.10 is not
-released and comes from git, so only `BPAF010=1` builds it.
+released and comes from git, pinned to commit `844357f`, so only `BPAF010=1`
+builds it.
 
 `just bench-examples`, `bench-shell` and `bench-ld` measure the two examples
 and the brush and mold ports; they are described in the `justfile`.
@@ -71,7 +72,7 @@ winnow 1.0.4, bpaf 0.9, clap 4. Cold instructions, warm time, stripped size.
 | usage | 5 683 | 1 | 503 ns | 394 KB |
 | clap | 136 514 | 24 | 15.3 µs | 763 KB |
 | bpaf 0.9 | 142 994 | 25 | 15.0 µs | 582 KB |
-| bpaf 0.10 | 144 538 | 25 | 17.3 µs | 825 KB |
+| bpaf 0.10, pre-release (`844357f`) | 144 538 | 25 | 17.3 µs | 825 KB |
 
 `mise use -g node@20`, 211 commands declared:
 
@@ -79,7 +80,7 @@ winnow 1.0.4, bpaf 0.9, clap 4. Cold instructions, warm time, stripped size.
 |---|---:|---:|---:|---:|
 | winnow-args, derive | 4 012 | 0.5 | 328 ns | 1.72 MB |
 | usage | 7 720 | 1 | 782 ns | 1.18 MB |
-| bpaf 0.10 | 1 196 466 | 154 | 166 µs | 2.97 MB |
+| bpaf 0.10, pre-release (`844357f`) | 1 196 466 | 154 | 166 µs | 2.97 MB |
 | clap | 4 943 837 | 640 | 753 µs | 2.24 MB |
 | bpaf 0.9 | 21 966 400 | 2 845 | 2.65 ms | 1.95 MB |
 
