@@ -1,4 +1,9 @@
-//! Flag parsers, bpaf-style: name an item, then say what it is.
+//! Parsers written by hand: name a flag, then say what it is.
+//!
+//! [`short`] and [`long`] name a flag; [`Named::switch`], [`Named::argument`]
+//! and the like turn the name into a winnow parser that reads **one
+//! occurrence** of it. [`args`] runs such a parser over the whole command
+//! line, and the closures given to `map` decide what to keep:
 //!
 //! ```
 //! use winnow::prelude::*;
@@ -24,10 +29,9 @@
 //! # Ok::<(), Error>(())
 //! ```
 //!
-//! Each parser here matches **one occurrence**. Absence, repetition and
-//! requiredness are decided by whatever folds the occurrences together — above,
-//! two closures and [`args`]; in the derive, a `match` in a loop — because only
-//! that layer knows the field's type.
+//! What a missing or repeated flag means is up to those closures: here a
+//! repeated `--path` keeps the last one, and a missing one leaves `None`. The
+//! derive makes the same decisions from each field's type.
 
 use winnow::combinator::{alt, repeat, trace};
 use winnow::error::{ModalError as _, ParserError as _};

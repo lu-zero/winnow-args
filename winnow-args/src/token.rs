@@ -1,11 +1,11 @@
 //! Lexing: one command-line item at a time.
 //!
-//! [`arg`] reads the next item — a long flag, one short letter, a word, or the
-//! `--` separator — and nothing more. Whether a flag takes a value is not the
-//! lexer's business: it leaves the stream where the value *would* start, and
-//! the caller, which knows the flag, finishes it with [`Arg::switch`] or
-//! [`Arg::value`]. One lexer thus serves an `alt` of flag parsers, a
-//! `dispatch!` on flag names, and the derive's `match`.
+//! [`arg`] reads the next item: a long flag, one short letter, a word, or the
+//! `--` separator. It does not know which flags take a value, so it stops
+//! where a value *would* start; the caller, which knows the flag, then calls
+//! [`Arg::switch`] (no value) or [`Arg::value`] (read it). The derive, the
+//! [combinators](crate::combinator) and a hand-written `dispatch!` on flag
+//! names all read items this way.
 //!
 //! | command line | items                                        |
 //! |--------------|----------------------------------------------|
