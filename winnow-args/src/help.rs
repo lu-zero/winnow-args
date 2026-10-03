@@ -87,6 +87,8 @@ pub struct Item {
     pub optional_value: bool,
     /// Words each occurrence takes; 1 unless declared `values = N`.
     pub values: usize,
+    /// It may take more than `values` (`values = 1..`): shown as `<V>...`.
+    pub more_values: bool,
 }
 
 impl Item {
@@ -114,6 +116,7 @@ impl Item {
         plus: None,
         optional_value: false,
         values: 1,
+        more_values: false,
     };
 }
 
@@ -673,7 +676,8 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
     if let Some(value) = item.value_name {
         // `<V>`, `=<V>` when only attached, in brackets when optional, and
         // once a word for `values = N`.
-        let value = vec![format!("<{value}>"); item.values.max(1)].join(" ");
+        let more = if item.more_values { "..." } else { "" };
+        let value = vec![format!("<{value}>"); item.values.max(1)].join(" ") + more;
         let (open, close) = match (item.require_equals, item.optional_value) {
             (true, true) => ("[=", "]"),
             (true, false) => ("=", ""),

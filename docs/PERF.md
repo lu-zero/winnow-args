@@ -1304,3 +1304,15 @@ instructions, 14.9 µs warm, clap 136 568 and 15.3 µs) in a smaller binary
 (581 552 bytes stripped against 825 416). At mise's scale it is far slower:
 22.0 M instructions and 2.65 ms a parse, against 1.2 M and 165 µs for 0.10 and
 4.9 M and 758 µs for clap. Earlier steps' bpaf columns are 0.10's.
+
+## 55. Value ranges, `default_fn`, `default_if`
+
+`values = 1..` / `a..=b` (with `value_terminator`) adds a loop after a `Vec`
+flag's first value, in that flag's arm only: `Arg::read_more` takes the next
+word unless it is flag-like or the terminator. `default_fn` and `default_if`
+run where `env` and `default` do, after the words run out.
+
+A struct that declares none of them generates the same code: the bench lines
+are unchanged from step 54 in both profiles (2 143 and 3 596 warm
+instructions in `release`, 1 773 and 3 407 in `release-lto`), and so are the
+examples.

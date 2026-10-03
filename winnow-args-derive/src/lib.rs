@@ -86,9 +86,18 @@ use syn::{
 /// - `value_name = "…"`: the placeholder in help.
 /// - `delimiter = ','`: split each value of a `Vec` field.
 /// - `values = N`: each occurrence of a `Vec` flag takes `N` words, whatever they look like.
+/// - `values = 1..`, `values = 2..=3`: at least and at most that many words an occurrence; those after
+///   the first are taken while they are not flag-like. Positionals after such a flag need a flag or `--`
+///   before them.
+/// - `value_terminator = ";"`: the word that ends such a run, itself dropped.
 /// - `choices("a", "b")`: the only values accepted.
 /// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order; an `Option<T>`
 ///   field then holds `Some`. A switch's variable is true unless empty, `0`, `false`, `no` or `off`.
+/// - `default_fn = path`: a function returning the field's value (for a `Vec`, the list), called when
+///   nothing else gave one; `default_note = "…"` is what help shows for it.
+/// - `default_if("--flag", "v")`: the default when `--flag` was given; `default_if("--flag", "x", "v")`
+///   when its value is `x`, whose type must be `PartialEq`. Tried after `env` and before `default`,
+///   in order; the selector is as for the rules below.
 /// - `default_missing = "…"`: the value of a flag given without one, which makes its value optional.
 /// - `require_equals`: the value only attached (`--name=v`, `-nv`); with `default_missing`, a bare flag
 ///   leaves the next word alone.
@@ -804,6 +813,7 @@ fn occurrence_item(
         plus: ::core::option::Option::None,
         optional_value: #optional_value,
         values: 1,
+        more_values: false,
     })
 }
 
@@ -1262,6 +1272,17 @@ struct Field {
     two_dashes: bool,
     /// Words each occurrence takes (a `Vec` flag): `-platform_version macos 11.0 12.0`.
     values: usize,
+    /// `values = a..` or `a..=b`: up to this many words in all (`usize::MAX`:
+    /// no limit), the ones after the first only while they are not flag-like.
+    values_max: Option<usize>,
+    /// The word that ends a variable run of values, itself dropped.
+    value_terminator: Option<String>,
+    /// A function giving the value when nothing else did.
+    default_fn: Option<syn::ExprPath>,
+    /// What help says of `default_fn`'s value.
+    default_note: Option<String>,
+    /// `(selector, the value it must have, this field's default then)`.
+    default_ifs: Vec<(String, Option<String>, String)>,
     /// Once this positional has a value, flags stop (whatever its `double_dash`).
     stop_flags: bool,
     /// The letter of its `+c` spelling, in a `plus_options` struct.
@@ -1303,13 +1324,15 @@ impl Field {
         let plus = opt_char(self.plus);
         let optional_value = self.default_missing.is_some();
         let values = self.values;
+        let more_values = self.values_max.is_some();
         let required = matches!(self.kind, Kind::Required(_))
             && self.default.is_none()
+            && self.default_fn.is_none()
             && self.env.is_none()
             && !self.keywords
             || self.required;
         let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
-        let default = opt_str(self.default.as_deref());
+        let default = opt_str(self.default.as_deref().or(self.default_note.as_deref()));
         let env = opt_str(self.env.as_deref());
         // Declared `choices`, else whatever fixed set the value type has.
         let choices = match (&self.choices, &self.kind, &self.role) {
@@ -1344,6 +1367,25 @@ impl Field {
                 plus: #plus,
                 optional_value: #optional_value,
                 values: #values,
+                more_values: #more_values,
+            }
+        }
+    }
+
+    /// How this flag takes a detached value.
+    fn value_options(&self) -> TokenStream2 {
+        let (negative_numbers, hyphen_values, require_equals, keep_equals) = (
+            self.negative_numbers,
+            self.hyphen_values,
+            self.require_equals,
+            self.keep_equals,
+        );
+        quote! {
+            __wa::ValueOptions {
+                negative_numbers: #negative_numbers,
+                hyphen_values: #hyphen_values,
+                require_equals: #require_equals,
+                keep_equals: #keep_equals,
             }
         }
     }
@@ -1356,14 +1398,7 @@ impl Field {
             self.require_equals,
             self.keep_equals,
         );
-        let options = quote! {
-            __wa::ValueOptions {
-                negative_numbers: #negative_numbers,
-                hyphen_values: #hyphen_values,
-                require_equals: #require_equals,
-                keep_equals: #keep_equals,
-            }
-        };
+        let options = self.value_options();
         match &self.default_missing {
             None if !negative_numbers && !hyphen_values && !require_equals && !keep_equals => {
                 quote!(__arg.read_value(__input)?)
@@ -1438,20 +1473,11 @@ impl Field {
         }
     }
 
-    /// Fill the field from its environment variable (`env`) or its default when
-    /// the command line left it unset and no `overrides` displaced it.
-    fn fallback(&self, env: bool, displaced: bool) -> TokenStream2 {
+    /// Store `value` (a `&BStr`), converted, in the slot of a field that takes
+    /// values; `source` names where it came from in an error.
+    fn assign(&self, value: TokenStream2, source: &str) -> TokenStream2 {
         let slot = slot(&self.ident);
-        if self.negate.is_some() {
-            return self.negatable_fallback(env);
-        }
-        let has = self.has();
-        let not_displaced = displaced.then(|| {
-            let displaced = displaced_flag(&self.ident);
-            quote!(&& !#displaced)
-        });
-        let unset = quote!(!#has #not_displaced);
-        let assign = |value: TokenStream2, source: &str| match &self.kind {
+        match &self.kind {
             Kind::Optional(ty) | Kind::Required(ty) => {
                 let value = self.source_value(ty, value, source);
                 quote!(#slot = ::core::option::Option::Some(#value);)
@@ -1466,9 +1492,41 @@ impl Field {
                     quote!(for __piece in __wa::split(#value, #d) { #slot.push(#piece); })
                 }
             },
-            Kind::Switch | Kind::Count(_) => unreachable!("handled below"),
-        };
+            Kind::Switch | Kind::Count(_) => unreachable!("a switch or a count takes no value"),
+        }
+    }
+
+    /// Whether the field was not given, for a fallback to fill it.
+    fn unset(&self, displaced: bool) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        if self.negate.is_some() {
+            return quote!(#slot.is_none());
+        }
+        let has = self.has();
+        let not_displaced = displaced.then(|| {
+            let displaced = displaced_flag(&self.ident);
+            quote!(&& !#displaced)
+        });
+        quote!(!#has #not_displaced)
+    }
+
+    /// Fill the field from its environment variable (`env`) or its default when
+    /// the command line left it unset and no `overrides` displaced it.
+    fn fallback(&self, env: bool, displaced: bool) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        if self.negate.is_some() {
+            return self.negatable_fallback(env);
+        }
+        let unset = self.unset(displaced);
+        let assign = |value: TokenStream2, source: &str| self.assign(value, source);
         if !env {
+            if let Some(function) = &self.default_fn {
+                let set = match &self.kind {
+                    Kind::Many(_) => quote!(#slot = #function();),
+                    _ => quote!(#slot = ::core::option::Option::Some(#function());),
+                };
+                return quote!(if #unset { #set });
+            }
             return self
                 .default
                 .as_ref()
@@ -1525,11 +1583,14 @@ impl Field {
                 }
             }
         } else {
-            let Some(default) = &self.default else {
-                return quote!();
-            };
-            let default = default == "true";
-            quote!(#slot = ::core::option::Option::Some(#default);)
+            match (&self.default_fn, &self.default) {
+                (Some(function), _) => quote!(#slot = ::core::option::Option::Some(#function());),
+                (None, Some(default)) => {
+                    let default = default == "true";
+                    quote!(#slot = ::core::option::Option::Some(#default);)
+                }
+                (None, None) => return quote!(),
+            }
         };
         quote!(if #slot.is_none() { #value })
     }
@@ -1810,16 +1871,42 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 None => {
                     let value = f.flag_value(ty, quote!(__value));
                     let read = f.read();
-                    // `values = N`: the words after the first, whatever they look like.
-                    let more = (f.values > 1).then(|| {
-                        let more = f.values - 1;
-                        quote! {
-                            for _ in 0..#more {
-                                let __value = __arg.read_next(__input)?;
-                                #ident.push(#value);
+                    let more = match f.values_max {
+                        // `values = N`: the words after the first, whatever they look like.
+                        None => (f.values > 1).then(|| {
+                            let more = f.values - 1;
+                            quote! {
+                                for _ in 0..#more {
+                                    let __value = __arg.read_next(__input)?;
+                                    #ident.push(#value);
+                                }
                             }
+                        }),
+                        // `values = a..=b`: more words until one is flag-like or the terminator.
+                        Some(max) => {
+                            let (min, options) = (f.values, f.value_options());
+                            let terminator = match &f.value_terminator {
+                                Some(word) => {
+                                    let word = LitByteStr::new(word.as_bytes(), Span::call_site());
+                                    quote!(::core::option::Option::Some(__wa::BStr::new(#word)))
+                                }
+                                None => quote!(::core::option::Option::None),
+                            };
+                            Some(quote! {
+                                let mut __taken = 1usize;
+                                while __taken < #max {
+                                    let ::core::option::Option::Some(__value) =
+                                        __arg.read_more(__input, #options, #terminator)
+                                    else {
+                                        break;
+                                    };
+                                    #ident.push(#value);
+                                    __taken += 1;
+                                }
+                                __arg.check_values(__taken, #min)?;
+                            })
                         }
-                    });
+                    };
                     quote! {
                         let __value = #read;
                         #ident.push(#value);
@@ -2548,6 +2635,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .collect();
     let exclusive = rules.exclusive(&fields, &groups);
     let supplied = rules.supplied(&fields);
+    let default_ifs = rules.default_ifs(&fields);
     let required = rules.required(&fields, &groups);
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
@@ -2750,6 +2838,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #(#env_fallbacks)*
                     #exclusive
                     #supplied
+                    #default_ifs
                     #(#default_fallbacks)*
                     #required
                     let __built = Self {
@@ -2860,6 +2949,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #(#env_fallbacks)*
                 #exclusive
                 #supplied
+                #default_ifs
                 #(#default_fallbacks)*
                 #required
                 let __built = Self {
@@ -3051,6 +3141,8 @@ struct Rules {
     required_unless: Vec<(usize, Vec<usize>)>,
     /// Members of each struct-level group, in `groups` order.
     members: Vec<Vec<usize>>,
+    /// `(field, other, the value `other` must have, the field's default then)`.
+    default_ifs: Vec<(usize, usize, Option<String>, String)>,
 }
 
 impl Rules {
@@ -3094,6 +3186,7 @@ impl Rules {
             requires: Vec::new(),
             required_unless: Vec::new(),
             members: vec![Vec::new(); groups.len()],
+            default_ifs: Vec::new(),
         };
         for (i, f) in fields.iter().enumerate() {
             for selector in &f.conflicts {
@@ -3114,6 +3207,25 @@ impl Rules {
             }
             for selector in &f.requires {
                 rules.requires.push((i, resolve(f, selector)?));
+            }
+            for (selector, equals, value) in &f.default_ifs {
+                let other = resolve(f, selector)?;
+                let comparable = match &fields[other].kind {
+                    Kind::Count(_) => false,
+                    Kind::Switch => equals.as_deref().is_none_or(is_bool_word),
+                    _ => !fields[other].keywords,
+                };
+                if equals.is_some() && !comparable {
+                    return Err(syn::Error::new(
+                        f.ident.span(),
+                        format!(
+                            "`{selector}` has no value to compare: use `default_if(\"{selector}\", \"…\")`"
+                        ),
+                    ));
+                }
+                rules
+                    .default_ifs
+                    .push((i, other, equals.clone(), value.clone()));
             }
             if !f.required_unless.is_empty() {
                 let others = f
@@ -3230,6 +3342,61 @@ impl Rules {
             }}
         });
         quote!(#(#pairs)* #(#at_most_one)*)
+    }
+
+    /// `default_if`: each condition judged on what was supplied, then the first
+    /// that holds for a field still without a value gives it one.
+    fn default_ifs(&self, fields: &[Field]) -> TokenStream2 {
+        let (mut conditions, mut fills) = (Vec::new(), Vec::new());
+        for (n, (field, other, equals, value)) in self.default_ifs.iter().enumerate() {
+            let (f, other) = (&fields[*field], &fields[*other]);
+            let holds = format_ident!("__default_if_{n}");
+            let other_slot = slot(&other.ident);
+            let is = |ty: &Type, equals: &str| {
+                let literal = LitByteStr::new(equals.as_bytes(), Span::call_site());
+                quote! {
+                    |__v| <#ty as ::winnow_args::FromArg>::from_arg(__wa::BStr::new(#literal))
+                        .is_ok_and(|__literal| __literal == *__v)
+                }
+            };
+            let condition = match (equals, &other.kind) {
+                (None, _) => other.has(),
+                (Some(equals), Kind::Switch) => {
+                    let equals = equals == "true";
+                    match other.negate {
+                        Some(_) => quote!((#other_slot == ::core::option::Option::Some(#equals))),
+                        None => quote!((#other_slot == #equals)),
+                    }
+                }
+                (Some(equals), Kind::Optional(ty) | Kind::Required(ty)) => {
+                    let is = is(ty, equals);
+                    quote!(#other_slot.as_ref().is_some_and(#is))
+                }
+                (Some(equals), Kind::Many(ty)) => {
+                    let is = is(ty, equals);
+                    quote!(#other_slot.iter().any(#is))
+                }
+                (Some(_), Kind::Count(_)) => unreachable!("refused when the rules were read"),
+            };
+            conditions.push(quote!(let #holds = #condition;));
+            let unset = f.unset(self.is_displaced(fields, f));
+            let slot = slot(&f.ident);
+            let fill = match &f.kind {
+                Kind::Switch => {
+                    let value = value == "true";
+                    match f.negate {
+                        Some(_) => quote!(#slot = ::core::option::Option::Some(#value);),
+                        None => quote!(#slot = #value;),
+                    }
+                }
+                _ => {
+                    let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
+                    f.assign(quote!(__wa::BStr::new(#bytes)), &f.display())
+                }
+            };
+            fills.push(quote!(if #holds && #unset { #fill }));
+        }
+        quote!(#(#conditions)* #(#fills)*)
     }
 
     /// Whether each `requires`-declaring field was supplied, before defaults fill it.
@@ -3371,6 +3538,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut keep_equals = false;
     let (mut two_dashes, mut prefix) = (false, false);
     let mut values = 1;
+    let (mut values_max, mut value_terminator) = (None, None);
+    let (mut default_fn, mut default_note, mut default_ifs) = (None, None, Vec::new());
     let mut stop_flags = false;
     let mut plus: Option<char> = None;
     let mut keywords = false;
@@ -3440,11 +3609,32 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("stop_flags") {
                 stop_flags = true;
             } else if meta.path.is_ident("values") {
-                let n = meta.value()?.parse::<syn::LitInt>()?;
-                values = n.base10_parse::<usize>()?;
-                if values == 0 {
-                    return Err(syn::Error::new(n.span(), "a flag takes at least one value"));
-                }
+                let count = meta.value()?.parse::<syn::Expr>()?;
+                (values, values_max) = value_count(&count)?;
+            } else if meta.path.is_ident("value_terminator") {
+                value_terminator = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("default_fn") {
+                default_fn = Some(meta.value()?.parse::<syn::ExprPath>()?);
+            } else if meta.path.is_ident("default_note") {
+                default_note = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("default_if") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let list =
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                let mut words = list.iter().map(LitStr::value);
+                default_ifs.push(match (words.next(), words.next(), words.next(), words.next()) {
+                    (Some(selector), Some(value), None, _) => (selector, None, value),
+                    (Some(selector), Some(equals), Some(value), None) => {
+                        (selector, Some(equals), value)
+                    }
+                    _ => {
+                        return Err(meta.error(
+                            "expected `default_if(\"--flag\", \"value\")` or \
+                             `default_if(\"--flag\", \"its value\", \"value\")`",
+                        ));
+                    }
+                });
             } else if meta.path.is_ident("two_dashes") {
                 two_dashes = true;
             } else if meta.path.is_ident("prefix") {
@@ -3509,6 +3699,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
+                     `value_terminator`, `default_fn`, `default_note`, `default_if`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
                      `group`, `help`, `long_help`, `help_heading`, `hide`",
                 ));
@@ -3572,7 +3763,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
     }
-    if values > 1
+    if (values > 1 || values_max.is_some())
         && (positional
             || subcommand
             || !matches!(kind, Kind::Many(_))
@@ -3582,6 +3773,31 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         return error(
             "`values` is for a `Vec<T>` flag, without `delimiter` or `default_missing`".into(),
         );
+    }
+    if values_max.is_some() && require_equals {
+        return error("a range of `values` takes detached words: not with `require_equals`".into());
+    }
+    if value_terminator.is_some() && values_max.is_none() {
+        return error("`value_terminator` ends a range of `values` (`values = 1..`)".into());
+    }
+    let valueless = matches!(kind, Kind::Switch | Kind::Count(_)) && negate.is_none();
+    if default_fn.is_some() && (default.is_some() || subcommand || keywords || valueless) {
+        return error(
+            "`default_fn` is for a field that takes a value, or `negate`, without `default`".into(),
+        );
+    }
+    if default_note.is_some() && default_fn.is_none() {
+        return error("`default_note` describes a `default_fn`".into());
+    }
+    if !default_ifs.is_empty() && (subcommand || keywords || matches!(kind, Kind::Count(_))) {
+        return error("`default_if` is for a switch or a field that takes a value".into());
+    }
+    if let (Kind::Switch, Some((.., value))) =
+        (&kind, default_ifs.iter().find(|d| !is_bool_word(&d.2)))
+    {
+        return error(format!(
+            "a switch's `default_if` value is `true` or `false`, not `{value}`"
+        ));
     }
     if two_dashes && (long.is_none() && alias.is_empty() || positional || subcommand) {
         return error("`two_dashes` is for flags with a long name".into());
@@ -3701,12 +3917,52 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         two_dashes,
         prefix,
         values,
+        values_max,
+        value_terminator,
+        default_fn,
+        default_note,
+        default_ifs,
         stop_flags,
         plus,
         tristate,
         keywords,
         short_aliases,
     })
+}
+
+fn is_bool_word(word: &str) -> bool {
+    matches!(word, "true" | "false")
+}
+
+/// `values = 3`, `values = 1..`, `values = 1..=3`: the least, and for a range
+/// the most (`usize::MAX` when open).
+fn value_count(count: &syn::Expr) -> syn::Result<(usize, Option<usize>)> {
+    let number = |e: &syn::Expr| match e {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(n),
+            ..
+        }) => n.base10_parse::<usize>(),
+        _ => Err(syn::Error::new(e.span(), "expected a number")),
+    };
+    let (min, max) = match count {
+        syn::Expr::Range(range) => {
+            let min = range.start.as_deref().map(number).transpose()?.unwrap_or(1);
+            let max = match (&range.end, &range.limits) {
+                (None, _) => usize::MAX,
+                (Some(end), syn::RangeLimits::Closed(_)) => number(end)?,
+                (Some(end), syn::RangeLimits::HalfOpen(_)) => number(end)?.saturating_sub(1),
+            };
+            (min, Some(max))
+        }
+        exact => (number(exact)?, None),
+    };
+    if min == 0 || max.is_some_and(|max| max < min) {
+        return Err(syn::Error::new(
+            count.span(),
+            "a flag takes at least one value, and at most no fewer",
+        ));
+    }
+    Ok((min, max))
 }
 
 /// Every long spelling of `f`, its negation included.

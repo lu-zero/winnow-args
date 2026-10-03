@@ -48,9 +48,11 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       numbers), `KeyValue<K, V>`, `Spanned<T>` (with its offset)
 - [x] Switch, `count` (saturating), `Option<T>`, required `T`, `Vec<T>` one
       value per occurrence; a repeated single value keeps the last
-- [x] `delimiter`, `values = N`, `choices(…)`, `ValueEnum` (`name`, `alias`,
+- [x] `delimiter`, `values = N`, `values = 1..` / `a..=b` with `value_terminator`,
+      `choices(…)`, `ValueEnum` (`name`, `alias`,
       `alias_hidden`, `hide`, `rename_all`)
-- [x] Command line > `env` > `default`; `default_missing` for an optional value
+- [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
+      `default_note`); `default_missing` for an optional value
 - [x] `keywords`: `-z now` is `--now` of a nested `Args` type, in order
 - [x] `@file` response files (`response`): nested 10 deep, 4096 files, GNU quoting
 
@@ -130,8 +132,6 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Grammar and values
 
-- [ ] A variadic flag taking any number of words (`--include a b`), its
-      `value_terminator`, and `var_min` / `var_max` / `num_args = a..=b` bounds
 - [ ] A variadic positional that is not last; `allow_missing_positional`
 - [ ] A negative number routed into a default subcommand's positional
       (usage corpus `default-takes-an-opted-negative-number`)
@@ -147,7 +147,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Defaults and rules
 
 - [ ] Bare `env`, `env_fallback`, `deprecated_env`
-- [ ] `default_fn` (+ `default_note`), `default_if`, repeated `default` for a `Vec`
+- [ ] Repeated `default` for a `Vec`
 - [ ] `required_if`, `required_if_eq(_any/_all)`, `required_unless_all`,
       `requires_if`, `exclusive`
 - [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions; a hook

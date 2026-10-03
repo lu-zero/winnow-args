@@ -27,10 +27,9 @@ each is: [`benchmarks/`](../benchmarks/README.md).
 | Optional value (`--color[=WHEN]`) | ✓ | ✓ | ~ | ✓ |
 | `require_equals`, hyphen values, negative numbers | ✓ | ✓ | ~ | ✓ |
 | `--no-x` negation | ✓ | ✓ | ~ | ~ |
-| A flag taking several words | ~ fixed count | ✓ | ~ | ✓ |
-| Ranges on the number of values | – | ✓ | ~ | ✓ |
+| A flag taking several words, a fixed number or a range | ✓ | ✓ | ~ | ✓ |
 | Custom value parser in the derive | ~ `FromArg` type | ~ `FromStr` type | ✓ | ✓ |
-| Defaults computed, or depending on another flag | – | ✓ | ~ | ✓ |
+| Defaults computed, or depending on another flag | ✓ | ✓ | ~ | ✓ |
 
 ## Shell and linker conventions
 
