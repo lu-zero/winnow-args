@@ -1120,8 +1120,8 @@ after the struct's own flags.
 ## 49. A review pass
 
 Two adversarial reviews (the runtime, and the derive's generated code) found
-what follows; each is fixed with a test in `tests/interactions.rs`,
-`tests/complete.rs` or `tests/response.rs`.
+what follows; each is fixed with a test in `tests/it/interactions.rs`,
+`complete.rs` or `response.rs`.
 
 - A `+x` word reached a flattened struct's `-x` arm; `+x` global flags never
   reached a subcommand.
