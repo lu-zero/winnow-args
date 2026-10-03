@@ -129,11 +129,12 @@ something a past pass got wrong and had to clean up later.
 - No commented-out code and no `// removed: ...` markers for deleted code
   — `git log`/`git blame` is the actual history.
 
-**`todo/` is scratch, not documentation — never cited from a doc comment**
-- `todo/*.md` is planning scratch and may be pruned or rewritten at any time.
-- A doc comment (`///`, `//!`) must never cite a `todo/` path. If the fact
-  matters, inline it as a sentence, or promote it to `docs/*.md` and cite that.
-- A bare `//` implementation comment may reference `todo/`.
+**`.agents/todo/` is local scratch — never committed, never cited**
+- Track work in progress there (`.agents/todo/*.md`); it is gitignored and may
+  be pruned or rewritten at any time.
+- Nothing committed cites it: it exists only in one checkout. A fact that
+  matters goes in a comment as a sentence, or in `docs/CHECKLIST.md` once it
+  is status a reader needs.
 
 **Dead weight**
 - No speculative abstraction for a single call site: no config knobs,

@@ -2,3 +2,4 @@
 /Cargo.lock
 /.cargo/
 __pycache__/
+/.agents/todo/
