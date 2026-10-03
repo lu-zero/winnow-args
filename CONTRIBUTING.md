@@ -19,7 +19,9 @@ BPAF010=1 just perf           # with the unreleased bpaf 0.10 as well
 just bench-examples           # warm instructions per parse, the two examples
 just bench-shell NAME=SHELL…  # a builtin call, and scripts, in bash-compatible shells
 just bench-ld NAME=LINKER…    # parsing a link line, per word
-just gen --help               # regenerate the mold port, the examples, the mise shadow
+just gen mold MOLD_DIR                # mold's parser, in a mold checkout
+just gen examples BRUSH_DIR MOLD_DIR  # brush_builtins.rs and ld.rs
+just gen mise-shadow                  # benchmarks/shadows/mise-wa
 ```
 
 `just check` passes before a commit. Plain `cargo test` runs the doctests;
@@ -62,16 +64,22 @@ Parsing a command line is the product; these rules decide between designs.
 ## Dependencies
 
 The tree builds from a fresh clone, on releases only: every dependency comes
-from crates.io with a semver requirement (`version = "1"`, never an exact pin),
-the bench's too. No git or path dependency and no `[patch]` to a local
-checkout: what is built, tested and measured is what a user gets.
+from crates.io with a semver requirement (`winnow` is `"1.0.4"`, which means
+`^1.0.4`), the bench's too. No git or path dependency and no `[patch]` to a
+local checkout: what is built, tested and measured is what a user gets.
 
-One exception, outside the workspace: `benchmarks/bpaf010` takes the unreleased bpaf
-0.10 from git, and only `BPAF010=1 just perf` builds it, so its going out of
-sync breaks nothing.
+The derive is pinned with `=` (`version = "=0.1.0"`). Generated code builds
+help and token types by struct literal, so the two crates are released
+together; [`docs/DESIGN.md`](./docs/DESIGN.md) says why. Leave that pin as `=`.
 
-Until the first release the workspace tracks the latest stable Rust and
-dependencies; no crate is pinned back for a lower MSRV.
+Outside the workspace, `benchmarks/bpaf010` takes the unreleased bpaf 0.10
+from git, and only `BPAF010=1 just perf` builds it, so its going out of sync
+breaks nothing.
+
+`rust-version` in the workspace manifest is the MSRV (1.85, the edition 2024
+floor). CI builds with the current stable compiler. A dependency is not held
+back for an older compiler, and `rust-version` moves in the commit that starts
+using a newer feature.
 
 ## Other projects' code
 
