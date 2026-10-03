@@ -62,6 +62,8 @@
 //!
 //! - [`Args::parse`] in `main`: help, version and errors are printed and the
 //!   process exits (0, or 2 on failure), as [`report`] does.
+//! - [`Args::try_parse`] in a `main` that handles them itself: the same,
+//!   returning the [`Error`]; [`Args::program`] is the name to report it under.
 //! - [`Args::parse_from`] in tests: the arguments after the program name, and
 //!   an [`Error`] back. Help and version are `Err` too
 //!   ([`ErrorKind::HelpRequested`]), so hand an error to [`report`] rather than
@@ -80,6 +82,7 @@
 //! | clap | winnow-args |
 //! |---|---|
 //! | `#[derive(Parser)]`, `#[command(...)]` | `#[derive(Args)]`, `#[arg(...)]` on the struct |
+//! | `Cli::try_parse().unwrap_or_else(\|e\| e.exit())` | `Cli::try_parse()`, then `exit(report(&e, &Cli::program()))` |
 //! | `ArgAction::SetTrue` / `Count` | a `bool` field / `count` |
 //! | `default_value = "…"`, `env = "…"` | `default = "…"`, `env = "…"` |
 //! | `value_delimiter = ','`, `num_args = 2` | `delimiter = ','`, `values = 2` |
@@ -388,22 +391,47 @@ pub trait Args: Sized {
     /// and exit as [`report`] does. It answers no completion callback: call
     /// [`Args::completion_request`] first if the program has [`complete`] scripts.
     fn parse() -> Self {
-        let mut args = std::env::args_os();
-        let program = Self::HELP.name;
-        let argv0 = args.next().unwrap_or_default();
-        let program = if program.is_empty() {
-            std::path::Path::new(&argv0)
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default()
-        } else {
-            program.to_owned()
-        };
-        let args: Vec<_> = args.collect();
-        match Self::parse_words(&words(&args)) {
+        match Self::try_parse() {
             Ok(parsed) => parsed,
-            Err(error) => std::process::exit(report(&error, &program)),
+            Err(error) => std::process::exit(report(&error, &Self::program())),
         }
+    }
+
+    /// Parse the process's arguments, leaving help, version and failures to
+    /// the caller: [`Args::parse`] without the printing and the exit.
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "derive")] {
+    /// use winnow_args::Args;
+    ///
+    /// #[derive(Args)]
+    /// struct Cli {
+    ///     #[arg(short, long)]
+    ///     verbose: bool,
+    /// }
+    ///
+    /// let cli = match Cli::try_parse() {
+    ///     Ok(cli) => cli,
+    ///     Err(error) => std::process::exit(winnow_args::report(&error, &Cli::program())),
+    /// };
+    /// # let _ = cli.verbose;
+    /// # }
+    /// ```
+    fn try_parse() -> Result<Self, Error> {
+        Self::parse_from_argv(std::env::args_os())
+    }
+
+    /// The program's name, as messages give it: `#[arg(name = "…")]`, else
+    /// the file name the process was run as.
+    fn program() -> String {
+        if !Self::HELP.name.is_empty() {
+            return Self::HELP.name.to_owned();
+        }
+        let argv0 = std::env::args_os().next().unwrap_or_default();
+        std::path::Path::new(&argv0)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 }
 

@@ -638,3 +638,16 @@ fn auto_styles_follow_the_environment_of_their_stream() {
     assert_eq!(with_env(&forced, Style::auto), colored);
     assert_eq!(with_env(&forced, Style::auto_stderr), colored);
 }
+
+#[test]
+fn the_program_is_the_declared_name_or_the_one_it_runs_as() {
+    #[derive(Args)]
+    #[arg(name = "tool")]
+    struct Named {}
+    #[derive(Args)]
+    struct Unnamed {}
+    assert_eq!(Named::program(), "tool");
+    let running = std::env::args_os().next().unwrap();
+    let file_name = std::path::Path::new(&running).file_name().unwrap();
+    assert_eq!(Unnamed::program(), file_name.to_string_lossy());
+}
