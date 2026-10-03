@@ -1,6 +1,14 @@
-//! Command line argument parsing built on [winnow].
+//! [winnow] parsers for a program's command line.
 //!
-//! The command line is a struct. `#[derive(Args)]` writes its parser:
+//! A flag or a word is a winnow parser ([`combinator`]). It reads the word
+//! where the shell left it: nothing is copied or re-split, and the bytes need
+//! not be UTF-8 until a value type converts them. `alt`, `repeat` and the rest
+//! of winnow combine those parsers. That covers `--long` and `-l` flags,
+//! positionals and subcommands, and older command lines: `+x` options as in a
+//! bash builtin, and flags whose order matters as in `ld`.
+//!
+//! A derive crate is provided to make this easier. It fills a struct from the
+//! arguments:
 //!
 // The example needs the `derive` feature.
 #![cfg_attr(feature = "derive", doc = "```")]
@@ -25,8 +33,17 @@
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 //!
-//! Each derive's page lists its attributes. A parser written by hand is
-//! [`combinator`].
+//! The library exists because usage, bpaf and clap are not both this flexible
+//! and this fast. Cold instructions and warm time on an Ampere-1a, release
+//! build, one core. `example -v --path /tmp/x a b c`: derive 2 939
+//! instructions and 196 ns, combinators 4 574 and 396 ns, usage 5 683 and
+//! 503 ns, clap 136 514 and 15.3 µs, bpaf 0.9 takes 142 994 and 15.0 µs.
+//! mise's 211 commands, `mise use -g node@20`: derive 4 012 and 328 ns, usage
+//! 7 720 and 782 ns, clap 4 943 837 and 753 µs, bpaf 0.9 takes 21 966 400 and
+//! 2.65 ms. The tables and the method are in the repository's
+//! [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
+//!
+//! Each derive's page lists its attributes.
 //!
 //! # Entry points
 //!
