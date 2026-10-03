@@ -68,7 +68,7 @@ from crates.io with a semver requirement (`winnow` is `"1.0.4"`, which means
 `^1.0.4`), the bench's too. No git or path dependency and no `[patch]` to a
 local checkout: what is built, tested and measured is what a user gets.
 
-The derive is pinned with `=` (`version = "=0.1.0"`). Generated code builds
+The derive is pinned with `=` (`version = "=0.1.1"`). Generated code builds
 help and token types by struct literal, so the two crates are released
 together; [`docs/DESIGN.md`](./docs/DESIGN.md) says why. Leave that pin as `=`.
 
