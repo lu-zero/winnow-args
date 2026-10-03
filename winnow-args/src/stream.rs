@@ -357,6 +357,25 @@ mod tests {
     }
 
     #[test]
+    fn a_flag_matches_beside_a_word_holding_any_byte() {
+        let words = [BStr::new(b"--verbose"), BStr::new(b"a\0\xff")];
+        let mut input = Argv::new(&words);
+        let flag = crate::token::arg(&mut input).unwrap();
+        assert!(matches!(flag, crate::token::Arg::Long(f) if f.name == b"verbose"));
+        let word = crate::token::arg(&mut input).unwrap();
+        assert!(matches!(word, crate::token::Arg::Word(w) if w.value == &b"a\0\xff"[..]));
+    }
+
+    #[test]
+    fn a_multibyte_short_is_one_letter() {
+        let words = [BStr::new("-β".as_bytes())];
+        let mut input = Argv::new(&words);
+        let flag = crate::token::arg(&mut input).unwrap();
+        assert!(matches!(flag, crate::token::Arg::Short(f) if f.letter == 'β'));
+        assert!(input.is_empty());
+    }
+
+    #[test]
     fn reading_a_letter_counts_as_progress() {
         let words = line(&["-abc"]);
         let mut input = Argv::new(&words);
