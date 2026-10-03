@@ -32,7 +32,7 @@ each is: [`benchmarks/`](../benchmarks/README.md).
 | Custom value parser in the derive | ~ `FromArg` type | ~ `FromStr` type | ✓ | ✓ |
 | Defaults computed, or depending on another flag | – | ✓ | ~ | ✓ |
 
-## Grammars beyond GNU's usual
+## Shell and linker conventions
 
 | | winnow-args | usage | bpaf | clap |
 |---|:-:|:-:|:-:|:-:|
