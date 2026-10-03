@@ -30,6 +30,8 @@
 //! A program expands its arguments, then parses the words with
 //! [`Args::parse_words`](crate::Args::parse_words) where it would call `parse()`;
 //! nothing turns `@file` on but that call. `examples/ld.rs` does it.
+//! Off Unix a response path is Unicode: bytes that are not UTF-8 are an
+//! I/O error, not a file named by an empty path.
 
 use std::ffi::OsStr;
 use std::fmt;
@@ -120,7 +122,7 @@ pub fn expand<'a, S: AsRef<OsStr>>(
     let mut words = Vec::with_capacity(args.len());
     for (index, arg) in args.iter().enumerate() {
         match arg.as_ref().as_encoded_bytes().strip_prefix(b"@") {
-            Some(path) => read(files, path_of(path), 1, &mut words)?,
+            Some(path) => read(files, path_of(path)?, 1, &mut words)?,
             None => words.push(Word::Arg(index)),
         }
     }
@@ -164,7 +166,7 @@ fn read(
             Token::Owned(bytes) => bytes,
         };
         if let Some(nested) = bytes.strip_prefix(b"@") {
-            let nested = path_of(nested).to_owned();
+            let nested = path_of(nested)?.to_owned();
             read(files, &nested, depth + 1, words)?;
             continue;
         }
@@ -180,15 +182,29 @@ fn read(
 }
 
 #[cfg(unix)]
-fn path_of(bytes: &[u8]) -> &Path {
+fn path_of(bytes: &[u8]) -> Result<&Path, ResponseError> {
     use std::os::unix::ffi::OsStrExt;
-    Path::new(OsStr::from_bytes(bytes))
+    Ok(Path::new(OsStr::from_bytes(bytes)))
 }
 
 #[cfg(not(unix))]
-fn path_of(bytes: &[u8]) -> &Path {
-    // Outside Unix a path must be valid UTF-8 to be named in a response file.
-    Path::new(std::str::from_utf8(bytes).unwrap_or_default())
+fn path_of(bytes: &[u8]) -> Result<&Path, ResponseError> {
+    unicode_path(bytes)
+}
+
+/// A response path where the platform's paths are Unicode.
+#[cfg(any(test, not(unix)))]
+fn unicode_path(bytes: &[u8]) -> Result<&Path, ResponseError> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => Ok(Path::new(text)),
+        Err(error) => Err(ResponseError {
+            path: PathBuf::from(String::from_utf8_lossy(bytes).into_owned()),
+            kind: ResponseErrorKind::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                error,
+            )),
+        }),
+    }
 }
 
 enum Token {
@@ -294,5 +310,12 @@ mod tests {
     fn premature_end() {
         assert!(words("'open").is_none());
         assert!(words("trailing\\").is_none());
+    }
+
+    #[test]
+    fn a_non_utf8_path_is_not_an_empty_name() {
+        let error = unicode_path(b"\xff").unwrap_err();
+        assert!(matches!(error.kind, ResponseErrorKind::Io(_)));
+        assert!(!error.path.as_os_str().is_empty());
     }
 }
