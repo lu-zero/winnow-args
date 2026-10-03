@@ -1,5 +1,10 @@
 # winnow-args
 
+[![LICENSE](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![Crates.io](https://img.shields.io/crates/v/winnow-args.svg)](https://crates.io/crates/winnow-args)
+[![docs.rs](https://docs.rs/winnow-args/badge.svg)](https://docs.rs/winnow-args)
+[![CI](https://github.com/lu-zero/winnow-args/actions/workflows/ci.yml/badge.svg)](https://github.com/lu-zero/winnow-args/actions/workflows/ci.yml)
+
 Command line parsing built from [winnow](https://github.com/winnow-rs/winnow) parsers.
 
 winnow-args parses a program's arguments into typed values, typically a
