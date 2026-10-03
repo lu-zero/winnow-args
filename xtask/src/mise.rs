@@ -11,7 +11,7 @@ use std::fs;
 
 use crate::{Result, regex, root, rustfmt};
 
-const SOURCE: &str = "bench/shadows/mise/src/lib.rs";
+const SOURCE: &str = "bench/shadows/mise/src/shadow.rs";
 const TARGET: &str = "bench/shadows/mise-wa/src/lib.rs";
 
 /// Metadata winnow-args does not model; none of it changes how a line parses.

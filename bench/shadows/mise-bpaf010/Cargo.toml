@@ -1,16 +1,14 @@
 # Vendored from usage (https://github.com/jdx/usage, MIT, see ../LICENSE-usage)
-# at 19a2974b: benches/shadows/mise-bpaf010/src/lib.rs, generated there by
-# `cargo run -p xtask -- gen-shadow`. Only this manifest differs: dependencies
-# come from crates.io (or git, for the unpublished bpaf 0.10).
+# at 19a2974b: benches/shadows/mise-bpaf010/src/lib.rs, here `src/shadow.rs`,
+# generated there by `cargo run -p xtask -- gen-shadow`. Ours are this manifest
+# (dependencies from crates.io, or git for the unpublished bpaf 0.10) and
+# `src/lib.rs`, which loads the shadow.
 [package]
 name = "shadow-mise-bpaf010"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
-[lib]
-# The doc comments are copied help text, full of indented examples.
-doctest = false
 
 [dependencies]
 bpaf.workspace = true
