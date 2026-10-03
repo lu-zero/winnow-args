@@ -47,8 +47,11 @@ check:
     run cargo test --workspace --all-features
     exit "$status"
 
-# Regenerate a generated source: `just gen --help`.
-[doc("Regenerate a generated source (the mold port, the examples, the mise shadow)")]
+# Regenerate a generated source:
+#   just gen mold MOLD_DIR
+#   just gen examples BRUSH_DIR MOLD_DIR
+#   just gen mise-shadow
+[doc("Regenerate mold, the examples, or the mise shadow")]
 gen *args:
     cargo run -q -p xtask -- gen "$@"
 
