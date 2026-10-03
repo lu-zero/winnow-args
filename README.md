@@ -23,7 +23,7 @@ crate docs; this page is about the repository.
 | `+x` options, as a shell builtin takes | ✓ | – | – |
 | Long options with one dash, `-z` keywords, as GNU `ld` takes | ✓ | – | – |
 | Flags kept in command-line order | ✓ | ~ | ~ |
-| Flag spellings and rule selectors checked at compile time | ✓ | – | – |
+| Flag constraints checked at compile time | ✓ | – | – |
 | Help prose left out of the binary by a feature | ✓ | – | – |
 | A CLI built at runtime, external subcommands | – | ✓ | ✓ |
 | Conditional requirements (`required_if`) | – | ✓ | ✓ |

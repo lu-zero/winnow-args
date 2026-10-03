@@ -67,7 +67,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 |---|:-:|:-:|:-:|:-:|
 | Conflicts, requirements, groups | ✓ | ✓ | ~ by composition | ✓ |
 | Conditional requirements (`required_if`) | – | ✓ | ~ | ✓ |
-| Checked at compile time | ✓ spellings, selectors | – | ~ types | – |
+| Flag constraints checked at compile time | ✓ | – | ~ types | – |
 | Cross-field validation hook | – | ✓ | ✓ `guard` | ~ |
 
 ## Help, errors, completion
