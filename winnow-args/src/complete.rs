@@ -154,7 +154,7 @@ pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
     let mut state = Walk {
         command: root,
         globals: Vec::new(),
-        pending: None,
+        owing: None,
         stopped: false,
         position: 0,
     };
@@ -164,13 +164,23 @@ pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
     state.complete(current)
 }
 
+/// Words still taken by the flag just seen: `fixed` of them whole, then
+/// non-flag-like ones, a single word when `once`.
+#[derive(Clone, Copy)]
+struct Owing {
+    item: &'static Item,
+    fixed: usize,
+    flexible: bool,
+    once: bool,
+}
+
 /// Where a command line stands after the words before the cursor.
 struct Walk {
     command: &'static Command,
     /// The global flags of the commands above.
     globals: Vec<&'static Item>,
-    /// A flag waiting for its value in the next word.
-    pending: Option<&'static Item>,
+    /// A flag still taking values.
+    owing: Option<Owing>,
     /// Past a `--`.
     stopped: bool,
     /// How many positionals were given.
@@ -193,12 +203,98 @@ impl Walk {
         item.value_name.is_some() && !item.require_equals
     }
 
-    fn short(&self, letter: char) -> Option<&'static Item> {
-        self.flags().find(|i| i.short == Some(letter))
+    fn letter(&self, letter: char, plus: bool) -> Option<&'static Item> {
+        self.flags().find(|i| {
+            if plus {
+                i.plus == Some(letter)
+            } else {
+                i.short == Some(letter) || i.more_shorts.contains(&letter)
+            }
+        })
+    }
+
+    fn plus_options(&self) -> bool {
+        self.flags().any(|i| i.plus.is_some())
+    }
+
+    /// The letters of a `+abc` bundle, when this command has `+` options.
+    fn plus_letters<'a>(&self, word: &'a str) -> Option<&'a str> {
+        let letters = word.strip_prefix('+').filter(|l| !l.is_empty())?;
+        self.plus_options().then_some(letters)
+    }
+
+    /// `attached` is the value already in this word (`--name=value`, `-nrest`).
+    fn owe(&mut self, item: &'static Item, attached: bool) {
+        if item.value_name.is_none() || (!attached && item.require_equals) {
+            return;
+        }
+        if item.more_values {
+            self.owing = Some(Owing {
+                item,
+                fixed: 0,
+                flexible: true,
+                once: false,
+            });
+            return;
+        }
+        if !attached && item.optional_value {
+            self.owing = Some(Owing {
+                item,
+                fixed: 0,
+                flexible: true,
+                once: true,
+            });
+            return;
+        }
+        let left = item.values.max(1) - usize::from(attached);
+        if left > 0 {
+            self.owing = Some(Owing {
+                item,
+                fixed: left,
+                flexible: false,
+                once: false,
+            });
+        }
+    }
+
+    /// Whether `word` is one of the values still owed. A flag-like word ends a
+    /// flexible run and is left for the caller to read as a flag.
+    fn consume_owing(&mut self, word: &str) -> bool {
+        let Some(owing) = self.owing else {
+            return false;
+        };
+        if owing.fixed > 0 {
+            let fixed = owing.fixed - 1;
+            self.owing = (fixed > 0).then_some(Owing { fixed, ..owing });
+            return true;
+        }
+        if owing.flexible && !crate::token::is_flag_like(word.as_bytes()) {
+            if owing.once {
+                self.owing = None;
+            }
+            return true;
+        }
+        self.owing = None;
+        false
+    }
+
+    fn bundle(&mut self, letters: &str, plus: bool) {
+        for (at, letter) in letters.char_indices() {
+            let Some(item) = self.letter(letter, plus) else {
+                break;
+            };
+            if item.value_name.is_some() {
+                // The value is the rest of the word, or the next word.
+                if at + letter.len_utf8() == letters.len() && Self::takes_next(item) {
+                    self.owe(item, false);
+                }
+                break;
+            }
+        }
     }
 
     fn step(&mut self, word: &str) {
-        if self.pending.take().is_some() {
+        if self.consume_owing(word) {
             return;
         }
         if self.stopped {
@@ -212,22 +308,13 @@ impl Walk {
                 Some((name, value)) => (name, Some(value)),
                 None => (body, None),
             };
-            self.pending = self
-                .long(name)
-                .filter(|i| Self::takes_next(i) && value.is_none());
-        } else if let Some(letters) = word.strip_prefix('-').filter(|l| !l.is_empty()) {
-            for (at, letter) in letters.char_indices() {
-                let Some(item) = self.short(letter) else {
-                    break;
-                };
-                if item.value_name.is_some() {
-                    // The value is the rest of the word, or the next word.
-                    if at + letter.len_utf8() == letters.len() && Self::takes_next(item) {
-                        self.pending = Some(item);
-                    }
-                    break;
-                }
+            if let Some(item) = self.long(name) {
+                self.owe(item, value.is_some());
             }
+        } else if let Some(letters) = word.strip_prefix('-').filter(|l| !l.is_empty()) {
+            self.bundle(letters, false);
+        } else if let Some(letters) = self.plus_letters(word) {
+            self.bundle(letters, true);
         } else if let Some(sub) = self
             .command
             .subcommands
@@ -245,8 +332,16 @@ impl Walk {
 
     fn complete(&self, current: &str) -> Completions {
         let mut out = Completions::default();
-        if let Some(item) = self.pending {
-            values(item, "", current, &mut out);
+        if let Some(owing) = self.owing {
+            let as_value = owing.fixed > 0
+                || (owing.flexible && !crate::token::is_flag_like(current.as_bytes()));
+            if as_value {
+                values(owing.item, "", current, &mut out);
+                return out;
+            }
+        }
+        if !self.stopped && current.starts_with('+') && self.plus_options() {
+            self.plus_names(current, &mut out);
             return out;
         }
         if !self.stopped && current.starts_with('-') {
@@ -293,8 +388,13 @@ impl Walk {
             if let Some(negate) = item.negate {
                 push(out, &format!("--{negate}"), item.help, current);
             }
-            if let Some(short) = item.short.filter(|_| shorts) {
-                push(out, &format!("-{short}"), item.help, current);
+            if shorts {
+                if let Some(short) = item.short {
+                    push(out, &format!("-{short}"), item.help, current);
+                }
+                for &letter in item.more_shorts {
+                    push(out, &format!("-{letter}"), item.help, current);
+                }
             }
         }
         let command = self.command;
@@ -309,6 +409,14 @@ impl Walk {
                 push(out, "-V", "Print version", current);
             }
             push(out, "--version", "Print version", current);
+        }
+    }
+
+    fn plus_names(&self, current: &str, out: &mut Completions) {
+        for item in self.flags().filter(|i| !i.hide) {
+            if let Some(letter) = item.plus {
+                push(out, &format!("+{letter}"), item.help, current);
+            }
         }
     }
 }
