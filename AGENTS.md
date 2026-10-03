@@ -1,212 +1,70 @@
-# Project Conventions
+# For coding agents
 
-## Build Commands
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) is the project's conventions: tasks,
+layout, performance posture, dependencies, style, commits. Read it first. This
+file adds what an agent in particular gets wrong.
 
-```bash
-cargo test --workspace            # unit, integration and doctests
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all -- --check
-RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps
-just --list                       # the tasks below, from the justfile
-just check                        # every feature set and profile, warning-free
-just perf [argv...]               # cold-parse comparison, see docs/PERF.md
-PROFILE=release-lto just perf     # one codegen unit + fat LTO: for sizes
-just bench-examples               # warm instructions per parse, the two examples
-just bench-shell NAME=SHELL…      # a builtin call, and scripts, in bash-compatible shells
-just bench-ld NAME=LINKER…        # parsing a link line, per word
-just gen --help                   # regenerate the mold port, the examples, the mise shadow
-```
+## Slop warning
 
-**Doctests:** plain `cargo test` runs them; `cargo nextest` does not. There is
-no git hook: `.claude/hooks/` checks an agent's tool calls (rustdoc, comment
-and commit-message length), so a person runs `just check` before a commit.
+This codebase was largely AI-generated. Be skeptical of existing code,
+comments and docs: a pattern being there does not make it correct.
 
+## Working here
 
-## Performance
+- `just check` passes before a commit. `.claude/hooks/` checks your tool calls
+  (rustdoc, comment and commit-message length); there is no git hook.
+- Sibling checkouts (`../usage`, `../winnow`, `../bpaf`, `../clap`) are for
+  reading: never copy from them, and never build against them.
+- `.agents/todo/` is local scratch for work in progress: gitignored, pruned at
+  will, and cited by nothing that is committed. A fact that matters goes in a
+  comment as a sentence, or in `docs/CHECKLIST.md` once it is status.
+- A commit you assisted carries `Assisted-by: AGENT:MODEL`
+  (`Assisted-by: Claude:claude-opus-5-5`); list specialized analysis tools
+  after the model, not git, cargo or editors. Never add `Co-Authored-By` or a
+  `Signed-off-by`: the sign-off is the human's.
 
-Parsing a command line is the product; these rules decide between designs.
+## Unslop rules
 
-- **Fast beats lean.** Parse time comes first. A size reduction is taken only
-  if it costs no time; shared code is left to LTO to factor, not moved out of
-  line by hand (two such attempts were measured slower and reverted).
-- **A feature costs nothing to those who do not use it.** A struct that does
-  not declare it must generate the same loop as before: compare the bench
-  lines before and after, and say so in the commit.
-- **The hot path is the generated loop**, `token`, and `stream`: no
-  indirection, allocation or out-of-line helper there without a measurement.
-  `Argv` stays 32 bytes (asserted). Help, errors and completion are off the
-  path: write them for clarity.
-- **Measure, then quote.** Every feature gets an entry in
-  [`docs/PERF.md`](./docs/PERF.md) with its numbers; a `perf:` commit quotes
-  them. Prefer instruction counts to wall time, warm (`PARSE_N=n` minus
-  `PARSE_N=0`, divided by `n`) for the cost of a parse and cold
-  (`just perf`) for a process. Pin to one core; when a whole program is
-  measured, average over copies of the script at several paths.
-- **Numbers are only comparable on the same host and tool.** `just perf`
-  uses cachegrind where valgrind works and `perf stat` medians otherwise; say
-  which produced a number.
-
-What exists: `bench/` (the same CLI, and mise's, in winnow-args, usage, bpaf
-and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
-`just perf`, `just bench-examples`, and for the downstream ports
-`just bench-shell` (brush against bash and its other parsers) and
-`just bench-ld` (mold with and without the feature); their results are in
-`docs/PERF.md`.
-
-## Architecture
-
-- `winnow-args` — runtime. `stream` (the `Argv` stream over `&[&BStr]`
-  words), `token` (lexer and flag continuations), `combinator` (bpaf-style
-  occurrence parsers), `value` (`FromArg`), `error`; off the parse path,
-  `help`, `color`, `complete`, `response` and `env`.
-- `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
-  `token::arg`. What only generated code calls is under `winnow_args::__private`.
-- `bench` — the same CLI in usage, winnow-args, bpaf and clap (unpublished).
-- `xtask` — the generators (unpublished): mold's parser from its own, the two
-  examples from the brush and mold ports, our mise shadow from usage's. They
-  edit text, so what they carry over stays verbatim; scripts are for running
-  tools (the `justfile`), not for writing Rust.
-- **Read [`docs/DESIGN.md`](./docs/DESIGN.md) first**, and keep it updated as the
-  design changes. [`docs/CHECKLIST.md`](./docs/CHECKLIST.md) tracks grammar
-  coverage; tick items only when a test covers them.
-
-The argv grammar follows usage's (`../usage/docs/spec/argv.md`). A deliberate
-divergence is recorded as a **decision** in the checklist, not left implicit.
-
-## Reference checkouts
-
-Sibling checkouts are read for behaviour and API, never copied from (the one
-exception is usage's generated mise shadows, vendored in `bench/shadows/` with
-usage's license):
-
-- `../winnow` — read it rather than relying on memory of older winnow APIs;
-  we build on the release.
-- `../usage` — argv grammar, conformance corpus, benchmark methodology.
-- `../bpaf` — ergonomics reference; the bench uses the released 0.9.
-- `../clap` — clap reference.
-
-## Dependencies
-
-Crates.io deps take a semver requirement (`version = "1"`), never an exact
-pin. The tree builds from a fresh clone, on releases only: every dependency
-comes from crates.io, the bench's too (usage-argv, usage-derive, bpaf, clap),
-and usage's mise shadows are vendored in `bench/shadows/`. No git or path
-dependency, and no `[patch]` to a sibling checkout: what is built, tested and
-measured is what a user gets.
-
-## Coding Style
-
-- `rustfmt` — all code must be formatted
-- No dead code, no unused dependencies
-- Doc comments on all public types and functions
-- Unit tests live in a `#[cfg(test)] mod tests` block; behaviour tests that
-  must hold for both the combinators and the derive live in
-  `winnow-args/tests/` and parse every line with both
-- Keep doctests compiling and green (`cargo test --doc`); rustdoc under
-  `RUSTDOCFLAGS=-D warnings` must stay clean
-- No `unsafe` in `winnow-args`
-
-### Unslop Rules
-
-Enforced, not just a style nit — see [Slop Warning](#slop-warning) below
-for why. This codebase is AI-generated by design, and every rule here is
-something a past pass got wrong and had to clean up later.
+Enforced. Each is something a past pass got wrong and had to clean up.
 
 **Comments**
-- Default to no comment. Add one only when the *why* is non-obvious: a
-  hidden constraint, a workaround for a specific bug, an invariant a
-  future reader would violate without warning.
-- Terse: one sentence beats a paragraph, a paragraph beats a wall of text.
-  A comment that needs several paragraphs to justify a few lines of code
-  is a sign the code itself needs simplifying, not that the comment needs
-  more words.
-- Never restate what the code already says through its own names — the
-  reader can read Rust.
-- Never reference the current task, a commit, a PR/issue number, or a
-  session. That context belongs in the commit message.
-- No commented-out code and no `// removed: ...` markers for deleted code
-  — `git log`/`git blame` is the actual history.
-
-**`.agents/todo/` is local scratch — never committed, never cited**
-- Track work in progress there (`.agents/todo/*.md`); it is gitignored and may
-  be pruned or rewritten at any time.
-- Nothing committed cites it: it exists only in one checkout. A fact that
-  matters goes in a comment as a sentence, or in `docs/CHECKLIST.md` once it
-  is status a reader needs.
+- Default to no comment. Add one only when the *why* is non-obvious: a hidden
+  constraint, a workaround for a specific bug, an invariant a reader would
+  break without warning.
+- One sentence beats a paragraph. A comment that needs several paragraphs to
+  justify a few lines means the code needs simplifying.
+- Never restate what the names already say.
+- Never reference the task, a commit, a PR or issue number, or a session:
+  that belongs in the commit message.
+- No commented-out code and no `// removed: …` markers; git is the history.
+- Hard limits: no comment line over **150 characters**, no paragraph over
+  **5 lines** (3 is better). Hitting either means cut, not wrap. Longer
+  justification goes in the commit message or `docs/DESIGN.md`.
 
 **Dead weight**
-- No speculative abstraction for a single call site: no config knobs,
-  trait generalizations, or feature flags without a second concrete
-  caller that needs them today.
-- No error handling, fallback, or validation for a scenario the caller's
-  own guarantees already rule out.
-- `#[allow(dead_code)]` is not a way to keep something "just in case" —
-  delete it; it's in git history if it turns out to be needed.
+- No speculative abstraction for a single call site: no knob, trait or
+  feature flag without a second caller that needs it today.
+- No error handling, fallback or validation for a case the caller's own
+  guarantees rule out.
+- `#[allow(dead_code)]` does not keep something "just in case": delete it.
 
 **Never downgrade a domain type to make code fast**
-- `String`/`&str` is for text that is genuinely just text. A value that is
-  a path stays `PathBuf`/`OsString`; a command-line value stays `&BStr`
-  until its type converts it.
-- When a typed value shows up hot in a profile, use the cheap accessor at
-  the *comparison site* (`as_bytes()`), not a weaker field type.
+- `String`/`&str` is for text that is just text. A path stays
+  `PathBuf`/`OsString`; a command-line value stays `&BStr` until its type
+  converts it.
+- When a typed value is hot in a profile, use the cheap accessor at the
+  comparison site (`as_bytes()`), not a weaker field type.
 
-**Comment length is not optional-nice, it's enforced**
-- If justifying a change takes more than ~3 sentences, that justification
-  belongs in the commit message or `docs/DESIGN.md`, not the doc comment.
-- Hard limits, not guidelines: no comment line over **150 characters**,
-  no comment paragraph over **5 lines** (3 is better). Hitting either
-  means cut, don't wrap.
+**Tests exercise project logic, not the standard library**
+- No test whose assertions would hold for any correct implementation of the
+  primitive underneath.
+- One test at the real decision point (a branch, an edge case, a regression)
+  beats a test added so that "added a function, added a test" is true.
 
-**Tests must exercise project logic, not the standard library**
-- Don't add a test whose assertions would hold for *any* correct
-  implementation of the underlying primitive.
-- Prefer one test that exercises the actual decision point (a real
-  branch, a real edge case, a real regression) over a test added purely
-  to make "added a function → added a test" true.
-
-**Scope discipline — stay inside the blast radius you were asked for**
-- When work surfaces a *different*, deeper subsystem than the one you
-  started in, stop and report the finding before editing that subsystem.
-  Agreement that an idea has merit is not authorization to implement it.
-- A signature change that cascades into many call sites and tests is a
-  point to pause and confirm the shape before the mechanical propagation.
-- If a change was explicitly reverted once, re-attempting it later needs
-  its own fresh explicit confirmation.
-
-## Commits
-
-[Conventional Commits](https://www.conventionalcommits.org/):
-
-- `feat:` — new functionality
-- `fix:` — bug fix
-- `refactor:` — code restructuring without behaviour change
-- `perf:` — performance work (quote `just perf` numbers in the body)
-- `docs:` — documentation only
-- `test:` — adding or updating tests
-- `ci:` — CI/CD changes
-- `chore:` — maintenance (dependencies, tooling)
-
-Same hard limits as comments (see Unslop Rules): no body line over
-**150 characters**, no paragraph over **5 lines** (3 is better). The
-subject line still follows Conventional Commits' own ~50/72 convention.
-
-When a commit was significantly assisted by an AI tool, note it with an
-`Assisted-by:` trailer rather than a `Co-Authored-By:` trailer. Use the kernel's
-format (`AGENT_NAME:MODEL_VERSION`, colon-separated, e.g.
-`Assisted-by: Claude:claude-opus-5-5`). Only list *specialized* analysis tools
-after the model version if any were used; basic dev tools (git, cargo, editors)
-are not listed. The agent never adds a `Signed-off-by` (DCO) — that is the human's.
-
-Work happens on the `draft` branch until it is consolidated.
-
-## MSRV
-
-Until the first release, the workspace tracks **latest stable** dependencies
-and bumps `rust-version` as needed. Do not pin crates to older releases to
-satisfy a lower MSRV.
-
-## Slop Warning
-
-This codebase was largely AI-generated. Be skeptical of existing code — it may
-contain bugs or surprising behaviour. Do not assume existing patterns are
-correct — including patterns in comments and docs.
+**Scope: stay inside what you were asked for**
+- When work surfaces a different, deeper subsystem, stop and report before
+  editing it. Agreement that an idea has merit is not authorization.
+- A signature change that cascades through many call sites is a point to
+  confirm the shape before the mechanical part.
+- A change that was reverted once needs fresh, explicit confirmation to try
+  again.
