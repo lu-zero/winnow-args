@@ -283,8 +283,7 @@ pub fn resolve<'w>(
 
 /// The width help wraps to: `COLUMNS` when it is a positive number, so a user
 /// or a test can say what to assume; else, with the `terminal-size` feature,
-/// the width of the terminal on standard output; else 100 (clap's width when
-/// it cannot ask the terminal).
+/// the width of the terminal on standard output; else 100.
 ///
 /// Under [`with_env`](crate::with_env) the terminal is not asked: the page
 /// depends only on the environment given.
@@ -343,8 +342,7 @@ impl Style {
     /// [`Palette::DEFAULT`] in the 16 basic colors.
     pub const COLORED: Style = Style::at(Palette::DEFAULT, Depth::Ansi16);
 
-    /// [`Palette::CLAP`]: clap 4's default styles (bold and underline in
-    /// help, color only in errors).
+    /// [`Palette::CLAP`]: bold and underline in help, color only in errors.
     pub const CLAP: Style = Style::at(Palette::CLAP, Depth::Ansi16);
 
     /// `palette` on a terminal of `depth`.
@@ -462,8 +460,8 @@ impl Cell {
         self.width += text.chars().count();
     }
 
-    /// `<NAME>` painted whole, or `[NAME]` with only the name painted, as usage
-    /// does: square brackets say "optional", they are not part of the value.
+    /// `<NAME>` painted whole, or `[NAME]` with only the name painted: square
+    /// brackets say "optional", they are not part of the value.
     fn push_placeholder(&mut self, style: Style, required: bool, name: &str) {
         if required {
             self.push(style.placeholder(), &format!("<{name}>"));
@@ -631,7 +629,7 @@ pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
         .iter()
         .filter(|i| i.positional && !i.hide && i.trailing)
     {
-        // clap paints the brackets and `--` as literals: they are typed.
+        // The brackets and `--` are typed, so they are painted as literals.
         let mut cell = Cell::default();
         cell.push(Ink::NONE, " ");
         cell.push(style.dim(), "[");
@@ -773,7 +771,7 @@ fn painted_code(text: &str, style: Style) -> String {
 /// A titled two-column list; long help puts each description under its item.
 ///
 /// Descriptions wrap to `width`. The column is at most two fifths of the
-/// page (usage's rule), so one long spelling does not squeeze every
+/// page, so one long spelling does not squeeze every
 /// description; an item wider than that has its description on the next line.
 fn section(
     out: &mut String,

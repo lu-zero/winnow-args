@@ -16,32 +16,31 @@ use crate::stream::Argv;
 /// Boxed cause of an [`ErrorKind::InvalidValue`].
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-/// The class of failure, after usage's argv grammar error codes.
+/// The class of failure.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ErrorKind {
     /// A parser did not match here; another one may.
     Backtrack,
-    /// `unknown_flag`: a flag-like word matched no flag.
+    /// A flag-like word matched no flag.
     UnknownFlag,
-    /// `unexpected_arg`: a word nothing could hold.
+    /// A word nothing could hold.
     UnexpectedArg,
-    /// `missing_flag_value`: a flag needing a value did not get one.
+    /// A flag needing a value did not get one.
     MissingValue,
     /// A flag that takes no value was given one: `--verbose=yes`.
     UnexpectedValue,
-    /// `missing_required_flag`: a required flag never appeared.
+    /// A required flag never appeared.
     MissingRequired,
-    /// `missing_required_arg`: a required positional argument was never filled.
+    /// A required positional argument was never filled.
     MissingArgument,
     /// A required subcommand was not given.
     MissingSubcommand,
-    /// `conflicting_flags`: two arguments that exclude each other were both given.
+    /// Two arguments that exclude each other were both given.
     Conflict,
     /// A required group had none of its members.
     MissingOneOf,
-    /// `arg_requires_double_dash`: a word reached an argument that only takes
-    /// words after `--`.
+    /// A word reached an argument that only takes words after `--`.
     RequiresDoubleDash,
     /// `-h`/`--help`, or a bare invocation of an `arg_required_else_help`
     /// command: show [`Error::render_help`] rather than report a failure.
@@ -50,7 +49,7 @@ pub enum ErrorKind {
     VersionRequested,
     /// A value that its type rejected.
     InvalidValue,
-    /// `invalid_choice`: a value outside a fixed set.
+    /// A value outside a fixed set.
     InvalidChoice,
 }
 
@@ -339,7 +338,7 @@ impl Error {
     }
 
     /// The whole report for an error that is not help or version:
-    /// `error: …` and a pointer to `--help`, as clap prints it.
+    /// `error: …` and a pointer to `--help`.
     pub fn render(&self, style: Style) -> String {
         format!(
             "{} {}\n\nFor more information, try '{}'.",

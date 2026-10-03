@@ -1,8 +1,7 @@
 //! The derives of winnow-args: `Args`, `Subcommand`, `ValueEnum` and `Occurrence`.
 //!
 //! Each is documented with every attribute it accepts. `#[winnow_args(...)]` is
-//! `#[arg(...)]` under another name, for a type whose other derives (clap's)
-//! claim `arg`.
+//! `#[arg(...)]` under another name, for a type whose other derives claim `arg`.
 //!
 //! What `#[derive(Args)]` generates is one loop:
 //!
@@ -33,7 +32,7 @@ use syn::{
 ///
 /// Naming and help:
 ///
-/// - `name = "…"`: the program name in usage (`argv[0]` when empty) and in completion scripts, which need it.
+/// - `name = "…"`: the program name in the usage line (`argv[0]` when empty) and in completion scripts, which need it.
 /// - `version`, `version = "…"`: supply `-V`/`--version`; bare, the crate's `CARGO_PKG_VERSION`.
 /// - `about`, `long_about`, `after_help`, `after_long_help`: help text; the first two default to the doc comment.
 /// - `disable_help_flag`, `disable_help_short` (`--help` only), `disable_version_flag`,
@@ -1100,8 +1099,8 @@ fn kebab_case(ident: &str) -> String {
     out
 }
 
-/// An attribute for these derives: `#[arg(…)]`, or `#[winnow_args(…)]` on a
-/// type that other derives (clap's claim `arg`) also read.
+/// An attribute for these derives: `#[arg(…)]`, or `#[winnow_args(…)]` where
+/// another derive claims `arg`.
 fn is_ours(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("winnow_args")
 }
@@ -2673,9 +2672,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     });
     let build: Vec<TokenStream2> = build.collect();
-    // Every field read once after building, as clap's and usage's derives do:
-    // a flag accepted and ignored on purpose (`pwd -L`) is the derive's field,
-    // not dead code in the user's crate. No runtime work after optimization.
+    // Every field read once after building, so a flag accepted and ignored on
+    // purpose (`pwd -L`) is not dead code in the user's crate. No runtime work
+    // after optimization.
     let field_reads: Vec<TokenStream2> = fields
         .iter()
         .map(|f| &f.ident)
@@ -3000,7 +2999,7 @@ struct StructOptions {
     disable_help_short: bool,
     disable_version_flag: bool,
     disable_help_subcommand: bool,
-    /// An unknown flag-like word is a positional value, as usage's default.
+    /// An unknown flag-like word is a positional value.
     unknown_flags_value: bool,
     /// GNU's `getopt_long_only`: a long name may be spelled with one dash.
     long_only: bool,
@@ -3572,7 +3571,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     bare.replace('_', "-")
                 };
-                // A second `long` is another spelling, as in usage.
+                // A second `long` is another spelling.
                 match long {
                     None => long = Some(name),
                     Some(_) => alias.push(name),
@@ -3598,7 +3597,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("negate") {
                 negate = Some(if meta.input.peek(syn::Token![=]) {
                     let name = meta.value()?.parse::<LitStr>()?.value();
-                    // usage spells it `"--no-color"`.
+                    // A leading `--` is not part of the name.
                     Some(name.strip_prefix("--").unwrap_or(&name).to_owned())
                 } else {
                     None

@@ -113,7 +113,7 @@ impl<const N: usize> Named<N> {
         self
     }
 
-    /// `true` for this flag, `false` for `no`: usage's `negate`, as in
+    /// `true` for this flag, `false` for `no`, as in
     /// `long("color").negated_by(long("no-color"))`. Fold with "last wins".
     pub fn negated_by<'i, const M: usize>(
         self,

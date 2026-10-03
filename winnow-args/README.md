@@ -34,8 +34,8 @@ fn main() {
 
 Tests call `Cli::parse_from(["-v", "a"])`, without the program name. The
 same command line by hand is `winnow_args::combinator`, shown next to this
-derive in `examples/example.rs`. The crate docs list the entry points and map
-clap's attributes to these; each derive's page lists every attribute it takes.
+derive in `examples/example.rs`. The crate docs list the entry points, and
+each derive's page lists every attribute it takes.
 
 ## What it covers
 
@@ -44,7 +44,7 @@ clap's attributes to these; each derive's page lists every attribute it takes.
   `--` treats them, subcommands with global flags, conflicts, requirements
   and groups, environment variables and defaults, `flatten`. Unknown flags
   are errors unless `unknown_flags = "value"`.
-- **Help and completion**: clap-like help with colour and wrapping; completion
+- **Help and completion**: help with colour and wrapping; completion
   scripts for bash, zsh, fish, elvish and PowerShell that ask the program
   itself.
 - **A shell's builtins**: `+x` options, unknown flags kept as words, options

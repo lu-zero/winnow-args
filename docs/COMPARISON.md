@@ -3,7 +3,8 @@
 What each derive (or, for bpaf, its combinators too) offers, read from the
 projects' documentation: usage 6.11, bpaf 0.9, clap 4. `✓` built in · `~`
 possible with some work, or in a companion crate · `–` not offered. How fast
-each is: [`benchmarks/`](../benchmarks/README.md).
+each is: [`benchmarks/`](../benchmarks/README.md). The rename from clap's and
+usage's derives is in the crate docs, under "From clap and usage".
 
 ## How the parser is made
 
