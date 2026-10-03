@@ -1,9 +1,9 @@
 # Performance log
 
 One entry per feature. Each adds the feature to all five bench CLIs, re-runs
-every line in `bench/argv.txt`, and keeps the earlier lines so the cost of
+every line in `benchmarks/argv.txt`, and keeps the earlier lines so the cost of
 merely *carrying* a feature shows up next to the cost of *using* it.
-`bench/tests/agree.rs` checks every framework parses every line to the same fields.
+`benchmarks/tests/agree.rs` checks every framework parses every line to the same fields.
 
 Method (`just perf`, aarch64 host):
 
@@ -452,7 +452,7 @@ needed: a repeated `long` as another spelling, `help` on a variant,
 `required` on a switch, and `double_dash = "automatic"` next to `"required"`
 (mise's `run`), which needed `Mode::Values` so an automatic stop is not
 mistaken for a `--`. `SUITE=mise just perf` runs it against usage's own
-shadows, unmodified. `bench/tests/mise.rs` checks that the benchmark line binds
+shadows, unmodified. `benchmarks/tests/mise.rs` checks that the benchmark line binds
 the same fields in all four, and that usage and winnow-args accept and reject
 the same 19 varied lines.
 

@@ -2,4 +2,4 @@
 /Cargo.lock
 __pycache__/
 /.agents/todo/
-/bench/bpaf010/Cargo.lock
+/benchmarks/bpaf010/Cargo.lock

@@ -11,8 +11,8 @@ use std::fs;
 
 use crate::{Result, regex, root, rustfmt};
 
-const SOURCE: &str = "bench/shadows/mise/src/shadow.rs";
-const TARGET: &str = "bench/shadows/mise-wa/src/lib.rs";
+const SOURCE: &str = "benchmarks/shadows/mise/src/shadow.rs";
+const TARGET: &str = "benchmarks/shadows/mise-wa/src/lib.rs";
 
 /// Metadata winnow-args does not model; none of it changes how a line parses.
 /// `value_optional` is what `default_missing` already says.

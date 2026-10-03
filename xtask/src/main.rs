@@ -47,7 +47,7 @@ enum Generated {
     Mold(Mold),
     /// `winnow-args/examples/{brush_builtins,ld}.rs`, from the two ports.
     Examples(Examples),
-    /// `bench/shadows/mise-wa`, from usage's mise shadow.
+    /// `benchmarks/shadows/mise-wa`, from usage's mise shadow.
     MiseShadow,
 }
 

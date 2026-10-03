@@ -3,15 +3,15 @@ resolver = "3"
 members = [
     "winnow-args",
     "winnow-args-derive",
-    "bench",
-    "bench/shadows/mise",
-    "bench/shadows/mise-bpaf",
-    "bench/shadows/mise-clap",
-    "bench/shadows/mise-wa",
+    "benchmarks",
+    "benchmarks/shadows/mise",
+    "benchmarks/shadows/mise-bpaf",
+    "benchmarks/shadows/mise-clap",
+    "benchmarks/shadows/mise-wa",
     "xtask",
 ]
 # bpaf 0.10 comes from git: kept out, so that it going out of sync breaks nothing.
-exclude = ["bench/bpaf010"]
+exclude = ["benchmarks/bpaf010"]
 # Plain `cargo build`, `test`, `doc` and `run` are about the library; the
 # benches need `--workspace` or `-p bench`.
 default-members = ["winnow-args", "winnow-args-derive"]

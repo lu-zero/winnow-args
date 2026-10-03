@@ -52,6 +52,22 @@ derive's page lists every attribute it takes.
 - **Without the derive**: the lexer (`token`) and bpaf-style combinators
   (`combinator`) the derive is built on.
 
+## Performance
+
+The parser is generated at compile time and reads the words in place, so a
+parse is short however many flags and subcommands the program has. One cold
+parse, in instructions, and its warm time:
+
+| | a small CLI | mise's 211 commands |
+|---|---:|---:|
+| winnow-args | 2 939, 196 ns | 4 012, 328 ns |
+| usage | 5 683, 503 ns | 7 720, 782 ns |
+| clap | 136 514, 15.3 µs | 4 943 837, 753 µs |
+| bpaf 0.9 | 142 994, 15.0 µs | 21 966 400, 2.65 ms |
+
+Measured on an aarch64 server; the method, the lines and how to run it are in
+the repository's [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
+
 ## Cargo features
 
 - `derive` (default): the derives.
