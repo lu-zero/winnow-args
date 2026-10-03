@@ -60,44 +60,53 @@
 //!
 //! # Entry points
 //!
+//! - [`Args::completion_request`] before the others, for a program with
+//!   [`complete`] scripts.
 //! - [`Args::parse`] in `main`: help, version and errors are printed and the
 //!   process exits (0, or 2 on failure), as [`report`] does.
 //! - [`Args::try_parse`] in a `main` that handles them itself: the same,
 //!   returning the [`Error`]; [`Args::program`] is the name to report it under.
 //! - [`Args::parse_from`] in tests: the arguments after the program name, and
-//!   an [`Error`] back. Help and version are `Err` too
-//!   ([`ErrorKind::HelpRequested`]), so hand an error to [`report`] rather than
-//!   `?` it out of `main`.
+//!   an [`Error`] back. Help ([`ErrorKind::HelpRequested`]) and version
+//!   ([`ErrorKind::VersionRequested`]) are `Err` too, so hand it to [`report`]
+//!   rather than `?` it out of `main`.
 //! - [`Args::parse_from_argv`] for a whole command line, program name first.
 //! - [`Args::parse_words`] when the words are already [`BStr`]s, as after
 //!   [`response::expand`].
 //!
-//! The names are usage's: `parse_from` leaves the program name out, where
-//! clap's `try_parse_from` takes it first.
-//! - [`Args::completion_request`] before any of them, for a program with
-//!   [`complete`] scripts.
+//! # From clap and usage
 //!
-//! # From clap
+//! The spellings that differ. Everything else is on the derive's own page.
 //!
-//! | clap | winnow-args |
-//! |---|---|
-//! | `#[derive(Parser)]`, `#[command(...)]` | `#[derive(Args)]`, `#[arg(...)]` on the struct |
-//! | `Cli::try_parse().unwrap_or_else(\|e\| e.exit())` | `Cli::try_parse()`, then `exit(report(&e, &Cli::program()))` |
-//! | `ArgAction::SetTrue` / `Count` | a `bool` field / `count` |
-//! | `default_value = "…"`, `env = "…"` | `default = "…"`, `env = "…"` |
-//! | `value_delimiter = ','`, `num_args = 2` | `delimiter = ','`, `values = 2` |
-//! | `conflicts_with = "x"`, `requires = "x"` | `conflicts("--x")`, `requires("--x")` |
-//! | `#[arg(value_enum)]` | nothing: the type derives `ValueEnum` |
-//! | `#[command(flatten)]`, `#[command(subcommand)]` | `#[arg(flatten)]`, `#[arg(subcommand)]` |
-//! | `Parser::try_parse_from(["prog", …])` | `Args::parse_from_argv(["prog", …])`, or `parse_from([…])` |
+//! | | clap | usage | winnow-args |
+//! |---|---|---|---|
+//! | the command | `#[derive(Parser)]` | `#[derive(Cli)]` | `#[derive(Args)]` |
+//! | its name, its version | `#[command(name, version)]` | `#[usage(bin, version)]` | `#[arg(name, version)]` |
+//! | an attribute | `#[arg]`, `#[command]` | `#[usage]` | `#[arg]` |
+//! | subcommands | `#[derive(Subcommand)]` | `#[derive(Subcommands)]` | `#[derive(Subcommand)]` |
+//! | in `main` | `parse()` | `parse()` | `parse()` |
+//! | words after the program name | `try_parse_from`, name first | `parse_from` | `parse_from` |
+//! | the whole line | `try_parse_from(["prog", …])` | `parse_from_argv` | `parse_from_argv` |
+//! | a count | `action = ArgAction::Count` | `count` | `count` |
+//! | a positional | no `long` or `short` | no `short` or `long` | `#[arg(positional)]` |
+//! | a field with no attribute | a positional | a positional | `--field-name` |
+//! | a default, an environment variable | `default_value`, `env` | `default`, `env` | `default`, `env` |
+//! | several words, a delimiter | `num_args`, `value_delimiter` | `num_args`, `delimiter` | `values`, `delimiter` |
+//! | a value that may be left off | `default_missing_value` | `default_missing` | `default_missing` |
+//! | choices from an enum | `#[arg(value_enum)]` | `#[usage(value_enum)]` | the type derives `ValueEnum` |
+//! | a conflict | `conflicts_with = "file"` | `conflicts("--file")` | `conflicts("--file")` |
+//! | the flag that clears a switch | `ArgAction::SetFalse` | `negate = "--no-force"` | `negate = "no-force"` |
+//! | shared flags | `#[command(flatten)]` | `#[usage(flatten)]` | `#[arg(flatten)]` |
+//! | a subcommand field | `#[command(subcommand)]` | `#[usage(subcommand)]` | `#[arg(subcommand)]` |
+//! | an unknown flag | an error | a value, unless `unknown_flags = "error"` | an error, unless `unknown_flags = "value"` |
 //!
-//! Unknown flags are errors, a repeated single-value flag keeps the last
-//! value, and long names are never abbreviated.
+//! A repeated single-value flag keeps the last value, and a long name is
+//! matched in full.
 //!
 //! # Derive attributes
 //!
-//! The derives read `#[arg(...)]`, or `#[winnow_args(...)]` for a type whose other derives (clap's)
-//! claim `arg`. The page of each derive macro lists every attribute it accepts:
+//! The derives read `#[arg(...)]`, or `#[winnow_args(...)]` when another derive
+//! claims `arg`. The page of each derive macro lists every attribute it accepts:
 //! `Args` (struct options, field roles such as `flatten`, flag names, values,
 //! positionals, rules, help), `Subcommand`, `ValueEnum`,
 //! and `Occurrence` for tools whose flags mean something by their order
@@ -349,8 +358,8 @@ pub trait Args: Sized {
         Self::parse_argv(&mut Argv::new(words))
     }
 
-    /// Parse `argv`, the whole command line, program name first, as clap's
-    /// `try_parse_from` takes it. The name is skipped.
+    /// Parse `argv`, the whole command line, program name first. The name is
+    /// skipped.
     fn parse_from_argv<I, S>(argv: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -359,8 +368,7 @@ pub trait Args: Sized {
         Self::parse_from(argv.into_iter().skip(1))
     }
 
-    /// Parse `args`, the arguments after the program name, as usage's
-    /// `parse_from` takes them.
+    /// Parse `args`, the arguments after the program name.
     ///
     /// ```
     /// # #[cfg(feature = "derive")] {

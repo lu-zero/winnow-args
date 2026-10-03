@@ -498,9 +498,8 @@ impl Palette {
         code: Paint::NONE.bold(),
     };
 
-    /// clap 4's default styles (`Styles::styled()`, with its `color` feature):
-    /// no color in help, only bold underlined headings and bold program, flags
-    /// and commands, everything else plain; color only in errors: bold red
+    /// No color in help: bold underlined headings and bold program, flags and
+    /// commands, everything else plain. Color only in errors: bold red
     /// `error:`, yellow for what was typed wrong, green for what is missing.
     pub const CLAP: Palette = Palette {
         header: Paint::NONE.bold().underline(),
