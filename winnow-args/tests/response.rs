@@ -1,4 +1,4 @@
-//! `@file` response files (ld phase 5), with mold's and wild's cases.
+//! `@file` response files, with mold's and wild's cases.
 
 use std::path::PathBuf;
 

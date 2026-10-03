@@ -51,7 +51,7 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
 `just perf`, `just bench-examples`, and for the downstream ports
 `just bench-shell` (brush against bash and its other parsers) and
 `just bench-ld` (mold with and without the feature); their results are in
-`docs/CHECKLIST-brush.md`, `docs/CHECKLIST-ld.md` and `docs/PERF.md`.
+`docs/PERF.md`.
 
 ## Architecture
 
@@ -60,7 +60,7 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
   occurrence parsers), `value` (`FromArg`), `error`; off the parse path,
   `help`, `color`, `complete`, `response` and `env`.
 - `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
-  `token::arg`. Generated code only uses `winnow_args::__private`.
+  `token::arg`. What only generated code calls is under `winnow_args::__private`.
 - `bench` — the same CLI in usage, winnow-args, bpaf 0.10 and clap (unpublished).
 - `xtask` — the generators (unpublished): mold's parser from its own, the two
   examples from the brush and mold ports, our mise shadow from usage's. They

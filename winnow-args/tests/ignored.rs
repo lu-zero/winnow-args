@@ -1,4 +1,4 @@
-//! Unknown and ignored linker options (ld checklist phase 6), wild's way:
+//! Unknown and ignored linker options, wild's way:
 //! silently ignored flags are aliases of one unread switch, unknown flags are
 //! collected whole by an `#[arg(unknown)]` field, and the linker warns about
 //! those it knows to ignore and reports the rest together.

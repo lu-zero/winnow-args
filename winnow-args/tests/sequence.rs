@@ -1,5 +1,5 @@
 //! `#[derive(Occurrence)]` and `#[arg(sequence)]`: flags whose position is
-//! their meaning, as `ld`'s (ld checklist phase 4).
+//! their meaning, as `ld`'s.
 #![cfg(feature = "derive")]
 
 use winnow::stream::BStr;

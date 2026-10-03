@@ -1,4 +1,4 @@
-//! ld's values (ld checklist phase 2): C-syntax numbers, `key=value`,
+//! ld's values: C-syntax numbers, `key=value`,
 //! several words per occurrence, `-l:file`.
 #![cfg(feature = "derive")]
 
