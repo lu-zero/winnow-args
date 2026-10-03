@@ -2,17 +2,21 @@
 
 Command line parsing built from [winnow](https://github.com/winnow-rs/winnow) parsers.
 
-A command line reaches the program as a list of words, already split by the
-shell. winnow-args turns that list into a value of the program's own type, or
-into an error that says which word is wrong. A word is one of:
+winnow-args parses a program's arguments into typed values, typically a
+struct with one field per flag or positional. It distinguishes:
 
-- a **flag**: `--verbose`, or `-v`; short flags bundle, so `-vq` is `-v -q`;
-- a flag's **value**: `--path /tmp`, `--path=/tmp`, `-p /tmp` or `-p/tmp`;
-- a **positional**: a plain word that means what its position says, as the
-  two files of `cp a b`;
-- a **subcommand**: a word that names what the rest of the line is for, as
+- **flags**, long (`--verbose`) or short (`-v`); short flags can be bundled,
+  `-vq` for `-v -q`;
+- **values** of flags, given as the next word (`--path /tmp`, `-p /tmp`) or
+  attached (`--path=/tmp`, `-p/tmp`);
+- **positionals**, words identified by their position: `a` and `b` in
+  `cp a b`;
+- **subcommands**, words that select a command with arguments of its own:
   `add` in `git add -p`;
-- `--`: every word after it is a positional, whatever it looks like.
+- `--`, after which every word is a positional.
+
+A failed parse returns an `Error` with its kind, the word at fault and its
+offset.
 
 There are two ways to say which of these a program takes:
 
