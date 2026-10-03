@@ -179,6 +179,36 @@ impl<'i> Arg<'i> {
         Ok(input.take_word())
     }
 
+    /// One more value for a flag that takes a variable number of them
+    /// (`--include a b`): the next word, unless the words ran out, it is
+    /// flag-like (as [`Arg::read_value_with`] judges it under `options`), or it
+    /// is `terminator`, which is dropped.
+    #[inline]
+    pub fn read_more(
+        &self,
+        input: &mut Argv<'i>,
+        options: ValueOptions,
+        terminator: Option<&BStr>,
+    ) -> Option<&'i BStr> {
+        if input.is_empty() {
+            return None;
+        }
+        if terminator.is_some_and(|t| **t == *input.front()) {
+            input.take_word();
+            return None;
+        }
+        detached(input, options)
+    }
+
+    /// Fail if a flag declared to take at least `min` values got fewer.
+    #[inline]
+    pub fn check_values(&self, got: usize, min: usize) -> Result<(), Error> {
+        if got < min {
+            return Err(self.missing_value());
+        }
+        Ok(())
+    }
+
     /// Whether a value is attached to this flag in its own word:
     /// `--name=value`, `-nvalue`. Asked before reading it.
     #[inline(always)]
@@ -237,15 +267,7 @@ impl<'i> Arg<'i> {
                 if input.is_empty() || options.require_equals {
                     return None;
                 }
-                let next = input.front();
-                if input.mode() == Mode::Word
-                    && is_flag_like(next)
-                    && !options.hyphen_values
-                    && !(options.negative_numbers && is_negative_number(next))
-                {
-                    return None;
-                }
-                Some(input.take_word())
+                detached(input, options)
             }
         }
     }
@@ -349,6 +371,21 @@ impl<'i> Word<'i> {
     pub fn value_as<T: FromArg>(&self, name: &'static str) -> impl Parser<Argv<'i>, T, Error> {
         move |_: &mut Argv<'i>| self.convert(name)
     }
+}
+
+/// The next word as a flag's detached value, unless it is flag-like and
+/// `options` does not take it anyway. The input is not empty.
+#[inline(always)]
+fn detached<'i>(input: &mut Argv<'i>, options: ValueOptions) -> Option<&'i BStr> {
+    let next = input.front();
+    if input.mode() == Mode::Word
+        && is_flag_like(next)
+        && !options.hyphen_values
+        && !(options.negative_numbers && is_negative_number(next))
+    {
+        return None;
+    }
+    Some(input.take_word())
 }
 
 /// How a flag takes a detached value, beyond the default of any word that is
