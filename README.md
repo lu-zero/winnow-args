@@ -93,6 +93,7 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 - [`docs/PERF.md`](./docs/PERF.md): measurements, one entry per feature.
 - [`docs/COMPARISON.md`](./docs/COMPARISON.md): features next to usage's,
   bpaf's and clap's.
+- [`CHANGELOG.md`](./CHANGELOG.md): what changed in each release.
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): building, testing, measuring.
 
 ## License
