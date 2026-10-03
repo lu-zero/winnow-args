@@ -56,10 +56,10 @@ gen *args:
 # instructions for one cold parse (PARSE_N=1 minus PARSE_N=0, as
 # ../usage/tasks/perf-shadow.sh does), cold wall time (the first parse in a
 # fresh process, median over $RUNS) and warm wall time (min and median per
-# parse in a hot loop). With no argv, every line of bench/argv.txt.
+# parse in a hot loop). With no argv, every line of benchmarks/argv.txt.
 #
 #   just perf -vp/tmp/x                # any argv; every binary gets the same one
-#   SUITE=mise just perf               # mise's full CLI: bench/mise-argv.txt
+#   SUITE=mise just perf               # mise's full CLI: benchmarks/mise-argv.txt
 #   PROFILE=release-lto just perf      # one codegen unit and fat LTO: stable sizes
 #   BPAF010=1 just perf                # with the unreleased bpaf 0.10, from git
 [doc("Cold and warm parse cost, in each framework, of an argv or every bench line")]
@@ -72,12 +72,12 @@ perf *argv:
       FRAMEWORKS=(usage wa bpaf clap)
       PREFIX=parse-n-mise-
       SWEEP=time-sweep-mise
-      LINES=bench/mise-argv.txt
+      LINES=benchmarks/mise-argv.txt
     else
       FRAMEWORKS=(usage wa wa-disp wa-comb bpaf clap)
       PREFIX=parse-n-
       SWEEP=time-sweep
-      LINES=bench/argv.txt
+      LINES=benchmarks/argv.txt
     fi
     export SUITE
     PROFILE=${PROFILE:-release}
@@ -89,7 +89,7 @@ perf *argv:
     cargo build --profile "$PROFILE" -q -p bench 2>/dev/null || cargo build --profile "$PROFILE" -p bench
     sweeps=("$BIN/$SWEEP")
     if [ -n "${BPAF010:-}" ]; then
-      cargo build --profile "$PROFILE" -q --manifest-path bench/bpaf010/Cargo.toml --target-dir target
+      cargo build --profile "$PROFILE" -q --manifest-path benchmarks/bpaf010/Cargo.toml --target-dir target
       FRAMEWORKS+=(bpaf010)
       sweeps+=("$BIN/$SWEEP-bpaf010")
     fi

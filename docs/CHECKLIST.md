@@ -92,9 +92,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Conformance and the ports
 
-- [x] `bench/`: one CLI and mise's whole CLI in winnow-args, usage, bpaf and
+- [x] `benchmarks/`: one CLI and mise's whole CLI in winnow-args, usage, bpaf and
       clap, measured as usage measures (`just perf`); mise's results checked
-      for agreement (`bench/tests/mise.rs`)
+      for agreement (`benchmarks/tests/mise.rs`)
 - [x] brush (local branch `winnow-port`, on brush's engine-neutral builtin
       contracts): every builtin and the shell's command line, no clap code in
       the binary. The compat suite passes what the clap and usage builds pass,

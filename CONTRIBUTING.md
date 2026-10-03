@@ -32,8 +32,8 @@ just gen --help               # regenerate the mold port, the examples, the mise
   `error`. Off it: `help`, `color`, `complete`, `response`, `env`.
 - `winnow-args-derive` — the derives. What only generated code calls is under
   `winnow_args::__private`.
-- `bench` (unpublished) — the same CLI, and mise's, in winnow-args, usage, bpaf
-  and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines.
+- `benchmarks` (unpublished, the `bench` package) — the same CLI, and mise's,
+  in winnow-args, usage, bpaf and clap; see its [README](./benchmarks/README.md).
 - `xtask` (unpublished) — the generators. They edit text, so what they carry
   over stays verbatim; the `justfile` runs tools, it does not write Rust.
 
@@ -66,7 +66,7 @@ from crates.io with a semver requirement (`version = "1"`, never an exact pin),
 the bench's too. No git or path dependency and no `[patch]` to a local
 checkout: what is built, tested and measured is what a user gets.
 
-One exception, outside the workspace: `bench/bpaf010` takes the unreleased bpaf
+One exception, outside the workspace: `benchmarks/bpaf010` takes the unreleased bpaf
 0.10 from git, and only `BPAF010=1 just perf` builds it, so its going out of
 sync breaks nothing.
 
@@ -77,7 +77,7 @@ dependencies; no crate is pinned back for a lower MSRV.
 
 usage, bpaf, clap and winnow are read for behaviour and API, never copied
 from. The one exception is usage's generated mise shadows, vendored unmodified
-in `bench/shadows/` with usage's license.
+in `benchmarks/shadows/` with usage's license.
 
 ## Style
 
