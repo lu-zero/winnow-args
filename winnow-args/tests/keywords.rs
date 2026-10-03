@@ -1,5 +1,5 @@
-//! `#[arg(keywords)]`: ld's `-z` keywords as a vocabulary of their own
-//! (ld checklist phase 3). Vectors from mold's `-z` tests.
+//! `#[arg(keywords)]`: ld's `-z` keywords as a vocabulary of their own.
+//! Vectors from mold's `-z` tests.
 #![cfg(feature = "derive")]
 
 use winnow::stream::BStr;

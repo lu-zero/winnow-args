@@ -1241,3 +1241,24 @@ The derives also read an enum variant's value where they build it (a
 that is only printed is not dead code. Help is off the parse path, and the
 read is a borrow the optimizer drops: the bench lines measure 2 165 and
 3 434 warm instructions (2 186 and 3 476 before).
+
+## 52. The brush port, phase by phase
+
+Kept from the brush checklist when the checklists became one. Phases 1 to 6
+were a fourth engine in brush's `abstract-arg-parsing` layout, since dropped;
+phase 7 is `winnow-port`, on brush's engine-neutral contracts. Per call is
+100 000 calls in a function, loop included (`:` is the loop alone), µs, clap
+→ winnow-args; scripts are `benchmarks/three-way.py`, 15 samples, pinned.
+
+| phase | builtins | per call | scripts |
+|---|---|---|---|
+| 1 | `pwd`, `read`, `mapfile`, … | (none timed) | within noise of clap |
+| 2 | `echo`, `printf`, `exec`, `eval` | `printf -v x %s y` 9.9 → 7.2, `echo -n` 7.2 → 4.5, `read -r x <<< a` 18.2 → 11.7 | −1 % to +3 % |
+| 3 | `set`, `declare`, `complete` | `set -f +f` 120 → 5.2, `declare -i n=1` 30 → 5.5, `compgen -W "a b" a` 26.2 → 10.6 | config-lint-500 107 → 70 ms, interp-loop 285 → 232 |
+| 4 | `kill`, `ulimit`, `trap`, `shift` | `ulimit -n` 20.0 → 8.4, `kill -0` 10.4 → 7.6, `trap -p` 8.6 → 5.6 | — |
+| 5 | `test`, `getopts`, `help` | `[ a = a ]` 9.1 → 7.3, `getopts ab o -a` 10.7 → 7.7 | — |
+| 6 | the rest | — | config-lint-500 103 → 59 ms, interp-loop 286 → 246 |
+
+Phase 6's binary was 65 KiB under clap's; phase 7's 256 KiB under usage-port's
+(6 472 000 bytes), level with it on the scripts and 0.1 to 0.6 µs faster a
+call, `set -f +f` 77.8 → 5.0 µs. Step 50 has the current numbers.
