@@ -3,7 +3,7 @@
 Read [`docs/DESIGN.md`](./docs/DESIGN.md) first and keep it true as the design
 changes. [`docs/CHECKLIST.md`](./docs/CHECKLIST.md) is the status: tick an item
 only when a test covers it, and record a deliberate divergence from usage's
-grammar there as a **decision**. Work happens on the `draft` branch.
+grammar there as a **decision**. Work happens on the `master` branch.
 
 ## Tasks
 

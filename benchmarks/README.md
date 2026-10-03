@@ -79,7 +79,7 @@ instructions, warm time, stripped size.
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 4 012 | 0.5 | 328 ns | 1.72 MB |
+| winnow-args, derive | 4 012 | 0.5 | 328 ns | 1.84 MB |
 | usage | 7 720 | 1 | 782 ns | 1.18 MB |
 | bpaf 0.10, pre-release (`844357f`) | 1 196 466 | 154 | 166 µs | 2.97 MB |
 | clap | 4 943 837 | 640 | 753 µs | 2.24 MB |
