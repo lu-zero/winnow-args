@@ -215,6 +215,53 @@ fn the_walk_reads_the_line_as_the_parser_does() {
         .map(|c| c.value)
         .collect();
     assert_eq!(help, ["--help"]);
+
+    // A second short is listed, and one that takes a value holds the next word.
+    assert!(forms(&["-"]).contains(&"-L".to_owned()));
+    assert!(walk(&["-L", ""]).files);
+    // `+e` is a switch, so the next word is still a flag.
+    assert_eq!(forms(&["+"]), ["+e"]);
+    assert!(forms(&["+e", "--"]).contains(&"--verbose".to_owned()));
+    // `values = 3`: three words, and after the first they are values even when flag-like.
+    assert!(walk(&["--platform", "a", "-11", ""]).files);
+    assert!(forms(&["--platform", "a", "b", "c", "-"]).contains(&"-v".to_owned()));
+    // `values = 1..` stops at a flag. A following flag is not an optional value.
+    assert!(walk(&["--include", "a", "b", ""]).files);
+    assert!(forms(&["--include", "a", "--"]).contains(&"--verbose".to_owned()));
+    assert!(!walk(&["--include", "a", "--"]).files);
+    assert!(forms(&["--color", "--v"]).contains(&"--verbose".to_owned()));
+    assert!(walk(&["--color", ""]).files);
+}
+
+/// Second shorts, `+` options, fixed and open value runs, an optional value.
+#[derive(Args, Debug)]
+#[arg(name = "forms", plus_options, disable_help_flag)]
+#[allow(dead_code, reason = "only the help data is completed")]
+struct Forms {
+    #[arg(short = 'l', short = 'L', value_name = "FILE")]
+    list: Option<String>,
+    #[arg(short = 'v', long)]
+    verbose: bool,
+    #[arg(short = 'e', plus = 'e')]
+    errexit: Option<bool>,
+    #[arg(long, values = 3, value_name = "V")]
+    platform: Vec<String>,
+    #[arg(long, values = 1.., value_name = "PATH")]
+    include: Vec<String>,
+    #[arg(long, default_missing = "always")]
+    color: Option<String>,
+}
+
+fn forms(words: &[&str]) -> Vec<String> {
+    complete(Forms::HELP, words)
+        .candidates
+        .into_iter()
+        .map(|c| c.value)
+        .collect()
+}
+
+fn walk(words: &[&str]) -> winnow_args::complete::Completions {
+    complete(Forms::HELP, words)
 }
 
 #[test]
