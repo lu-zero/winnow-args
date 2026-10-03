@@ -28,6 +28,50 @@ use syn::{
 /// Every attribute is `#[arg(...)]` (or `#[winnow_args(...)]`); a field with none is `--field-name`.
 /// Doc comments are the help text.
 ///
+/// ```ignore
+/// use winnow_args::Args;
+///
+/// /// Copy files.
+/// #[derive(Args, Debug)]
+/// #[arg(name = "cp", version)]
+/// struct Cp {
+///     /// Explain what is done; repeat for more.
+///     #[arg(short, long, count)]
+///     verbose: u8,
+///     /// Overwrite without asking.
+///     #[arg(short, long, negate)]
+///     force: bool,
+///     /// Attributes to keep.
+///     #[arg(long, delimiter = ',')]
+///     preserve: Vec<String>,
+///     /// Jobs to run.
+///     #[arg(short, long, env = "CP_JOBS", default = "1")]
+///     jobs: usize,
+///     #[arg(positional)]
+///     source: String,
+///     #[arg(positional)]
+///     dest: Option<String>,
+/// }
+///
+/// let cp = Cp::parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
+/// assert_eq!((cp.verbose, cp.force, cp.jobs), (2, false, 1));
+/// assert_eq!(cp.preserve, ["mode", "links"]);
+/// assert_eq!((cp.source.as_str(), cp.dest.as_deref()), ("a", Some("b")));
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
+/// What a field's type means. A repeated single-value flag keeps the last value.
+/// `values` and `delimiter` change what a `Vec` takes.
+///
+/// | Type | Flag | Positional |
+/// |---|---|---|
+/// | `bool` | a switch | |
+/// | integer, with `count` | how many times it was given | |
+/// | `T` | one value; an error if absent and without `env` or `default` | a required word |
+/// | `Option<T>` | one value, or `None` | an optional word |
+/// | `Vec<T>` | one value per occurrence | every word left |
+/// | `Option<bool>`, with `plus` | `-x` is `Some(true)`, `+x` `Some(false)` | |
+///
 /// # Struct options
 ///
 /// Naming and help:
@@ -47,14 +91,17 @@ use syn::{
 /// - `restart_token = "…"`: a word that starts a new run of positionals; flags resume and keep their values.
 /// - `default_subcommand = "…"`: the subcommand for a line whose first word names none; needs a `subcommand` field.
 /// - `group("name", required, multiple)`: declare a group; fields join it with `group = "name"`.
+///   `required` means at least one member. Without `multiple`, a second member conflicts.
 ///
 /// # Field roles
 ///
-/// A field is a flag unless it is one of these. `sequence` and `unknown` are for tools whose flags
-/// mean something by their order (see `Occurrence`); most programs need the first three. `flatten`,
-/// `sequence`, `unknown` and `skip` take no other option, except `sequence, unknown`.
+/// A field is a flag unless it is one of these. Most programs need `positional`, `subcommand` and
+/// `flatten`. `sequence` and `unknown` are for tools whose flags mean something by their order
+/// (see `Occurrence`). `flatten`, `sequence`, `unknown` and `skip` take no other option, except
+/// `sequence, unknown`.
 ///
-/// - `positional`: a word. `T` is required, `Option<T>` optional, `Vec<T>` every word left; in that order.
+/// - `positional`: a plain word. Required `T`, then `Option<T>`, then one `Vec<T>` last (it takes
+///   every word left). Any other order is a compile error.
 /// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
 /// - `flatten`: another flags-only `Args` struct, parsed as if declared here (nested too). A flag spelled in
 ///   both is a compile error. The flattened struct has no positionals, subcommand, `sequence`, `unknown`,
@@ -68,7 +115,7 @@ use syn::{
 /// # Flag names
 ///
 /// - `short`, `short = 'x'`: `-x`; bare, the field name's first letter. A second `short` is another letter.
-/// - `long`, `long = "name"`: `--name`; bare, the field name in kebab-case. A second `long` is another name.
+/// - `long`, `long = "name"`: `--name`, matched in full; bare, the field name in kebab-case. A second `long` is another name.
 /// - `alias = "…"`, `alias("…", …)`: more long names, not shown in help.
 /// - `negate`, `negate = "no-name"`: `--no-name` sets a `bool` false; bare, `--no-<long>`.
 /// - `two_dashes`: under `long_only`, the long name is never spelled with one dash (`--omagic`).
@@ -79,7 +126,7 @@ use syn::{
 ///
 /// # Values
 ///
-/// A value is any `T: FromArg`; the field's type says how many, as the table on `winnow_args::Args` has it.
+/// A value is any `T: FromArg`; the field's type says how many, as the table above has it.
 ///
 /// - `count`: an integer counting occurrences.
 /// - `value_name = "…"`: the placeholder in help.
@@ -116,7 +163,7 @@ use syn::{
 ///
 /// Selectors name another field: `"--long"`, `"-s"`, a positional's name or the field's name.
 ///
-/// - `required`: must end with a value.
+/// - `required`: the field must hold a value once defaults are applied. A bare `Vec` may be empty without it.
 /// - `required_unless("…", …)`: required unless one of them has a value.
 /// - `conflicts("…", …)`: not supplied together with these.
 /// - `overrides("…", …)`: the last of this and these supplied wins.
@@ -141,6 +188,45 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 /// A variant is a unit, or holds one `Args` type, which may be `Box`ed; a parent struct holds the enum in
 /// a `subcommand` field. The doc comments are the help text. As a whole command line the enum has no
 /// name, version or about: wrap it in a struct for those, and for completion scripts.
+///
+/// ```ignore
+/// use winnow_args::{Args, Subcommand};
+///
+/// #[derive(Args, Debug, PartialEq)]
+/// struct Add {
+///     #[arg(positional)]
+///     paths: Vec<String>,
+/// }
+///
+/// #[derive(Subcommand, Debug, PartialEq)]
+/// enum Command {
+///     /// Stage files.
+///     Add(Add),
+///     /// Show what changed.
+///     #[arg(alias = "st")]
+///     Status,
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Git {
+///     /// Say less.
+///     #[arg(short, long, global)]
+///     quiet: bool,
+///     #[arg(subcommand)]
+///     command: Command,
+/// }
+///
+/// let git = Git::parse_from(["add", "-q", "a", "b"])?;
+/// assert!(git.quiet);
+/// assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
+/// assert_eq!(Git::parse_from(["st"])?.command, Command::Status);
+///
+/// match git.command {
+///     Command::Add(Add { paths }) => println!("staging {paths:?}"),
+///     Command::Status => println!("on branch main"),
+/// }
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
 ///
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
@@ -366,6 +452,43 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 /// whether the value was attached. A variant with no `short` or `long` is `--variant-name`. Doc comments
 /// are the help text. A spelling used twice, here or in the parent, is a compile error.
 ///
+/// ```ignore
+/// use winnow_args::{Args, Occurrence};
+///
+/// #[derive(Occurrence, Debug, PartialEq)]
+/// enum Item {
+///     /// Link what follows only if needed.
+///     #[arg(long)]
+///     AsNeeded,
+///     /// Search for a library.
+///     #[arg(short = 'l', prefix)]
+///     Library(String),
+///     #[arg(positional, value_name = "FILE")]
+///     Input(String),
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Ld {
+///     #[arg(short, long)]
+///     output: Option<String>,
+///     #[arg(sequence)]
+///     items: Vec<Item>,
+/// }
+///
+/// let ld = Ld::parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
+/// assert_eq!(ld.output.as_deref(), Some("out"));
+/// assert_eq!(
+///     ld.items,
+///     [
+///         Item::Input("a.o".into()),
+///         Item::AsNeeded,
+///         Item::Library("m".into()),
+///         Item::Input("b.o".into()),
+///     ]
+/// );
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
+///
 /// Enum options, the default of every value variant:
 ///
 /// - `allow_hyphen_values`, `keep_equals`: as for a field.
@@ -383,7 +506,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 ///
 /// Variant roles, at most one of each in an enum:
 ///
-/// - `positional`: the variant takes every word; its `value_name` defaults to the variant's name.
+/// - `positional`: each plain word is that variant; its `value_name` defaults to the variant's name.
 /// - `unknown`: takes a flag no variant names, whole, for a parent with `sequence, unknown`.
 /// - `bundle`: takes a word of several short flags (`-sS`), whole, ahead of its letters.
 /// - `skip`: built by the program, never parsed.
@@ -396,6 +519,31 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 }
 
 /// Derive `FromArg` for an enum of unit variants, matched on the value's bytes; help lists them as possible values.
+///
+/// ```ignore
+/// use winnow_args::{Args, ErrorKind, ValueEnum};
+///
+/// #[derive(ValueEnum, Debug, PartialEq)]
+/// enum Color {
+///     Always,
+///     #[arg(alias = "no")]
+///     Never,
+///     #[arg(name = "auto")]
+///     WhenTerminal,
+/// }
+///
+/// #[derive(Args, Debug)]
+/// struct Cli {
+///     #[arg(long)]
+///     color: Option<Color>,
+/// }
+///
+/// assert_eq!(Cli::parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
+/// assert_eq!(Cli::parse_from(["--color", "no"])?.color, Some(Color::Never));
+/// let error = Cli::parse_from(["--color=red"]).unwrap_err();
+/// assert_eq!(error.kind(), ErrorKind::InvalidChoice);
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
 ///
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.

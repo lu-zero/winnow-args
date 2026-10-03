@@ -1,6 +1,6 @@
 //! Command line argument parsing built on [winnow].
 //!
-//! Describe the command line as a struct, and the derive writes its parser:
+//! The command line is a struct. `#[derive(Args)]` writes its parser:
 //!
 // The example needs the `derive` feature.
 #![cfg_attr(feature = "derive", doc = "```")]
@@ -25,54 +25,19 @@
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 //!
-//! # How a command line is parsed
-//!
-//! 1. **Words.** The command line is the list of words the shell made
-//!    (`-v`, `--path=/tmp`, `a.txt`). [`Argv`] walks them in place: no word is
-//!    copied, and a word need not be UTF-8.
-//! 2. **Items.** The lexer, [`token::arg`], reads the next item: a long flag
-//!    (`--path`, with its `=value` if attached), one short flag (each letter of
-//!    `-vq` in turn), a plain word, or the `--` separator.
-//! 3. **Meaning.** The parser, which knows the program's flags, says what the
-//!    item is: `-v` sets a switch; `--path` takes a value, attached or the next
-//!    word; a plain word is a positional or names a subcommand. An item it
-//!    does not know is an error.
-//! 4. **Result.** When the words run out, defaults and environment variables
-//!    fill what was not given, the rules are checked (required, conflicts),
-//!    and the struct is built.
-//!
-//! # Two ways to write the parser
-//!
-//! Steps 1, 2 and 4 are the same for everyone. Step 3 can be written by the
-//! derive or by hand.
-//!
-//! **The derive** is what most programs want. Each field is a flag or a
-//! positional; its type says how many values it holds and its attributes how
-//! it is spelled. `#[derive(Args)]` turns that into one loop over the items
-//! with a `match` on their names, so finding a flag costs the same however
-//! many the program has.
-//!
-//! **The [combinators](combinator)** are for parsers built without a macro.
-//! `short('p').long("path")` names a flag and `.argument()` or `.switch()`
-//! makes it a winnow parser for one occurrence, to combine with winnow's own
-//! `alt`, `map` and `repeat`. Flags are tried in turn, so it is slower than
-//! the derive; both use the same lexer, values and errors.
+//! Each derive's page lists its attributes. A parser written by hand is
+//! [`combinator`].
 //!
 //! # Entry points
 //!
-//! - [`Args::completion_request`] before the others, for a program with
+//! - [`Args::completion_request`] before [`Args::parse`], when the program has
 //!   [`complete`] scripts.
-//! - [`Args::parse`] in `main`: help, version and errors are printed and the
-//!   process exits (0, or 2 on failure), as [`report`] does.
-//! - [`Args::try_parse`] in a `main` that handles them itself: the same,
-//!   returning the [`Error`]; [`Args::program`] is the name to report it under.
-//! - [`Args::parse_from`] in tests: the arguments after the program name, and
-//!   an [`Error`] back. Help ([`ErrorKind::HelpRequested`]) and version
-//!   ([`ErrorKind::VersionRequested`]) are `Err` too, so hand it to [`report`]
-//!   rather than `?` it out of `main`.
-//! - [`Args::parse_from_argv`] for a whole command line, program name first.
-//! - [`Args::parse_words`] when the words are already [`BStr`]s, as after
-//!   [`response::expand`].
+//! - [`Args::parse`] in `main`. Help, version and a failure are printed, and
+//!   the process exits.
+//! - [`Args::try_parse`] returns the [`Error`] for the caller to handle.
+//! - [`Args::parse_from`] takes the words after the program name.
+//! - [`Args::parse_from_argv`] takes the whole line, program name first.
+//! - [`Args::parse_words`] takes words that are already [`BStr`]s.
 //!
 //! # From clap and usage
 //!
@@ -99,27 +64,6 @@
 //! | shared flags | `#[command(flatten)]` | `#[usage(flatten)]` | `#[arg(flatten)]` |
 //! | a subcommand field | `#[command(subcommand)]` | `#[usage(subcommand)]` | `#[arg(subcommand)]` |
 //! | an unknown flag | an error | a value, unless `unknown_flags = "error"` | an error, unless `unknown_flags = "value"` |
-//!
-//! A repeated single-value flag keeps the last value, and a long name is
-//! matched in full.
-//!
-//! # Derive attributes
-//!
-//! The derives read `#[arg(...)]`, or `#[winnow_args(...)]` when another derive
-//! claims `arg`. The page of each derive macro lists every attribute it accepts:
-//! `Args` (struct options, field roles such as `flatten`, flag names, values,
-//! positionals, rules, help), `Subcommand`, `ValueEnum`,
-//! and `Occurrence` for tools whose flags mean something by their order
-//! (a linker's `--as-needed a.o`).
-//!
-//! # Supporting modules
-//!
-//! - [`value`]: [`FromArg`] and the value types [`value::CInt`] (C-syntax integers), [`value::KeyValue`]
-//!   (`key=value`), [`value::Parsed`] (any `FromStr`) and [`value::Spanned`] (a value with its offset).
-//! - [`help`], [`color`]: the help data the derive emits, and how it is rendered and painted.
-//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and PowerShell that call the program back.
-//! - [`response`]: `@file` response files, nested up to 10 deep and 4096 files in all.
-//! - [`mod@env`]: [`with_env`], a fixed environment for deterministic tests.
 
 pub mod color;
 pub mod combinator;
@@ -141,169 +85,145 @@ pub use value::{ChoiceError, FromArg};
 /// UTF-8. What [`FromArg::from_arg`] is given.
 pub use winnow::stream::BStr;
 
-/// A command line as a struct: a field per flag or word.
-///
-/// ```
-/// use winnow_args::Args;
-///
-/// /// Copy files.
-/// #[derive(Args, Debug)]
-/// #[arg(name = "cp", version)]
-/// struct Cp {
-///     /// Explain what is done; repeat for more.
-///     #[arg(short, long, count)]
-///     verbose: u8,
-///     /// Overwrite without asking.
-///     #[arg(short, long, negate)]
-///     force: bool,
-///     /// Attributes to keep.
-///     #[arg(long, delimiter = ',')]
-///     preserve: Vec<String>,
-///     /// Jobs to run.
-///     #[arg(short, long, env = "CP_JOBS", default = "1")]
-///     jobs: usize,
-///     #[arg(positional)]
-///     source: String,
-///     #[arg(positional)]
-///     dest: Option<String>,
-/// }
-///
-/// let cp = Cp::parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
-/// assert_eq!((cp.verbose, cp.force, cp.jobs), (2, false, 1));
-/// assert_eq!(cp.preserve, ["mode", "links"]);
-/// assert_eq!((cp.source.as_str(), cp.dest.as_deref()), ("a", Some("b")));
-/// # Ok::<(), winnow_args::Error>(())
-/// ```
-///
-/// What a field's type means:
-///
-/// | Type | Flag | Positional |
-/// |---|---|---|
-/// | `bool` | a switch | |
-/// | integer, with `count` | how many times it was given | |
-/// | `T` | one value; an error if absent and without `env` or `default` | a required word |
-/// | `Option<T>` | one value, or `None` | an optional word |
-/// | `Vec<T>` | one value per occurrence | every word left |
-/// | `Option<bool>`, with `plus` | `-x` is `Some(true)`, `+x` `Some(false)` | |
-///
 #[cfg(feature = "derive")]
-pub use winnow_args_derive::Args;
+pub use winnow_args_derive::{Args, Occurrence, Subcommand, ValueEnum};
 
-/// Subcommands as an enum: a variant per word that selects one.
-///
-/// ```
-/// use winnow_args::{Args, Subcommand};
-///
-/// #[derive(Args, Debug, PartialEq)]
-/// struct Add {
-///     #[arg(positional)]
-///     paths: Vec<String>,
-/// }
-///
-/// #[derive(Subcommand, Debug, PartialEq)]
-/// enum Command {
-///     /// Stage files.
-///     Add(Add),
-///     /// Show what changed.
-///     #[arg(alias = "st")]
-///     Status,
-/// }
-///
-/// #[derive(Args, Debug)]
-/// struct Git {
-///     /// Say less.
-///     #[arg(short, long, global)]
-///     quiet: bool,
-///     #[arg(subcommand)]
-///     command: Command,
-/// }
-///
-/// let git = Git::parse_from(["add", "-q", "a", "b"])?;
-/// assert!(git.quiet);
-/// assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
-/// assert_eq!(Git::parse_from(["st"])?.command, Command::Status);
-///
-/// match git.command {
-///     Command::Add(Add { paths }) => println!("staging {paths:?}"),
-///     Command::Status => println!("on branch main"),
-/// }
-/// # Ok::<(), winnow_args::Error>(())
-/// ```
-///
-#[cfg(feature = "derive")]
-pub use winnow_args_derive::Subcommand;
-
-/// Flags and words kept in the order given, as an enum's variants.
-///
-/// ```
-/// use winnow_args::{Args, Occurrence};
-///
-/// #[derive(Occurrence, Debug, PartialEq)]
-/// enum Item {
-///     /// Link what follows only if needed.
-///     #[arg(long)]
-///     AsNeeded,
-///     /// Search for a library.
-///     #[arg(short = 'l', prefix)]
-///     Library(String),
-///     #[arg(positional, value_name = "FILE")]
-///     Input(String),
-/// }
-///
-/// #[derive(Args, Debug)]
-/// struct Ld {
-///     #[arg(short, long)]
-///     output: Option<String>,
-///     #[arg(sequence)]
-///     items: Vec<Item>,
-/// }
-///
-/// let ld = Ld::parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
-/// assert_eq!(ld.output.as_deref(), Some("out"));
-/// assert_eq!(
-///     ld.items,
-///     [
-///         Item::Input("a.o".into()),
-///         Item::AsNeeded,
-///         Item::Library("m".into()),
-///         Item::Input("b.o".into()),
-///     ]
-/// );
-/// # Ok::<(), winnow_args::Error>(())
-/// ```
-///
-#[cfg(feature = "derive")]
-pub use winnow_args_derive::Occurrence;
-
-/// A value that is one of an enum's variants.
-///
-/// ```
-/// use winnow_args::{Args, ErrorKind, ValueEnum};
-///
-/// #[derive(ValueEnum, Debug, PartialEq)]
-/// enum Color {
-///     Always,
-///     #[arg(alias = "no")]
-///     Never,
-///     #[arg(name = "auto")]
-///     WhenTerminal,
-/// }
-///
-/// #[derive(Args, Debug)]
-/// struct Cli {
-///     #[arg(long)]
-///     color: Option<Color>,
-/// }
-///
-/// assert_eq!(Cli::parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
-/// assert_eq!(Cli::parse_from(["--color", "no"])?.color, Some(Color::Never));
-/// let error = Cli::parse_from(["--color=red"]).unwrap_err();
-/// assert_eq!(error.kind(), ErrorKind::InvalidChoice);
-/// # Ok::<(), winnow_args::Error>(())
-/// ```
-///
-#[cfg(feature = "derive")]
-pub use winnow_args_derive::ValueEnum;
+// The derive crate cannot call `parse_from`, so these examples are tested here.
+#[cfg(all(doctest, feature = "derive"))]
+pub mod derive_examples {
+    //! ```
+    //! use winnow_args::Args;
+    //!
+    //! /// Copy files.
+    //! #[derive(Args, Debug)]
+    //! #[arg(name = "cp", version)]
+    //! struct Cp {
+    //!     /// Explain what is done; repeat for more.
+    //!     #[arg(short, long, count)]
+    //!     verbose: u8,
+    //!     /// Overwrite without asking.
+    //!     #[arg(short, long, negate)]
+    //!     force: bool,
+    //!     /// Attributes to keep.
+    //!     #[arg(long, delimiter = ',')]
+    //!     preserve: Vec<String>,
+    //!     /// Jobs to run.
+    //!     #[arg(short, long, env = "CP_JOBS", default = "1")]
+    //!     jobs: usize,
+    //!     #[arg(positional)]
+    //!     source: String,
+    //!     #[arg(positional)]
+    //!     dest: Option<String>,
+    //! }
+    //!
+    //! let cp = Cp::parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
+    //! assert_eq!((cp.verbose, cp.force, cp.jobs), (2, false, 1));
+    //! assert_eq!(cp.preserve, ["mode", "links"]);
+    //! assert_eq!((cp.source.as_str(), cp.dest.as_deref()), ("a", Some("b")));
+    //! # Ok::<(), winnow_args::Error>(())
+    //! ```
+    //!
+    //! ```
+    //! use winnow_args::{Args, Subcommand};
+    //!
+    //! #[derive(Args, Debug, PartialEq)]
+    //! struct Add {
+    //!     #[arg(positional)]
+    //!     paths: Vec<String>,
+    //! }
+    //!
+    //! #[derive(Subcommand, Debug, PartialEq)]
+    //! enum Command {
+    //!     /// Stage files.
+    //!     Add(Add),
+    //!     /// Show what changed.
+    //!     #[arg(alias = "st")]
+    //!     Status,
+    //! }
+    //!
+    //! #[derive(Args, Debug)]
+    //! struct Git {
+    //!     /// Say less.
+    //!     #[arg(short, long, global)]
+    //!     quiet: bool,
+    //!     #[arg(subcommand)]
+    //!     command: Command,
+    //! }
+    //!
+    //! let git = Git::parse_from(["add", "-q", "a", "b"])?;
+    //! assert!(git.quiet);
+    //! assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
+    //! assert_eq!(Git::parse_from(["st"])?.command, Command::Status);
+    //!
+    //! match git.command {
+    //!     Command::Add(Add { paths }) => println!("staging {paths:?}"),
+    //!     Command::Status => println!("on branch main"),
+    //! }
+    //! # Ok::<(), winnow_args::Error>(())
+    //! ```
+    //!
+    //! ```
+    //! use winnow_args::{Args, Occurrence};
+    //!
+    //! #[derive(Occurrence, Debug, PartialEq)]
+    //! enum Item {
+    //!     /// Link what follows only if needed.
+    //!     #[arg(long)]
+    //!     AsNeeded,
+    //!     /// Search for a library.
+    //!     #[arg(short = 'l', prefix)]
+    //!     Library(String),
+    //!     #[arg(positional, value_name = "FILE")]
+    //!     Input(String),
+    //! }
+    //!
+    //! #[derive(Args, Debug)]
+    //! struct Ld {
+    //!     #[arg(short, long)]
+    //!     output: Option<String>,
+    //!     #[arg(sequence)]
+    //!     items: Vec<Item>,
+    //! }
+    //!
+    //! let ld = Ld::parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
+    //! assert_eq!(ld.output.as_deref(), Some("out"));
+    //! assert_eq!(
+    //!     ld.items,
+    //!     [
+    //!         Item::Input("a.o".into()),
+    //!         Item::AsNeeded,
+    //!         Item::Library("m".into()),
+    //!         Item::Input("b.o".into()),
+    //!     ]
+    //! );
+    //! # Ok::<(), winnow_args::Error>(())
+    //! ```
+    //!
+    //! ```
+    //! use winnow_args::{Args, ErrorKind, ValueEnum};
+    //!
+    //! #[derive(ValueEnum, Debug, PartialEq)]
+    //! enum Color {
+    //!     Always,
+    //!     #[arg(alias = "no")]
+    //!     Never,
+    //!     #[arg(name = "auto")]
+    //!     WhenTerminal,
+    //! }
+    //!
+    //! #[derive(Args, Debug)]
+    //! struct Cli {
+    //!     #[arg(long)]
+    //!     color: Option<Color>,
+    //! }
+    //!
+    //! assert_eq!(Cli::parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
+    //! assert_eq!(Cli::parse_from(["--color", "no"])?.color, Some(Color::Never));
+    //! let error = Cli::parse_from(["--color=red"]).unwrap_err();
+    //! assert_eq!(error.kind(), ErrorKind::InvalidChoice);
+    //! # Ok::<(), winnow_args::Error>(())
+    //! ```
+}
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
@@ -514,7 +434,7 @@ pub trait Occurrence: Sized {
     /// The variants as help lists them, after the parent's own flags.
     const ITEMS: &'static [help::Item] = &[];
 
-    /// Whether there is a positional variant: it takes every word.
+    /// Whether there is a positional variant: each plain word is that variant.
     const POSITIONAL: bool = false;
 
     /// Whether there is an `#[arg(bundle)]` variant.

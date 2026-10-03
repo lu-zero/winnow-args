@@ -1,8 +1,8 @@
 # winnow-args
 
 Command line parsing built on [winnow](https://github.com/winnow-rs/winnow).
-Describe the command line as a struct and the derive writes its parser: one
-loop that reads each word where it is and looks flags up in a `match`. A word
+The command line is a struct. The derive writes one loop that reads each
+word where it is and looks flags up in a `match`. A word
 is never copied or re-split, and it need not be UTF-8 until a value type
 converts it.
 
