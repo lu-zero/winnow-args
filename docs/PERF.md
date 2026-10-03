@@ -1262,3 +1262,22 @@ phase 7 is `winnow-port`, on brush's engine-neutral contracts. Per call is
 Phase 6's binary was 65 KiB under clap's; phase 7's 256 KiB under usage-port's
 (6 472 000 bytes), level with it on the scripts and 0.1 to 0.6 µs faster a
 call, `set -f +f` 77.8 → 5.0 µs. Step 50 has the current numbers.
+
+## 53. After the API and documentation rework
+
+`d964cec` (public `BStr`, `value_optional` gone) through the doc fixes
+(hidden `ValueEnum` variants out of errors, `Shell: FromArg`, role fields
+checked). Pinned (node 3, core 96), `perf instructions:u`. Warm instructions
+per parse on the bench lines, before (`1157798`) / after:
+
+| line | release | release-lto |
+|---|---|---|
+| `-v --path /tmp/x a b c` | 2 165 / 2 173 | 1 765 / 1 765 |
+| mise `use -g node@20` | 3 548 / 3 548 | 3 430 / 3 455 |
+
+Each move arrives with a commit that changes no parse path (release `wa` with
+the doc fixes, release-lto mise with the API commit): layout, not work. The
+`just perf` tables agree with step 50 within the cold counter's noise; warm
+times are equal or lower on every line (mise `use -g node@20` 321 ns, 345 at
+step 50). The examples: brush builtins 338 to 1 697, ld 265 and 324 a word,
+as in step 48.
