@@ -14,7 +14,7 @@ each is: [`benchmarks/`](../benchmarks/README.md).
 | Combinators, without a macro | ✓ | – | ✓ | ~ builder |
 | A CLI built at runtime | – | ✓ `usage-lib` | ✓ | ✓ builder |
 | Words borrowed, not copied | ✓ | ✓ | – | – |
-| Non-UTF-8 values | ✓ | ✓ | ✓ | ✓ |
+| Non-UTF-8 values | ✓ Unix | ✓ | ✓ | ✓ |
 
 ## Flags and values
 
@@ -42,6 +42,10 @@ each is: [`benchmarks/`](../benchmarks/README.md).
 | Unknown flags kept as words, or collected | ✓ | ✓ | ~ | ~ |
 | Sigil arguments, clauses | – | ✓ | ~ | – |
 | Response files (`@file`) | ✓ | ✓ | – | ~ |
+
+Unknown flags are errors here unless `unknown_flags = "value"`; usage keeps
+the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
+`OsString` and `PathBuf` keep non-UTF-8 bytes on Unix only.
 
 ## Positionals and subcommands
 

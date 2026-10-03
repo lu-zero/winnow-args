@@ -1,8 +1,7 @@
 //! Colors for help and errors, for the terminal at hand.
 //!
-//! Terminals show 16, 256 or 16 million colors. [`Depth::detect`] works out
-//! which from the environment, the way `supports-color` and `anstyle-query`
-//! do, and a [`Theme`] offers a [`Palette`] for each depth: the richest one
+//! Terminals show 16, 256 or 16 million colors. [`Depth::detect`] reads the
+//! environment, and a [`Theme`] offers a [`Palette`] for each depth: the richest one
 //! the terminal can show is used, and a color deeper than the terminal is
 //! mapped to the nearest one it has. The default theme uses only the 16 basic
 //! colors, which the terminal's own theme defines — so they suit light and
@@ -28,10 +27,11 @@ impl Depth {
     /// The depth for a stream that is (or is not) a terminal, from the
     /// environment:
     ///
-    /// - a non-empty `NO_COLOR` means none, whatever else is set;
+    /// - a non-empty `NO_COLOR` means none, and it wins over `FORCE_COLOR`;
     /// - `FORCE_COLOR=0` or `false` means none too;
-    /// - `FORCE_COLOR` (`1`–`3`, or empty/`true` for 1) or `CLICOLOR_FORCE`
-    ///   (not `0`) give color even to a pipe;
+    /// - `FORCE_COLOR` (`1`–`3`, or empty/`true` for 1) is a minimum depth,
+    ///   not the depth: a terminal that can show more still does.
+    ///   `CLICOLOR_FORCE` (not `0`) gives color even to a pipe;
     /// - otherwise none for a pipe, `CLICOLOR=0`, `TERM=dumb`, or no `TERM`
     ///   at all;
     /// - then 24-bit for `COLORTERM=truecolor`/`24bit`, a `TERM` ending in

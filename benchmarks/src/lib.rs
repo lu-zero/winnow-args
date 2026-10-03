@@ -1,5 +1,4 @@
-//! `example -v/--verbose... -p/--path=PATH --color=WHEN -j/--jobs=N -q/--quiet --json|--toml --strict -w/--write[=PATH] --offset=N --args=ARGS --inspect[=PORT] --[no-]cache -I/--include=DIR[,DIR]... [FILE]... [-- CMD...] [use -g/--global [TOOL]...]`
-//! in six spellings.
+//! The bench CLI. Its flags are the lines in `argv.txt`, compared by `just perf`.
 
 /// winnow-args, derived.
 pub mod wa_derive {

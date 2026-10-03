@@ -581,7 +581,9 @@ impl Globals for () {
     }
 }
 
-/// [`Globals`] from a closure; the derive uses it for a struct's global flags.
+/// [`Globals`] from a closure. It does not answer [`Globals::short`]: the derive
+/// calls `inherit`, which forwards the parent's letters, so a lenient
+/// subcommand still sees them.
 pub fn globals<F>(bind: F) -> impl Globals
 where
     F: for<'i> FnMut(&Arg<'i>, &mut Argv<'i>) -> Result<bool, Error>,
@@ -601,6 +603,7 @@ where
 
 /// [`Globals`] that are `shorts` (letter, takes a value) and `bind`, then
 /// `parent`'s: what the derive hands a subcommand of a struct with global flags.
+/// Unlike [`globals`], `short` sees those letters.
 #[doc(hidden)]
 pub fn inherit<'a, F>(
     shorts: &'static [(char, bool)],

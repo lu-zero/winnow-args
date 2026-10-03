@@ -503,7 +503,7 @@ fn depth_follows_the_terminal_and_the_environment() {
         Depth::None
     );
     assert_eq!(forced(&[("NO_COLOR", "")]), Depth::Ansi16);
-    // `FORCE_COLOR` levels, as supports-color reads them.
+    // `FORCE_COLOR` levels. A number is a floor, not a cap.
     let force = |level| with_env(&[("FORCE_COLOR", level)], || Depth::detect(false));
     assert_eq!(force(""), Depth::Ansi16);
     assert_eq!(force("true"), Depth::Ansi16);

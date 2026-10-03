@@ -53,7 +53,7 @@ use syn::{
 ///
 /// A field is a flag unless it is one of these. `sequence` and `unknown` are for tools whose flags
 /// mean something by their order (see `Occurrence`); most programs need the first three. `flatten`,
-/// `sequence`, `unknown` and `skip` take no other option.
+/// `sequence`, `unknown` and `skip` take no other option, except `sequence, unknown`.
 ///
 /// - `positional`: a word. `T` is required, `Option<T>` optional, `Vec<T>` every word left; in that order.
 /// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
@@ -93,6 +93,7 @@ use syn::{
 /// - `choices("a", "b")`: the only values accepted.
 /// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order; an `Option<T>`
 ///   field then holds `Some`. A switch's variable is true unless empty, `0`, `false`, `no` or `off`.
+///   An unparseable `count` variable is left unset, not an error.
 /// - `default_fn = path`: a function returning the field's value (for a `Vec`, the list), called when
 ///   nothing else gave one; `default_note = "…"` is what help shows for it.
 /// - `default_if("--flag", "v")`: the default when `--flag` was given; `default_if("--flag", "x", "v")`
