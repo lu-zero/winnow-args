@@ -59,6 +59,8 @@ instructions a word against 3 333 for mold's own parser.
 - [`docs/CHECKLIST.md`](./docs/CHECKLIST.md): what is done, what is not, and
   where we chose a side.
 - [`docs/PERF.md`](./docs/PERF.md): measurements, one entry per feature.
+- [`docs/COMPARISON.md`](./docs/COMPARISON.md): features next to usage's,
+  bpaf's and clap's.
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md): building, testing, measuring.
 
 ## License
