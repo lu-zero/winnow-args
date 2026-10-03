@@ -1,4 +1,19 @@
 //! Turning a value's bytes into a Rust type.
+//!
+//! A field's type says how its value is read, through [`FromArg`]:
+//!
+//! | Type | Reads |
+//! |---|---|
+//! | `String`, `char`, `bool`, integers, floats, `std::net` addresses | UTF-8 text, parsed with `str::parse` |
+//! | `PathBuf`, `OsString` | the bytes as they are on Unix, UTF-8 elsewhere |
+//! | `Vec<u8>` | the bytes as they are |
+//! | an enum deriving `ValueEnum` | one of its variants' names |
+//! | [`Parsed<T>`] | any `T: FromStr`, a type from another crate included |
+//! | [`CInt<T>`] | an integer in C syntax: `0x400000`, `010000` |
+//! | [`KeyValue<K, V>`] | `key=value`, split at the first `=` |
+//!
+//! Any other type implements [`FromArg`] itself. In an `Occurrence` variant,
+//! [`Spanned<T>`] is a `T` with where it was found.
 
 use std::ffi::OsString;
 use std::path::PathBuf;

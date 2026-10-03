@@ -1,14 +1,33 @@
-//! [winnow] parsers for a program's command line.
+//! Command line parsing built from [winnow] parsers.
 //!
-//! A flag or a word is a winnow parser ([`combinator`]). It reads the word
-//! where the shell left it: nothing is copied or re-split, and the bytes need
-//! not be UTF-8 until a value type converts them. `alt`, `repeat` and the rest
-//! of winnow combine those parsers. That covers `--long` and `-l` flags,
-//! positionals and subcommands, and older command lines: `+x` options as in a
-//! bash builtin, and flags whose order matters as in `ld`.
+//! winnow-args parses a program's arguments into typed values, typically a
+//! struct with one field per flag or positional. It distinguishes:
 //!
-//! A derive crate is provided to make this easier. It fills a struct from the
-//! arguments:
+//! - **flags**, long (`--verbose`) or short (`-v`); short flags can be bundled,
+//!   `-vq` for `-v -q`;
+//! - **values** of flags, given as the next word (`--path /tmp`, `-p /tmp`) or
+//!   attached (`--path=/tmp`, `-p/tmp`);
+//! - **positionals**, words identified by their position: `a` and `b` in
+//!   `cp a b`;
+//! - **subcommands**, words that select a command with arguments of its own:
+//!   `add` in `git add -p`;
+//! - `--`, after which every word is a positional.
+//!
+//! A failed parse returns an [`Error`] with its kind, the word at fault and its
+//! offset.
+//!
+//! There are two ways to say which of these a program takes:
+//!
+//! - `#[derive(Args)]` on a struct. A field is a flag or a positional, its type
+//!   says how many values it takes and what they convert to, and its doc comment
+//!   is its help. This is what most programs want, and the faster of the two.
+//! - By hand, with [`combinator`]. A flag is a [winnow] parser, and
+//!   `alt`, `repeat` and the rest of winnow combine flags into a command line.
+//!
+//! Either way the words are read where the shell left them: nothing is copied or
+//! re-split, and the bytes need not be UTF-8 until a value's type asks for text.
+//! Both also cover command lines older than `--long`: `+x` options as in a bash
+//! builtin, and flags whose order matters as in `ld`.
 //!
 // The example needs the `derive` feature.
 #![cfg_attr(feature = "derive", doc = "```")]
@@ -25,36 +44,71 @@
 //!     /// Where to look.
 //!     #[arg(short, long)]
 //!     path: Option<PathBuf>,
+//!     #[arg(positional)]
+//!     files: Vec<String>,
 //! }
 //!
-//! let cli = Cli::parse_from(["-v", "--path=/tmp"])?;
+//! // In `main`: `let cli = Cli::parse();`
+//! let cli = Cli::parse_from(["-v", "--path=/tmp", "a", "b"])?;
 //! assert!(cli.verbose);
 //! assert_eq!(cli.path, Some(PathBuf::from("/tmp")));
+//! assert_eq!(cli.files, ["a", "b"]);
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 //!
-//! The library exists because usage, bpaf and clap are not both this flexible
-//! and this fast. Cold instructions and warm time on an Ampere-1a, release
-//! build, one core. `example -v --path /tmp/x a b c`: derive 2 939
-//! instructions and 196 ns, combinators 4 574 and 396 ns, usage 5 683 and
-//! 503 ns, clap 136 514 and 15.3 µs, bpaf 0.9 takes 142 994 and 15.0 µs.
-//! mise's 211 commands, `mise use -g node@20`: derive 4 012 and 328 ns, usage
-//! 7 720 and 782 ns, clap 4 943 837 and 753 µs, bpaf 0.9 takes 21 966 400 and
-//! 2.65 ms. The tables and the method are in the repository's
-//! [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
+//! # Where to look
 //!
-//! Each derive's page lists its attributes.
+#![cfg_attr(
+    feature = "derive",
+    doc = "- [`derive@Args`], [`derive@Subcommand`], [`derive@ValueEnum`] and [`derive@Occurrence`]:
+  the derives. Each page lists every attribute it takes."
+)]
+//! - [`combinator`]: the same command lines written by hand, and [`token`],
+//!   the lexer under both.
+//! - [`FromArg`]: what a value can be, and the types in [`value`] for a
+//!   `FromStr` type, a C-syntax number and `key=value`.
+//! - [`Error`] and [`report`]: what a failed parse holds, and how it is printed.
+//! - [`help`] and [`color`]: the help text and its theme.
+//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and PowerShell.
+//! - [`response`]: `@file` words.
+//! - [`with_env`]: a test's own environment variables.
 //!
 //! # Entry points
 //!
-//! - [`Args::completion_request`] before [`Args::parse`], when the program has
-//!   [`complete`] scripts.
 //! - [`Args::parse`] in `main`. Help, version and a failure are printed, and
 //!   the process exits.
 //! - [`Args::try_parse`] returns the [`Error`] for the caller to handle.
-//! - [`Args::parse_from`] takes the words after the program name.
+//! - [`Args::parse_from`] takes the words after the program name: what a test
+//!   calls.
 //! - [`Args::parse_from_argv`] takes the whole line, program name first.
 //! - [`Args::parse_words`] takes words that are already [`BStr`]s.
+//! - [`Args::completion_request`] goes before any of them in a program that
+//!   has [`complete`] scripts.
+//!
+//! # Performance
+//!
+//! The parser is generated at compile time, so a parse costs the same however
+//! many commands the program declares; clap and bpaf build theirs at each
+//! start. Cold instructions and warm time for one parse, on an Ampere-1a,
+//! release build, one core:
+//!
+//! | | `example -v --path /tmp/x a b c` | | `mise use -g node@20`, 211 commands | |
+//! |---|---:|---:|---:|---:|
+//! | derive | 2 939 | 196 ns | 4 012 | 328 ns |
+//! | combinators | 4 574 | 396 ns | | |
+//! | usage | 5 683 | 503 ns | 7 720 | 782 ns |
+//! | clap | 136 514 | 15.3 µs | 4 943 837 | 753 µs |
+//! | bpaf 0.9 | 142 994 | 15.0 µs | 21 966 400 | 2.65 ms |
+//!
+//! The full tables and the method are in the repository's
+//! [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
+//!
+//! # Cargo features
+//!
+//! - `derive` (default): the derives.
+//! - `help-text` (default): the prose of derived help. Without it, help still
+//!   lists commands, flags, values and defaults, and the binary is smaller.
+//! - `terminal-size`: wrap help to the terminal's width when `COLUMNS` is unset.
 //!
 //! # From clap and usage
 //!
@@ -66,9 +120,8 @@
 //! | its name, its version | `#[command(name, version)]` | `#[usage(bin, version)]` | `#[arg(name, version)]` |
 //! | an attribute | `#[arg]`, `#[command]` | `#[usage]` | `#[arg]` |
 //! | subcommands | `#[derive(Subcommand)]` | `#[derive(Subcommands)]` | `#[derive(Subcommand)]` |
-//! | in `main` | `parse()` | `parse()` | `parse()` |
-//! | words after the program name | `try_parse_from`, name first | `parse_from` | `parse_from` |
-//! | the whole line | `try_parse_from(["prog", …])` | `parse_from_argv` | `parse_from_argv` |
+//! | words after the program name | none: the name comes first | `parse_from` | `parse_from` |
+//! | the whole line | `try_parse_from` | `parse_from_argv` | `parse_from_argv` |
 //! | a count | `action = ArgAction::Count` | `count` | `count` |
 //! | a positional | no `long` or `short` | no `short` or `long` | `#[arg(positional)]` |
 //! | a field with no attribute | a positional | a positional | `--field-name` |
@@ -104,6 +157,11 @@ pub use winnow::stream::BStr;
 
 #[cfg(feature = "derive")]
 pub use winnow_args_derive::{Args, Occurrence, Subcommand, ValueEnum};
+
+// The README's example is compiled as a doctest.
+#[cfg(all(doctest, feature = "derive"))]
+#[doc = include_str!("../README.md")]
+pub struct Readme;
 
 // The derive crate cannot call `parse_from`, so these examples are tested here.
 #[cfg(all(doctest, feature = "derive"))]
