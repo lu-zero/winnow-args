@@ -27,6 +27,17 @@ jobs:
           toolchain: stable
       - run: cargo test -p winnow-args ${{ matrix.features }}
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: "1.85"
+      # The compile-fail cases pin the current compiler's messages.
+      - run: cargo test -p winnow-args --all-features -- --skip compile_fail
+
   workspace:
     name: Workspace
     runs-on: ubuntu-latest
