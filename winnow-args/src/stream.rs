@@ -57,8 +57,8 @@ pub struct Argv<'i> {
 }
 
 // The checkpoint is the whole `Argv`, copied on every `alt` branch: kept at
-// two 16-byte moves (docs/PERF.md, step 5).
-const _: () = assert!(std::mem::size_of::<Argv<'static>>() == 32);
+// two 16-byte moves (docs/PERF.md, step 5). Smaller where pointers are 32 bits.
+const _: () = assert!(std::mem::size_of::<Argv<'static>>() <= 32);
 
 impl<'i> Argv<'i> {
     /// Parse `words`, which should not include the program name.

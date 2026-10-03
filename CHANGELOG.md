@@ -3,6 +3,12 @@
 What changed in each release of `winnow-args` and `winnow-args-derive`, which
 are released together. Versions follow [semver](https://semver.org).
 
+## 0.1.1 (unreleased)
+
+- **Fixed**: the crate did not build for a 32-bit target, wasm32 included. A
+  compile-time assertion required `Argv` to be exactly 32 bytes, which holds
+  only where pointers are 64 bits; it now requires at most 32.
+
 ## 0.1.0 (2026-10-03)
 
 The first release.

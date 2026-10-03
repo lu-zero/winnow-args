@@ -51,8 +51,8 @@ Parsing a command line is the product; these rules decide between designs.
   before and after, and say so in the commit.
 - **The hot path is the generated loop**, `token` and `stream`: no
   indirection, allocation or out-of-line helper there without a measurement.
-  `Argv` stays 32 bytes (asserted). Help, errors and completion are off the
-  path: write them for clarity.
+  `Argv` stays within 32 bytes (asserted; it is 32 on a 64-bit target). Help,
+  errors and completion are off the path: write them for clarity.
 - **Measure, then quote.** Every feature gets an entry in
   [`docs/PERF.md`](./docs/PERF.md); a `perf:` commit quotes its numbers.
   Prefer instruction counts to wall time: warm (`PARSE_N=n` minus `PARSE_N=0`,

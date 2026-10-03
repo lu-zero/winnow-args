@@ -38,6 +38,17 @@ jobs:
       # The compile-fail cases pin the current compiler's messages.
       - run: cargo test -p winnow-args --all-features -- --skip compile_fail
 
+  wasm32:
+    name: 32-bit target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: wasm32-wasip2
+      - run: cargo check -p winnow-args --target wasm32-wasip2 --all-features
+
   workspace:
     name: Workspace
     runs-on: ubuntu-latest
