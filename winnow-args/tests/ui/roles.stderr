@@ -1,0 +1,47 @@
+error: a `skip` field takes no other `arg` options
+  --> tests/ui/roles.rs:23:17
+   |
+23 |     #[arg(skip, long)]
+   |                 ^^^^
+
+error: a `flatten` field takes no other `arg` options
+  --> tests/ui/roles.rs:29:20
+   |
+29 |     #[arg(flatten, hide)]
+   |                    ^^^^
+
+error: a subcommand field takes no other `arg` options
+  --> tests/ui/roles.rs:35:5
+   |
+35 |     #[arg(subcommand, long)]
+   |     ^
+
+error: a struct has at most one subcommand field
+  --> tests/ui/roles.rs:44:5
+   |
+44 |     second: Option<Command>,
+   |     ^^^^^^
+
+error: a struct has at most one `sequence` field
+  --> tests/ui/roles.rs:51:5
+   |
+51 |     #[arg(sequence)]
+   |     ^
+
+error: a `sequence` field is a `Vec<T>` of an `Occurrence` enum
+  --> tests/ui/roles.rs:58:11
+   |
+58 |     item: Item,
+   |           ^^^^
+
+error: positionals must be required, then optional, then one `Vec` last
+  --> tests/ui/roles.rs:66:5
+   |
+66 |     second: String,
+   |     ^^^^^^
+
+error: `default_subcommand` needs an `#[arg(subcommand)]` field
+  --> tests/ui/roles.rs:71:8
+   |
+71 | struct DefaultOfNothing {
+   |        ^^^^^^^^^^^^^^^^

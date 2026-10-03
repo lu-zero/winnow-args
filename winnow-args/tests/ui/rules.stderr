@@ -1,0 +1,41 @@
+error: `--quiet` names no flag or positional of this struct
+ --> tests/ui/rules.rs:7:5
+  |
+7 |     verbose: bool,
+  |     ^^^^^^^
+
+error: `--no-cache` is the negation of `--cache`: name that flag instead
+  --> tests/ui/rules.rs:15:5
+   |
+15 |     fresh: bool,
+   |     ^^^^^
+
+error: no `#[arg(group("output"))]` on the struct
+  --> tests/ui/rules.rs:21:5
+   |
+21 |     json: bool,
+   |     ^^^^
+
+error: expected `default_if("--flag", "value")` or `default_if("--flag", "its value", "value")`
+  --> tests/ui/rules.rs:26:17
+   |
+26 |     #[arg(long, default_if("--json"))]
+   |                 ^^^^^^^^^^^^^^^^^^^^
+
+error: `default_if` is for a switch or a field that takes a value
+  --> tests/ui/rules.rs:34:5
+   |
+34 |     #[arg(short, count, default_if("--json", "1"))]
+   |     ^
+
+error: `-v` has no value to compare: use `default_if("-v", "…")`
+  --> tests/ui/rules.rs:43:5
+   |
+43 |     color: Option<String>,
+   |     ^^^^^
+
+error: a switch's `default_if` value is `true` or `false`, not `yes`
+  --> tests/ui/rules.rs:50:5
+   |
+50 |     #[arg(long, default_if("--json", "yes"))]
+   |     ^

@@ -86,6 +86,9 @@ in `benchmarks/shadows/` with usage's license.
   doctests green.
 - Comments say why, briefly: no line over 150 characters, no paragraph over 5
   lines, nothing that restates the code or cites a task, commit or issue.
+- The derive's compile errors are pinned in `winnow-args/tests/ui/` (trybuild):
+  a new one gets a case, and `TRYBUILD=overwrite cargo test --test compile_fail`
+  rewrites the expected output after a deliberate change, or a rustc one.
 - Unit tests in a `#[cfg(test)] mod tests`; behaviour that must hold for both
   the combinators and the derive is tested in `winnow-args/tests/` with both.
 
