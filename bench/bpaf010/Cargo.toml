@@ -1,0 +1,26 @@
+# The bench in bpaf 0.10, from git: its own workspace, opt-in (`BPAF010=1 just perf`).
+[package]
+name = "bench-bpaf010"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+bench = { path = ".." }
+bpaf = { git = "https://github.com/pacak/bpaf", rev = "844357fec9921634049ee8cf3f67ae7803d28e6f", features = ["derive"] }
+
+[lints.rust]
+missing_docs = "allow"
+
+[lints.clippy]
+large_enum_variant = "allow"
+
+[profile.release]
+debug = 1
+
+[profile.release-lto]
+inherits = "release"
+codegen-units = 1
+lto = "fat"
