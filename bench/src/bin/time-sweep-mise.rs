@@ -48,6 +48,6 @@ fn main() {
         black_box(shadow_mise_clap::Cli::try_parse_from(black_box(&clap_argv))).ok();
     });
     sweep("bpaf", 20, || {
-        black_box(shadow_mise_bpaf010::cli_p().run_inner(black_box(&strs[..]))).ok();
+        black_box(shadow_mise_bpaf::cli_p().run_inner(black_box(&strs[..]))).ok();
     });
 }

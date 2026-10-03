@@ -1281,3 +1281,26 @@ the doc fixes, release-lto mise with the API commit): layout, not work. The
 times are equal or lower on every line (mise `use -g node@20` 321 ns, 345 at
 step 50). The examples: brush builtins 338 to 1 697, ld 265 and 324 a word,
 as in step 48.
+
+## 54. On releases only: winnow 1.0.4, bpaf 0.9
+
+Every number above was taken with winnow patched to a local checkout of its
+`main` and bpaf 0.10 from git. Both are gone: the tree builds on crates.io
+releases alone. Pinned as in step 53, warm instructions per parse, patched
+winnow / released:
+
+| line | release | release-lto |
+|---|---|---|
+| `-v --path /tmp/x a b c` | 2 173 / 2 143 | 1 765 / 1 773 |
+| mise `use -g node@20` | 3 548 / 3 596 | 3 455 / 3 407 |
+
+Within 1.4 % either way; the ratios to usage hold (`-v --path /tmp/x a b c`:
+2 850 cold instructions and 196 ns warm against usage's 5 595 and 506; mise
+`use -g node@20`: 4 015 and 326 ns against 7 702 and 789).
+
+bpaf is now the released 0.9, with usage's own 0.9 shadow for mise (the same
+source as its 0.10 one). On the small CLI it is where 0.10 was (143 031
+instructions, 14.9 µs warm, clap 136 568 and 15.3 µs) in a smaller binary
+(581 552 bytes stripped against 825 416). At mise's scale it is far slower:
+22.0 M instructions and 2.65 ms a parse, against 1.2 M and 165 µs for 0.10 and
+4.9 M and 758 µs for clap. Earlier steps' bpaf columns are 0.10's.

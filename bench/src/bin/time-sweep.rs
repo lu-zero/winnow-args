@@ -56,7 +56,7 @@ fn main() {
         black_box(bench::wa_disp::cli.parse_next(&mut Argv::new(black_box(&words)))).ok();
     });
     sweep("bpaf", 100, || {
-        black_box(bench::bpaf010::cli_p().run_inner(black_box(&strs[..]))).ok();
+        black_box(bench::bpaf09::cli_p().run_inner(black_box(&strs[..]))).ok();
     });
     sweep("clap", 100, || {
         black_box(bench::clap4::Cli::try_parse_from(black_box(&clap_argv))).ok();

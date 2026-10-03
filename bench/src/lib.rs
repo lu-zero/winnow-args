@@ -340,8 +340,8 @@ pub mod wa_disp {
     }
 }
 
-/// bpaf 0.10, derived.
-pub mod bpaf010 {
+/// bpaf 0.9, derived.
+pub mod bpaf09 {
     use std::path::PathBuf;
 
     use bpaf::Bpaf;
@@ -356,6 +356,13 @@ pub mod bpaf010 {
             )
             .guard(|c| !(c.json && c.toml), "--json cannot be used with --toml")
             .guard(|c| !c.strict || c.json, "--strict requires --json")
+            // bpaf has no global flags: the subcommand takes `-v` too.
+            .map(|mut c| {
+                if let Some(Commands::Use(u)) = &c.command {
+                    c.verbose += u.verbose;
+                }
+                c
+            })
             .to_options()
     }
 
@@ -376,8 +383,7 @@ pub mod bpaf010 {
         pub write: Option<String>,
         #[bpaf(external(offset_p))]
         pub offset: Option<i32>,
-        // bpaf 0.10 has no hyphen values, and pairing `literal("--args")` with
-        // `any` breaks `optional()`: a plain argument, which refuses `-destroy`.
+        // bpaf has no hyphen values: a plain argument, which refuses `-destroy`.
         // The agreement test skips bpaf on such lines.
         #[bpaf(long("args"), argument("ARGS"))]
         pub args: Option<String>,
@@ -405,27 +411,27 @@ pub mod bpaf010 {
         pub command: Option<Commands>,
         #[bpaf(positional("FILE"))]
         pub files: Vec<PathBuf>,
-        // bpaf 0.10 cannot keep `FILE` before `--`: a strict positional errors on a
+        // bpaf cannot keep `FILE` before `--`: a strict positional errors on a
         // plain word rather than missing it, so `FILE` also takes the words after
         // `--` and this stays empty. The agreement test skips bpaf on such lines.
         #[bpaf(positional("CMD"), strict, many)]
         pub cmd: Vec<String>,
     }
 
-    /// bpaf's derive has no `default_missing`; `on_missing_value` is the combinator.
-    fn write_p() -> impl bpaf::Parser<Output = Option<String>> {
+    /// bpaf has no `default_missing`: a bare flag is the other branch.
+    fn write_p() -> impl bpaf::Parser<Option<String>> {
         use bpaf::Parser as _;
-        bpaf::short('w')
+        let path = bpaf::short('w').long("write").argument::<String>("PATH");
+        let bare = bpaf::short('w')
             .long("write")
-            .argument::<String>("PATH")
-            .on_missing_value(|| Ok("./bin/mise".into()))
-            .optional()
+            .req_flag(String::from("./bin/mise"));
+        bpaf::construct!([path, bare]).optional()
     }
 
     /// `adjacent` refuses a detached value: `require_equals`. It reports
     /// `--inspect a` as not adjacent rather than missing, so `on_missing_value`
     /// never fires; a bare `--inspect` flag is the other branch.
-    fn inspect_p() -> impl bpaf::Parser<Output = Option<String>> {
+    fn inspect_p() -> impl bpaf::Parser<Option<String>> {
         use bpaf::Parser as _;
         let port = bpaf::long("inspect").argument::<String>("PORT").adjacent();
         let bare = bpaf::long("inspect").req_flag(String::from("9229"));
@@ -433,19 +439,21 @@ pub mod bpaf010 {
     }
 
     /// `--cache` / `--no-cache`, the last one given winning.
-    fn cache_p() -> impl bpaf::Parser<Output = bool> {
+    fn cache_p() -> impl bpaf::Parser<bool> {
         use bpaf::Parser as _;
         let yes = bpaf::long("cache").req_flag(true);
         let no = bpaf::long("no-cache").req_flag(false);
         bpaf::construct!([yes, no]).last().fallback(true)
     }
 
-    /// bpaf's derive has no negative numbers; `negative_lit` is the combinator.
-    fn offset_p() -> impl bpaf::Parser<Output = Option<i32>> {
+    /// An argument refuses `-3`: the flag, then any word that is a number.
+    fn offset_p() -> impl bpaf::Parser<Option<i32>> {
         use bpaf::Parser as _;
-        bpaf::long("offset")
-            .argument::<i32>("N")
-            .negative_lit()
+        let flag = bpaf::long("offset").req_flag(());
+        let number = bpaf::any::<i32, _, _>("N", Some);
+        bpaf::construct!(flag, number)
+            .adjacent()
+            .map(|((), n)| n)
             .optional()
     }
 
@@ -470,7 +478,7 @@ pub mod bpaf010 {
     }
 
     /// bpaf has no value delimiter: split each occurrence afterwards.
-    fn include_p() -> impl bpaf::Parser<Output = Vec<PathBuf>> {
+    fn include_p() -> impl bpaf::Parser<Vec<PathBuf>> {
         use bpaf::Parser as _;
         bpaf::short('I')
             .long("include")
@@ -484,14 +492,9 @@ pub mod bpaf010 {
             })
     }
 
-    /// bpaf's derive has no `global`; the combinator does.
-    fn verbose_p() -> impl bpaf::Parser<Output = usize> {
+    fn verbose_p() -> impl bpaf::Parser<usize> {
         use bpaf::Parser as _;
-        bpaf::short('v')
-            .long("verbose")
-            .req_flag(())
-            .count()
-            .global()
+        bpaf::short('v').long("verbose").req_flag(()).count()
     }
 
     #[derive(Debug, Clone, Bpaf)]
@@ -504,6 +507,8 @@ pub mod bpaf010 {
     #[derive(Debug, Clone, Bpaf)]
     #[bpaf(generate(useargs_p))]
     pub struct UseArgs {
+        #[bpaf(external(verbose_p))]
+        pub verbose: usize,
         #[bpaf(short('g'), long("global"), switch)]
         pub global: bool,
         #[bpaf(positional("TOOL"))]
