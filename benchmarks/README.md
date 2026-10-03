@@ -59,8 +59,9 @@ and the brush and mold ports; they are described in the `justfile`.
 
 ## Results
 
-An Ampere-1a (aarch64), `release` profile, pinned to one core, `perf stat`,
-winnow 1.0.4, bpaf 0.9, clap 4. Cold instructions, warm time, stripped size.
+Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz). `release`
+profile, pinned to one core, `perf stat`, winnow 1.0.4, bpaf 0.9, clap 4. Cold
+instructions, warm time, stripped size.
 
 `example -v --path /tmp/x a b c`:
 

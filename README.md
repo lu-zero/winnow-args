@@ -37,8 +37,10 @@ crate docs; this page is about the repository.
 
 Two command lines: `example -v --path /tmp/x a b c`, and `mise use -g node@20`
 with mise's 211 commands declared. Instructions for one parse in a fresh
-process, and time per parse in a hot loop, on an Ampere-1a, release build, one
-core.
+process, and time per parse in a hot loop.
+
+Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
+profile, pinned to one core.
 
 | | example, instructions | time | mise, instructions | time |
 |---|---:|---:|---:|---:|

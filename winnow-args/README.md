@@ -87,8 +87,7 @@ derive's page lists every attribute it takes.
 
 The parser is generated at compile time, so a parse costs the same however
 many commands the program declares; clap and bpaf build theirs at each start.
-Cold instructions and warm time for one parse, on an Ampere-1a, release
-build, one core:
+Cold instructions and warm time for one parse:
 
 | | `example -v --path /tmp/x a b c` | | `mise use -g node@20`, 211 commands | |
 |---|---:|---:|---:|---:|
@@ -98,7 +97,9 @@ build, one core:
 | clap | 136 514 | 15.3 µs | 4 943 837 | 753 µs |
 | bpaf 0.9 | 142 994 | 15.0 µs | 21 966 400 | 2.65 ms |
 
-The full tables and the method are in the repository's
+Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
+profile, pinned to one core. The full tables and the method are in the
+repository's
 [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
 
 ## Cargo features

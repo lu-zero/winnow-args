@@ -29,9 +29,13 @@ letters are read: `repeat`'s progress check and error offsets work inside `-vq`.
 
 A word position alone cannot say whether we are inside `-vp` or past `--`, so
 `Argv` carries the byte inside the word and a `Mode`, and its checkpoint is a
-copy of the whole 32-byte struct. Two winnow facts forced this: `Stateful` does
-not restore its state on `reset` (unsound under `alt`), and `Checkpoint::new`
-is private, so a custom stream brings its own checkpoint type.
+copy of the whole 32-byte struct: when `alt` backtracks, the lexer state goes
+back with the position.
+
+winnow's `Stateful` does not fit. It is for state that outlives backtracking
+(a counter, a recursion limit), so its `reset` restores the input and leaves
+the state alone; a lexer state kept there would stay mid-bundle after a failed
+branch. `Argv` is its own `Stream` instead, with `Checkpoint = Self`.
 
 ## Lexer, then continuation
 
