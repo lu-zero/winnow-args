@@ -61,6 +61,7 @@ gen *args:
 #   just perf -vp/tmp/x                # any argv; every binary gets the same one
 #   SUITE=mise just perf               # mise's full CLI: bench/mise-argv.txt
 #   PROFILE=release-lto just perf      # one codegen unit and fat LTO: stable sizes
+#   BPAF010=1 just perf                # with the unreleased bpaf 0.10, from git
 [doc("Cold and warm parse cost, in each framework, of an argv or every bench line")]
 perf *argv:
     #!/usr/bin/env bash
@@ -86,6 +87,12 @@ perf *argv:
     RUNS=${RUNS:-31}
 
     cargo build --profile "$PROFILE" -q -p bench 2>/dev/null || cargo build --profile "$PROFILE" -p bench
+    sweeps=("$BIN/$SWEEP")
+    if [ -n "${BPAF010:-}" ]; then
+      cargo build --profile "$PROFILE" -q --manifest-path bench/bpaf010/Cargo.toml --target-dir target
+      FRAMEWORKS+=(bpaf010)
+      sweeps+=("$BIN/$SWEEP-bpaf010")
+    fi
 
     median() {
       sort -n | awk '{ a[NR] = $1 } END { print a[int((NR + 1) / 2)] }'
@@ -139,7 +146,7 @@ perf *argv:
       while read -r name min med; do
         warm_min[$name]=$min
         warm_median[$name]=$med
-      done < <("$BIN/$SWEEP" "${ARGV[@]}")
+      done < <(for sweep in "${sweeps[@]}"; do "$sweep" "${ARGV[@]}"; done)
 
       echo "argv: ${ARGV[*]}"
       echo "profile: $PROFILE; instructions: $counter; cold ns: median of $RUNS processes; warm ns: min / median of 2000 rounds"

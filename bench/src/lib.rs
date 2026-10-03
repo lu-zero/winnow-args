@@ -720,3 +720,24 @@ pub mod usage {
         }
     }
 }
+
+/// Warm wall clock per call of `f`: prints `name min_ns median_ns` over many
+/// short rounds of `iters` calls, the estimator usage's `time-sweep` uses,
+/// because noise from a loaded machine only ever adds time.
+pub fn sweep(name: &str, iters: usize, mut f: impl FnMut()) {
+    const ROUNDS: usize = 2_000;
+    for _ in 0..iters.max(200) {
+        f();
+    }
+    let mut per_call: Vec<f64> = (0..ROUNDS)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            for _ in 0..iters {
+                f();
+            }
+            start.elapsed().as_secs_f64() * 1e9 / iters as f64
+        })
+        .collect();
+    per_call.sort_by(f64::total_cmp);
+    println!("{name} {:.0} {:.0}", per_call[0], per_call[ROUNDS / 2]);
+}

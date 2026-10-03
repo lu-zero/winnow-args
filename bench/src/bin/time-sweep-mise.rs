@@ -2,29 +2,9 @@
 
 use std::ffi::{OsStr, OsString};
 use std::hint::black_box;
-use std::time::Instant;
 
 use clap::Parser as _;
 use winnow_args::Args as _;
-
-const ROUNDS: usize = 2_000;
-
-fn sweep(name: &str, iters: usize, mut f: impl FnMut()) {
-    for _ in 0..iters.max(200) {
-        f();
-    }
-    let mut per_call: Vec<f64> = (0..ROUNDS)
-        .map(|_| {
-            let start = Instant::now();
-            for _ in 0..iters {
-                f();
-            }
-            start.elapsed().as_secs_f64() * 1e9 / iters as f64
-        })
-        .collect();
-    per_call.sort_by(f64::total_cmp);
-    println!("{name} {:.0} {:.0}", per_call[0], per_call[ROUNDS / 2]);
-}
 
 fn main() {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
@@ -38,16 +18,16 @@ fn main() {
         .chain(args.iter().cloned())
         .collect();
 
-    sweep("usage", 2_000, || {
+    bench::sweep("usage", 2_000, || {
         black_box(shadow_mise::Cli::parse_from(black_box(&refs))).ok();
     });
-    sweep("wa", 2_000, || {
+    bench::sweep("wa", 2_000, || {
         black_box(shadow_mise_wa::Cli::parse_from(black_box(&words))).ok();
     });
-    sweep("clap", 20, || {
+    bench::sweep("clap", 20, || {
         black_box(shadow_mise_clap::Cli::try_parse_from(black_box(&clap_argv))).ok();
     });
-    sweep("bpaf", 20, || {
+    bench::sweep("bpaf", 20, || {
         black_box(shadow_mise_bpaf::cli_p().run_inner(black_box(&strs[..]))).ok();
     });
 }
