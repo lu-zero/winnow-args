@@ -5,7 +5,7 @@ members = [
     "winnow-args-derive",
     "bench",
     "bench/shadows/mise",
-    "bench/shadows/mise-bpaf010",
+    "bench/shadows/mise-bpaf",
     "bench/shadows/mise-clap",
     "bench/shadows/mise-wa",
     "xtask",
@@ -23,8 +23,7 @@ repository = "https://github.com/lu-zero/winnow-args"
 
 [workspace.dependencies]
 winnow = { version = "1.0.4", default-features = false, features = ["std", "parser"] }
-# bpaf 0.10 is not on crates.io: the bench compares against this commit.
-bpaf = { git = "https://github.com/pacak/bpaf", rev = "844357fec9921634049ee8cf3f67ae7803d28e6f", features = ["derive"] }
+bpaf = { version = "0.9", features = ["derive"] }
 winnow-args = { path = "winnow-args", version = "0.1.0", default-features = false, features = ["derive"] }
 winnow-args-derive = { path = "winnow-args-derive", version = "=0.1.0" }
 proc-macro2 = "1"

@@ -11,10 +11,9 @@ what it costs is in [PERF.md](./PERF.md).
   instructions), because a CLI parses once and construction counts.
 - **clap** builds its command tree at runtime on every start, so the tree is
   most of its cost.
-- **bpaf 0.10** has the nicest composition vocabulary
-  (`short('p').long("path").argument("PATH")`), but runs every parser as a
-  cooperative task (`Future`s, `Rc`, `BTreeMap`) rebuilt on each run: on this
-  bench, the slowest of the four.
+- **bpaf** has the nicest composition vocabulary
+  (`short('p').long("path").argument("PATH")`), but builds its tree of parsers
+  at runtime on each run, as clap does.
 
 The goal: bpaf's composition shape, winnow's combinators, usage's cost.
 

@@ -41,7 +41,7 @@ fn the_benchmark_line_binds_the_same_fields() {
     };
     assert_eq!((u.global, u.tool_version), expect);
 
-    let Some(shadow_mise_bpaf010::Commands::Use(u)) = shadow_mise_bpaf010::cli_p()
+    let Some(shadow_mise_bpaf::Commands::Use(u)) = shadow_mise_bpaf::cli_p()
         .run_inner(&strs[..])
         .unwrap()
         .command

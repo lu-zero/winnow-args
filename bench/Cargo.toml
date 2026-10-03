@@ -18,7 +18,6 @@ terminal-size = ["winnow-args/terminal-size"]
 [dependencies]
 winnow.workspace = true
 winnow-args.workspace = true
-# bpaf 0.10 is not on crates.io: a pinned git commit (see the workspace manifest).
 bpaf.workspace = true
 clap = { version = "4", features = ["derive", "env"] }
 # The reference: usage's compiled, zero-allocation parser, as its mise shadow uses it.
@@ -29,5 +28,5 @@ usage-derive = "6.11"
 # `cargo run -p xtask -- gen mise-shadow`).
 shadow-mise = { path = "shadows/mise" }
 shadow-mise-clap = { path = "shadows/mise-clap" }
-shadow-mise-bpaf010 = { path = "shadows/mise-bpaf010" }
+shadow-mise-bpaf = { path = "shadows/mise-bpaf" }
 shadow-mise-wa = { path = "shadows/mise-wa" }

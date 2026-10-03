@@ -5,29 +5,25 @@
 set positional-arguments
 
 # Build, lint, document and test every feature configuration, warning-free.
-# Warnings from sibling checkouts (a local `[patch]` in .cargo/config.toml)
-# are counted apart: they are not ours to fix.
 [doc("Every feature set and profile: build, clippy, docs, tests")]
 check:
     #!/usr/bin/env bash
     set -uo pipefail
 
     status=0
-    sibling='\.\./|/(usage|bpaf|clap|winnow)/'
     run() {
-      local out ours theirs failed=""
+      local out warnings failed=""
       out=$("$@" 2>&1)
       local code=$?
       # A diagnostic's location is its first `-->` line.
-      ours=$(printf '%s\n' "$out" | grep -E '^ *--> ' | grep -vcE "$sibling")
-      theirs=$(printf '%s\n' "$out" | grep -E '^ *--> ' | grep -cE "$sibling")
-      if [ "$code" -ne 0 ] || [ "$ours" -ne 0 ]; then
+      warnings=$(printf '%s\n' "$out" | grep -cE '^ *--> ')
+      if [ "$code" -ne 0 ] || [ "$warnings" -ne 0 ]; then
         failed=" FAILED"
         status=1
       fi
-      printf '%-88s ours %s, siblings %s%s\n' "$*" "$ours" "$theirs" "$failed"
+      printf '%-98s %s diagnostics%s\n' "$*" "$warnings" "$failed"
       if [ -n "$failed" ]; then
-        printf '%s\n' "$out" | grep -E '^(warning|error)|^ *--> |FAILED|panicked' | grep -vE "$sibling" | head -20
+        printf '%s\n' "$out" | grep -E '^(warning|error)|^ *--> |FAILED|panicked' | head -20
       fi
     }
 

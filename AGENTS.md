@@ -61,7 +61,7 @@ and clap; `bench/argv.txt` and `bench/mise-argv.txt` are the lines),
   `help`, `color`, `complete`, `response` and `env`.
 - `winnow-args-derive` — `#[derive(Args)]`, generating one `match` loop over
   `token::arg`. What only generated code calls is under `winnow_args::__private`.
-- `bench` — the same CLI in usage, winnow-args, bpaf 0.10 and clap (unpublished).
+- `bench` — the same CLI in usage, winnow-args, bpaf and clap (unpublished).
 - `xtask` — the generators (unpublished): mold's parser from its own, the two
   examples from the brush and mold ports, our mise shadow from usage's. They
   edit text, so what they carry over stays verbatim; scripts are for running
@@ -79,22 +79,20 @@ Sibling checkouts are read for behaviour and API, never copied from (the one
 exception is usage's generated mise shadows, vendored in `bench/shadows/` with
 usage's license):
 
-- `../winnow` — the winnow version we build on; read it rather than relying on
-  memory of older winnow APIs.
+- `../winnow` — read it rather than relying on memory of older winnow APIs;
+  we build on the release.
 - `../usage` — argv grammar, conformance corpus, benchmark methodology.
-- `../bpaf` — bpaf 0.10 (unpublished), ergonomics reference and bench target.
+- `../bpaf` — ergonomics reference; the bench uses the released 0.9.
 - `../clap` — clap reference.
 
 ## Dependencies
 
 Crates.io deps take a semver requirement (`version = "1"`), never an exact
-pin. The tree builds from a fresh clone: `bench` takes usage-argv and
-usage-derive from crates.io, bpaf 0.10 (unpublished) as a git dependency
-pinned to a commit in the workspace manifest, and usage's mise shadows from
-`bench/shadows/`. Nothing published may depend on a git or path-only crate.
-
-Local checkouts of published crates (e.g. `../winnow`) go in gitignored
-`.cargo/config.toml` as `[patch.crates-io]`, not as `path =` in a manifest.
+pin. The tree builds from a fresh clone, on releases only: every dependency
+comes from crates.io, the bench's too (usage-argv, usage-derive, bpaf, clap),
+and usage's mise shadows are vendored in `bench/shadows/`. No git or path
+dependency, and no `[patch]` to a sibling checkout: what is built, tested and
+measured is what a user gets.
 
 ## Coding Style
 
