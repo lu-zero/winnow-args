@@ -4,13 +4,17 @@
 //! `#[arg(...)]` under another name, for a type whose other derives (clap's)
 //! claim `arg`.
 //!
-//! The generated `parse_argv` is one loop: lex an item with `arg`, `match` it
-//! against every flag the struct declares, store into a local per field, and
-//! build the struct once the line is exhausted. Long names are matched as byte
-//! string patterns and shorts as `char` patterns, so the lookup is whatever
-//! rustc makes of a `match`, not a walk over a list of parsers. Words fill the
-//! positional fields in declaration order, tracked by one counter, unless the
-//! first one names a subcommand: then the subcommand parses the rest.
+//! What `#[derive(Args)]` generates is one loop:
+//!
+//! 1. read the next item of the command line (a flag, a word, `--`);
+//! 2. `match` its name against the struct's flags, and store the value in a
+//!    local variable for that field;
+//! 3. give a plain word to the next positional field, in declaration order,
+//!    unless it names a subcommand, which then parses the rest;
+//! 4. when the words run out, apply defaults, check the rules, build the struct.
+//!
+//! The names are patterns of a `match`, which rustc compiles: no list of
+//! parsers is walked, whatever the number of flags.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};

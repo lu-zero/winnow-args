@@ -1,17 +1,6 @@
-//! Command line argument parsing built from [winnow] parsers.
+//! Command line argument parsing built on [winnow].
 //!
-//! The command line is read as a slice of [`BStr`] words
-//! through [`Argv`], a winnow [`Stream`](winnow::stream::Stream). Everything
-//! else is a winnow parser over it, in three layers:
-//!
-//! - [`token`]: the lexer. [`token::arg`] reads one item (long flag, short
-//!   letter, word, `--`); [`token::Arg`]'s methods finish a flag once its
-//!   caller knows whether it takes a value. Matched in a `dispatch!`, the
-//!   flags' names become a compiled `match`.
-//! - [`combinator`]: bpaf-style named items — `short('p').long("path").argument()` —
-//!   that compose with `alt`, `map` and friends.
-//! - [`Args`] and its derive: a struct parsed by one generated loop that
-//!   `match`es each lexed item against the struct's flags.
+//! Describe the command line as a struct, and the derive writes its parser:
 //!
 // The example needs the `derive` feature.
 #![cfg_attr(feature = "derive", doc = "```")]
@@ -35,6 +24,39 @@
 //! assert_eq!(cli.path, Some(PathBuf::from("/tmp")));
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
+//!
+//! # How a command line is parsed
+//!
+//! 1. **Words.** The command line is the list of words the shell made
+//!    (`-v`, `--path=/tmp`, `a.txt`). [`Argv`] walks them in place: no word is
+//!    copied, and a word need not be UTF-8.
+//! 2. **Items.** The lexer, [`token::arg`], reads the next item: a long flag
+//!    (`--path`, with its `=value` if attached), one short flag (each letter of
+//!    `-vq` in turn), a plain word, or the `--` separator.
+//! 3. **Meaning.** The parser, which knows the program's flags, says what the
+//!    item is: `-v` sets a switch; `--path` takes a value, attached or the next
+//!    word; a plain word is a positional or names a subcommand. An item it
+//!    does not know is an error.
+//! 4. **Result.** When the words run out, defaults and environment variables
+//!    fill what was not given, the rules are checked (required, conflicts),
+//!    and the struct is built.
+//!
+//! # Two ways to write the parser
+//!
+//! Steps 1, 2 and 4 are the same for everyone. Step 3 can be written by the
+//! derive or by hand.
+//!
+//! **The derive** is what most programs want. Each field is a flag or a
+//! positional; its type says how many values it holds and its attributes how
+//! it is spelled. `#[derive(Args)]` turns that into one loop over the items
+//! with a `match` on their names, so finding a flag costs the same however
+//! many the program has.
+//!
+//! **The [combinators](combinator)** are for parsers built without a macro.
+//! `short('p').long("path")` names a flag and `.argument()` or `.switch()`
+//! makes it a winnow parser for one occurrence, to combine with winnow's own
+//! `alt`, `map` and `repeat`. Flags are tried in turn, so it is slower than
+//! the derive; both use the same lexer, values and errors.
 //!
 //! # Entry points
 //!

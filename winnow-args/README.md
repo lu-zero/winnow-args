@@ -1,9 +1,9 @@
 # winnow-args
 
-Command line parsing built from [winnow](https://github.com/winnow-rs/winnow)
-parsers. The command line is a slice of byte-string words, so nothing is
-copied or joined and a non-UTF-8 argument is no special case; a derived parser
-is one loop with a `match` on each flag's name.
+Command line parsing built on [winnow](https://github.com/winnow-rs/winnow).
+Describe the command line as a struct and the derive writes its parser: one
+loop that reads each word where it is and looks flags up in a `match`. Nothing
+is copied, and an argument that is not UTF-8 is no special case.
 
 ```
 cargo add winnow-args
