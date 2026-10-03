@@ -3,7 +3,10 @@
 One entry per feature. Each adds the feature to all five bench CLIs, re-runs
 every line in `benchmarks/argv.txt`, and keeps the earlier lines so the cost of
 merely *carrying* a feature shows up next to the cost of *using* it.
-`benchmarks/tests/agree.rs` checks every framework parses every line to the same fields.
+`benchmarks/tests/agree.rs` checks the frameworks parse each line to the same
+fields. bpaf is skipped on a line it cannot represent; [`benchmarks/README.md`](../benchmarks/README.md)
+says which. An entry below describes the tree at that step: a "not yet" there
+is not [`CHECKLIST.md`](./CHECKLIST.md).
 
 Method (`just perf`, aarch64 host):
 
@@ -1057,7 +1060,8 @@ few hundred bytes; the unused impls are not linked.
 
 Not yet: `T`'s names in the parent's duplicate check (the parent's own arms
 win), rules naming `T`'s flags, and a flattened struct with positionals,
-a subcommand, keywords or `global` flags.
+a subcommand, keywords or `global` flags. The duplicate check is a compile
+error as of step 49. A flattened struct is still flags-only.
 
 ## 46. A positional `Vec` sized once
 

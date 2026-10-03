@@ -34,24 +34,11 @@ cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 ## Performance
 
 Parse time comes first here: a feature costs nothing to a program that does
-not use it, and each one was measured as it was added. One cold parse, in
-instructions, and the warm time of one, on an aarch64 server:
-
-| | `example -v --path /tmp/x a b c` | `mise use -g node@20` (211 commands) |
-|---|---:|---:|
-| winnow-args | 2 939, 196 ns | 4 012, 328 ns |
-| usage | 5 683, 503 ns | 7 720, 782 ns |
-| clap | 136 514, 15.3 µs | 4 943 837, 753 µs |
-| bpaf 0.9 | 142 994, 15.0 µs | 21 966 400, 2.65 ms |
-| bpaf 0.10, pre-release (`844357f`) | 144 538, 17.3 µs | 1 196 466, 166 µs |
-
-The same lines are checked to parse to the same result in all four.
-[`benchmarks/`](./benchmarks/README.md) says how this is measured and how to
-run it; [`docs/PERF.md`](./docs/PERF.md) keeps the history.
-
-In the ports: a brush builtin call costs at most 11 µs over an empty loop
-where clap's takes up to 127, and mold's 2 496-word link line parses in 554
-instructions a word against 3 333 for mold's own parser.
+not use it, and each one was measured as it was added. The numbers, the host,
+and where bpaf is skipped on a line it cannot represent are in
+[`benchmarks/`](./benchmarks/README.md). [`docs/PERF.md`](./docs/PERF.md) is
+the history of each feature. `just bench-shell` and `just bench-ld` measure
+the brush and mold ports.
 
 ## Documents
 
