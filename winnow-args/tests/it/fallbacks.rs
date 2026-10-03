@@ -28,7 +28,7 @@ struct Cli {
 
 fn parse(line: &[&str], env: &[(&str, &str)]) -> Result<Cli, Error> {
     let words = crate::words(line);
-    with_env(env, || Cli::parse_from(&words))
+    with_env(env, || Cli::parse_words(&words))
 }
 
 fn ok(line: &[&str], env: &[(&str, &str)]) -> Cli {
@@ -104,8 +104,8 @@ struct Required {
 
 #[test]
 fn the_environment_satisfies_a_required_flag() {
-    let e = with_env(&[], || Required::parse_from(&[])).unwrap_err();
+    let e = with_env(&[], || Required::parse_words(&[])).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::MissingRequired);
-    let parsed = with_env(&[("WA_TOKEN", "t")], || Required::parse_from(&[])).unwrap();
+    let parsed = with_env(&[("WA_TOKEN", "t")], || Required::parse_words(&[])).unwrap();
     assert_eq!(parsed.token, "t");
 }

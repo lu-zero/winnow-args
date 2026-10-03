@@ -22,7 +22,7 @@ fn main() {
         black_box(shadow_mise::Cli::parse_from(black_box(&refs))).ok();
     });
     bench::sweep("wa", 2_000, || {
-        black_box(shadow_mise_wa::Cli::parse_from(black_box(&words))).ok();
+        black_box(shadow_mise_wa::Cli::parse_words(black_box(&words))).ok();
     });
     bench::sweep("clap", 20, || {
         black_box(shadow_mise_clap::Cli::try_parse_from(black_box(&clap_argv))).ok();

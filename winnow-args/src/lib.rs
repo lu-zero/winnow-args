@@ -19,7 +19,7 @@
 //!     path: Option<PathBuf>,
 //! }
 //!
-//! let cli = Cli::try_parse_from(["-v", "--path=/tmp"])?;
+//! let cli = Cli::parse_from(["-v", "--path=/tmp"])?;
 //! assert!(cli.verbose);
 //! assert_eq!(cli.path, Some(PathBuf::from("/tmp")));
 //! # Ok::<(), winnow_args::Error>(())
@@ -62,12 +62,16 @@
 //!
 //! - [`Args::parse`] in `main`: help, version and errors are printed and the
 //!   process exits (0, or 2 on failure), as [`report`] does.
-//! - [`Args::try_parse_from`] in tests: the words after the program name
-//!   (clap's takes the name first), and an [`Error`] back. Help and version are
-//!   `Err` too ([`ErrorKind::HelpRequested`]), so hand an error to [`report`]
-//!   rather than `?` it out of `main`.
-//! - [`Args::parse_from`] when the words are already [`BStr`]s, as after
+//! - [`Args::parse_from`] in tests: the arguments after the program name, and
+//!   an [`Error`] back. Help and version are `Err` too
+//!   ([`ErrorKind::HelpRequested`]), so hand an error to [`report`] rather than
+//!   `?` it out of `main`.
+//! - [`Args::parse_from_argv`] for a whole command line, program name first.
+//! - [`Args::parse_words`] when the words are already [`BStr`]s, as after
 //!   [`response::expand`].
+//!
+//! The names are usage's: `parse_from` leaves the program name out, where
+//! clap's `try_parse_from` takes it first.
 //! - [`Args::completion_request`] before any of them, for a program with
 //!   [`complete`] scripts.
 //!
@@ -82,7 +86,7 @@
 //! | `conflicts_with = "x"`, `requires = "x"` | `conflicts("--x")`, `requires("--x")` |
 //! | `#[arg(value_enum)]` | nothing: the type derives `ValueEnum` |
 //! | `#[command(flatten)]`, `#[command(subcommand)]` | `#[arg(flatten)]`, `#[arg(subcommand)]` |
-//! | `Parser::try_parse_from(["prog", …])` | `Args::try_parse_from([…])`, no program name |
+//! | `Parser::try_parse_from(["prog", …])` | `Args::parse_from_argv(["prog", …])`, or `parse_from([…])` |
 //!
 //! Unknown flags are errors, a repeated single-value flag keeps the last
 //! value, and long names are never abbreviated.
@@ -152,7 +156,7 @@ pub use winnow::stream::BStr;
 ///     dest: Option<String>,
 /// }
 ///
-/// let cp = Cp::try_parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
+/// let cp = Cp::parse_from(["-vvf", "--preserve=mode,links", "a", "--no-force", "b"])?;
 /// assert_eq!((cp.verbose, cp.force, cp.jobs), (2, false, 1));
 /// assert_eq!(cp.preserve, ["mode", "links"]);
 /// assert_eq!((cp.source.as_str(), cp.dest.as_deref()), ("a", Some("b")));
@@ -202,10 +206,10 @@ pub use winnow_args_derive::Args;
 ///     command: Command,
 /// }
 ///
-/// let git = Git::try_parse_from(["add", "-q", "a", "b"])?;
+/// let git = Git::parse_from(["add", "-q", "a", "b"])?;
 /// assert!(git.quiet);
 /// assert_eq!(git.command, Command::Add(Add { paths: vec!["a".into(), "b".into()] }));
-/// assert_eq!(Git::try_parse_from(["st"])?.command, Command::Status);
+/// assert_eq!(Git::parse_from(["st"])?.command, Command::Status);
 ///
 /// match git.command {
 ///     Command::Add(Add { paths }) => println!("staging {paths:?}"),
@@ -242,7 +246,7 @@ pub use winnow_args_derive::Subcommand;
 ///     items: Vec<Item>,
 /// }
 ///
-/// let ld = Ld::try_parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
+/// let ld = Ld::parse_from(["a.o", "--as-needed", "-lm", "-o", "out", "b.o"])?;
 /// assert_eq!(ld.output.as_deref(), Some("out"));
 /// assert_eq!(
 ///     ld.items,
@@ -279,9 +283,9 @@ pub use winnow_args_derive::Occurrence;
 ///     color: Option<Color>,
 /// }
 ///
-/// assert_eq!(Cli::try_parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
-/// assert_eq!(Cli::try_parse_from(["--color", "no"])?.color, Some(Color::Never));
-/// let error = Cli::try_parse_from(["--color=red"]).unwrap_err();
+/// assert_eq!(Cli::parse_from(["--color=auto"])?.color, Some(Color::WhenTerminal));
+/// assert_eq!(Cli::parse_from(["--color", "no"])?.color, Some(Color::Never));
+/// let error = Cli::parse_from(["--color=red"]).unwrap_err();
 /// assert_eq!(error.kind(), ErrorKind::InvalidChoice);
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
@@ -335,14 +339,25 @@ pub trait Args: Sized {
         complete::script(Self::HELP.name, shell)
     }
 
-    /// Parse `words`, which should not include the program name. Use
-    /// [`Args::try_parse_from`] unless the words are already [`BStr`]s.
-    fn parse_from(words: &[&BStr]) -> Result<Self, Error> {
+    /// Parse `words`, the arguments after the program name, already borrowed
+    /// as [`BStr`]s: what [`response::expand`] and [`words`] give. Nothing is
+    /// copied.
+    fn parse_words(words: &[&BStr]) -> Result<Self, Error> {
         Self::parse_argv(&mut Argv::new(words))
     }
 
-    /// Parse `args`, which should not include the program name (clap's
-    /// takes it first).
+    /// Parse `argv`, the whole command line, program name first, as clap's
+    /// `try_parse_from` takes it. The name is skipped.
+    fn parse_from_argv<I, S>(argv: I) -> Result<Self, Error>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        Self::parse_from(argv.into_iter().skip(1))
+    }
+
+    /// Parse `args`, the arguments after the program name, as usage's
+    /// `parse_from` takes them.
     ///
     /// ```
     /// # #[cfg(feature = "derive")] {
@@ -354,18 +369,19 @@ pub trait Args: Sized {
     ///     verbose: bool,
     /// }
     ///
-    /// assert!(Cli::try_parse_from(["-v"]).unwrap().verbose);
-    /// let error = Cli::try_parse_from(["--loud"]).err().unwrap();
+    /// assert!(Cli::parse_from(["-v"]).unwrap().verbose);
+    /// assert!(Cli::parse_from_argv(["prog", "-v"]).unwrap().verbose);
+    /// let error = Cli::parse_from(["--loud"]).err().unwrap();
     /// assert_eq!(error.kind(), ErrorKind::UnknownFlag);
     /// # }
     /// ```
-    fn try_parse_from<I, S>(args: I) -> Result<Self, Error>
+    fn parse_from<I, S>(args: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
     {
         let args: Vec<S> = args.into_iter().collect();
-        Self::parse_from(&words(&args))
+        Self::parse_words(&words(&args))
     }
 
     /// Parse the process's arguments; on help, version or a failure, print
@@ -384,7 +400,7 @@ pub trait Args: Sized {
             program.to_owned()
         };
         let args: Vec<_> = args.collect();
-        match Self::parse_from(&words(&args)) {
+        match Self::parse_words(&words(&args)) {
             Ok(parsed) => parsed,
             Err(error) => std::process::exit(report(&error, &program)),
         }
@@ -736,7 +752,7 @@ pub mod __private {
             .map(|v| [b"--".as_slice(), v].concat())
             .collect();
         let words: Vec<&BStr> = spelled.iter().map(|w| BStr::new(w.as_slice())).collect();
-        T::parse_from(&words).map_err(|e| {
+        T::parse_words(&words).map_err(|e| {
             let keyword = e.token().map_or_else(String::new, |t| {
                 t.strip_prefix("--").unwrap_or(t).to_owned()
             });

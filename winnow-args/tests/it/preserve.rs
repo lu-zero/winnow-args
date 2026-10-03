@@ -43,7 +43,7 @@ fn combinator(input: &mut Argv<'_>) -> Result<Wrap, Error> {
 fn parse(line: &[&str]) -> Wrap {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words)).unwrap();
-    let b = Wrap::parse_from(&words).unwrap();
+    let b = Wrap::parse_words(&words).unwrap();
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     b
 }
@@ -90,7 +90,7 @@ struct Echo {
 fn preserve_with_stop_flags_is_bash_echo() {
     let echo = |line: &[&str]| {
         let words = crate::words(line);
-        Echo::parse_from(&words).unwrap()
+        Echo::parse_words(&words).unwrap()
     };
     let e = echo(&["--", "-n"]);
     assert_eq!((e.n, e.args), (false, strings(&["--", "-n"])));

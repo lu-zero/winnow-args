@@ -102,7 +102,7 @@ struct LsArgs {
 
 fn main() {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let cli = match Cli::parse_from(&words(&args)) {
+    let cli = match Cli::parse_words(&words(&args)) {
         Ok(cli) => cli,
         // `-h`, `--help`, `help …` and `-V` end up here too.
         Err(e) => std::process::exit(report_with(&e, "tool", &THEME)),

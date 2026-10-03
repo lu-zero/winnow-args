@@ -57,7 +57,7 @@ impl From<Derived> for Cli {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Derived::parse_from(&words).map(Cli::from);
+    let b = Derived::parse_words(&words).map(Cli::from);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }

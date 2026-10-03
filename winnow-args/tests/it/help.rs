@@ -79,7 +79,7 @@ struct UseArgs {
 }
 
 fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
-    T::try_parse_from(line)
+    T::parse_from(line)
 }
 
 /// Help at the default width: `COLUMNS` unset whatever the test runner has.

@@ -21,7 +21,7 @@ struct Cli {
 }
 
 fn parse(line: &[&str]) -> Result<Cli, Error> {
-    Cli::try_parse_from(line)
+    Cli::parse_from(line)
 }
 
 #[test]

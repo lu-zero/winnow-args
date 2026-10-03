@@ -28,7 +28,7 @@
 //! ```
 //!
 //! A program expands its arguments, then parses the words with
-//! [`Args::parse_from`](crate::Args::parse_from) where it would call `parse()`;
+//! [`Args::parse_words`](crate::Args::parse_words) where it would call `parse()`;
 //! nothing turns `@file` on but that call. `examples/ld.rs` does it.
 
 use std::ffi::OsStr;

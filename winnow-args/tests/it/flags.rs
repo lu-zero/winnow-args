@@ -82,7 +82,7 @@ impl From<Derived> for Cli {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Derived::parse_from(&words).map(Cli::from);
+    let b = Derived::parse_words(&words).map(Cli::from);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -244,12 +244,12 @@ fn non_utf8_values_survive() {
     use std::os::unix::ffi::OsStrExt as _;
 
     let raw = OsStr::from_bytes(b"/tmp/\xff");
-    let cli = Derived::parse_from(&words(&[OsStr::new("-j1"), OsStr::new("-p"), raw])).unwrap();
+    let cli = Derived::parse_words(&words(&[OsStr::new("-j1"), OsStr::new("-p"), raw])).unwrap();
     assert_eq!(cli.path.as_deref().map(|p| p.as_os_str()), Some(raw));
 
     // Flags still match when a value is not UTF-8; only converting it to text fails.
     let e =
-        Derived::parse_from(&words(&[OsStr::new("-j1"), OsStr::new("--set"), raw])).unwrap_err();
+        Derived::parse_words(&words(&[OsStr::new("-j1"), OsStr::new("--set"), raw])).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::InvalidValue);
 }
 

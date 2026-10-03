@@ -37,7 +37,7 @@ pub(crate) fn parse(raw_cmdline: &[Cow<'_, OsStr>]) -> Vec<Item> {
         .skip(1)
         .map(|word| winnow_args::BStr::new(word.as_encoded_bytes()))
         .collect();
-    match Cli::parse_from(&words) {
+    match Cli::parse_words(&words) {
         Ok(cli) => cli.opts,
         Err(error) => {
             let token = error.token().unwrap_or_default();

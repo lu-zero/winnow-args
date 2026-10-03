@@ -48,7 +48,7 @@ struct InstallArgs {
 }
 
 fn parse(line: &[&str]) -> Result<Root, Error> {
-    Root::try_parse_from(line)
+    Root::parse_from(line)
 }
 
 fn ok(line: &[&str]) -> Root {

@@ -48,7 +48,7 @@ fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
 fn ok(line: &[&str]) -> Cli {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words)).unwrap();
-    let b = with_env(&[], || Cli::parse_from(&words)).unwrap();
+    let b = with_env(&[], || Cli::parse_words(&words)).unwrap();
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -103,7 +103,7 @@ struct Run {
 }
 
 fn run(line: &[&str]) -> Run {
-    Run::try_parse_from(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
+    Run::parse_from(line).unwrap_or_else(|e| panic!("{line:?}: {e}"))
 }
 
 #[test]

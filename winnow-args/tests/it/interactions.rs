@@ -3,7 +3,7 @@
 use winnow_args::{Args, Error, ErrorKind, Occurrence, Subcommand};
 
 fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
-    T::try_parse_from(line)
+    T::parse_from(line)
 }
 
 fn kind<T: Args + std::fmt::Debug>(line: &[&str]) -> ErrorKind {

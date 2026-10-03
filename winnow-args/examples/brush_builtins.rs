@@ -617,11 +617,11 @@ fn main() {
     {
         let words = winnow_args::words(&args);
         for _ in 0..n {
-            let _ = std::hint::black_box(Cli::parse_from(std::hint::black_box(&words)));
+            let _ = std::hint::black_box(Cli::parse_words(std::hint::black_box(&words)));
         }
         return;
     }
-    match Cli::try_parse_from(&args) {
+    match Cli::parse_from(&args) {
         Ok(cli) => println!("{:#?}", cli.builtin),
         Err(error) => std::process::exit(winnow_args::report(&error, "brush_builtins")),
     }

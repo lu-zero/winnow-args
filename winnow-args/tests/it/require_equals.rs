@@ -33,7 +33,7 @@ fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Cli::parse_from(&words);
+    let b = Cli::parse_words(&words);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     b
 }

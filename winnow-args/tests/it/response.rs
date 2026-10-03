@@ -117,7 +117,7 @@ fn parses_the_expanded_line() {
     let args = [at(&file), "y.o".to_owned()];
     let mut files = ResponseFiles::default();
     let words = expand(&args, &mut files).unwrap();
-    let ld = Ld::parse_from(&words).unwrap();
+    let ld = Ld::parse_words(&words).unwrap();
     assert!(ld.shared);
     assert_eq!(ld.output.as_deref(), Some("a b.so"));
     assert_eq!(ld.inputs, ["x.o", "y.o"]);

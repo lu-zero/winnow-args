@@ -28,7 +28,7 @@ struct Set {
 }
 
 fn parse(line: &[&str]) -> Result<Set, Error> {
-    Set::try_parse_from(line)
+    Set::parse_from(line)
 }
 
 fn ok(line: &[&str]) -> Set {
@@ -97,6 +97,6 @@ struct Plain {
 #[test]
 fn plus_words_are_words_elsewhere() {
     let words = [BStr::new("+e")];
-    let p = Plain::parse_from(&words).unwrap();
+    let p = Plain::parse_words(&words).unwrap();
     assert_eq!((p.e, p.rest), (false, strings(&["+e"])));
 }

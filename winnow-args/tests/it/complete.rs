@@ -242,7 +242,7 @@ fn a_shell_is_a_flag_value() {
         #[arg(long)]
         completions: Option<Shell>,
     }
-    let shell = |line: &[&str]| Cli::try_parse_from(line).map(|c| c.completions);
+    let shell = |line: &[&str]| Cli::parse_from(line).map(|c| c.completions);
     assert_eq!(shell(&["--completions", "zsh"]).unwrap(), Some(Shell::Zsh));
     let e = shell(&["--completions", "tcsh"]).unwrap_err();
     assert_eq!(e.kind(), winnow_args::ErrorKind::InvalidChoice);

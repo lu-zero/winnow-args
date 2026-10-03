@@ -87,7 +87,7 @@ fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Cli::parse_from(&words);
+    let b = Cli::parse_words(&words);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -145,19 +145,22 @@ struct Required {
 
 #[test]
 fn required_subcommand_and_enum_as_the_whole_line() {
-    let e = Required::parse_from(&[]).unwrap_err();
+    let e = Required::parse_words(&[]).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::MissingSubcommand);
     let words = [BStr::new("ls")];
-    assert_eq!(Required::parse_from(&words).unwrap().command, Command::List);
-
-    assert_eq!(Command::parse_from(&words).unwrap(), Command::List);
     assert_eq!(
-        Command::parse_from(&[]).unwrap_err().kind(),
+        Required::parse_words(&words).unwrap().command,
+        Command::List
+    );
+
+    assert_eq!(Command::parse_words(&words).unwrap(), Command::List);
+    assert_eq!(
+        Command::parse_words(&[]).unwrap_err().kind(),
         ErrorKind::MissingSubcommand
     );
     let words = [BStr::new("-x")];
     assert_eq!(
-        Command::parse_from(&words).unwrap_err().kind(),
+        Command::parse_words(&words).unwrap_err().kind(),
         ErrorKind::UnknownFlag
     );
 }
@@ -188,7 +191,7 @@ fn subcommands_nest() {
         .map(BStr::new)
         .collect();
     assert_eq!(
-        Outer::parse_from(&words).unwrap().command,
+        Outer::parse_words(&words).unwrap().command,
         Some(OuterCommand::Tool(ToolArgs {
             quiet: true,
             command: Command::Use(UseArgs {
@@ -199,7 +202,7 @@ fn subcommands_nest() {
     );
     let words = [BStr::new("tool")];
     assert_eq!(
-        Outer::parse_from(&words).unwrap_err().kind(),
+        Outer::parse_words(&words).unwrap_err().kind(),
         ErrorKind::MissingSubcommand
     );
 }

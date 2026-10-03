@@ -27,7 +27,7 @@ fn main() {
         black_box(bench::usage::Cli::parse_from(black_box(&refs))).ok();
     });
     bench::sweep("wa", 2_000, || {
-        black_box(bench::wa_derive::Cli::parse_from(black_box(&words))).ok();
+        black_box(bench::wa_derive::Cli::parse_words(black_box(&words))).ok();
     });
     bench::sweep("wa-comb", 2_000, || {
         black_box(bench::wa_comb::cli.parse_next(&mut Argv::new(black_box(&words)))).ok();

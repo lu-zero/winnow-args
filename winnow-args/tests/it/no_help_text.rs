@@ -33,7 +33,7 @@ enum Command {
 }
 
 fn help() -> String {
-    let e = Cli::parse_from(&[BStr::new("-h")]).unwrap_err();
+    let e = Cli::parse_words(&[BStr::new("-h")]).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::HelpRequested);
     with_env(&[], || e.render_help("mise").unwrap())
 }
@@ -60,6 +60,6 @@ Options:
 
 #[test]
 fn the_version_stays() {
-    let e = Cli::parse_from(&[BStr::new("-V")]).unwrap_err();
+    let e = Cli::parse_words(&[BStr::new("-V")]).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::VersionRequested);
 }
