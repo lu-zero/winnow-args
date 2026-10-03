@@ -78,7 +78,7 @@ fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Cli::parse_from(&words);
+    let b = Cli::parse_words(&words);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -136,7 +136,7 @@ fn a_repeated_long_adds_a_spelling() {
     for line in [&["--path", "x"][..], &["--file=x"], &["-px"]] {
         let words = crate::words(line);
         assert_eq!(
-            TwoLongs::parse_from(&words).unwrap().path.as_deref(),
+            TwoLongs::parse_words(&words).unwrap().path.as_deref(),
             Some("x"),
             "{line:?}"
         );
@@ -157,7 +157,7 @@ struct Kill {
 fn short_aliases_are_letters_too() {
     let parse = |line: &[&str]| {
         let words = crate::words(line);
-        Kill::parse_from(&words).unwrap()
+        Kill::parse_words(&words).unwrap()
     };
     assert!(parse(&["-l"]).list);
     assert!(parse(&["-L"]).list);

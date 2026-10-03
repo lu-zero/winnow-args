@@ -27,7 +27,7 @@ fn the_benchmark_line_binds_the_same_fields() {
 
     let words = winnow_args::words(&args);
     let Some(shadow_mise_wa::Commands::Use(u)) =
-        shadow_mise_wa::Cli::parse_from(&words).unwrap().command
+        shadow_mise_wa::Cli::parse_words(&words).unwrap().command
     else {
         panic!("winnow-args did not reach `use`")
     };
@@ -89,7 +89,7 @@ fn usage_and_winnow_args_accept_the_same_lines() {
         let refs: Vec<&OsStr> = args.iter().map(|a| a.as_os_str()).collect();
         let usage = shadow_mise::Cli::parse_from(&refs).is_ok();
         let wa = winnow_args::with_env(&[], || {
-            shadow_mise_wa::Cli::parse_from(&winnow_args::words(&args))
+            shadow_mise_wa::Cli::parse_words(&winnow_args::words(&args))
         });
         assert_eq!(
             wa.is_ok(),

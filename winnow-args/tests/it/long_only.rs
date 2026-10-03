@@ -42,7 +42,7 @@ struct Ld {
 }
 
 fn parse(line: &[&str]) -> Result<Ld, Error> {
-    Ld::try_parse_from(line)
+    Ld::parse_from(line)
 }
 
 fn ok(line: &[&str]) -> Ld {
@@ -106,7 +106,7 @@ struct Plain {
 fn the_default_grammar_is_unchanged() {
     let words = [BStr::new("-entry=main")];
     assert_eq!(
-        Plain::parse_from(&words).unwrap().entry.as_deref(),
+        Plain::parse_words(&words).unwrap().entry.as_deref(),
         Some("ntry=main")
     );
 }

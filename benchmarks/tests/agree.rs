@@ -84,7 +84,7 @@ fn frameworks_agree_on_every_benchmarked_line() {
         let all = [
             (
                 "wa",
-                bench::wa_derive::Cli::parse_from(&words)
+                bench::wa_derive::Cli::parse_words(&words)
                     .map(|c| fields!(c, bench::wa_derive::Commands::Use)),
             ),
             (

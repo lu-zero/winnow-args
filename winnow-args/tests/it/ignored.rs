@@ -44,7 +44,7 @@ const IGNORED_FLAGS: &[&str] = &["fix-cortex-a53-835769", "discard-all", "x"];
 
 fn parse(line: &str) -> Result<Ld, Error> {
     let words: Vec<&BStr> = line.split_whitespace().map(BStr::new).collect();
-    Ld::parse_from(&words)
+    Ld::parse_words(&words)
 }
 
 #[test]
@@ -140,7 +140,7 @@ struct Lto {
 
 fn lto(line: &str) -> Lto {
     let words: Vec<&BStr> = line.split_whitespace().map(BStr::new).collect();
-    Lto::parse_from(&words).unwrap()
+    Lto::parse_words(&words).unwrap()
 }
 
 #[test]

@@ -51,7 +51,7 @@ fn main() {
         Ok(parsed) => println!("combinator: {parsed:?}"),
         Err(e) => eprintln!("combinator: error: {e}"),
     }
-    match Derived::parse_from(&words) {
+    match Derived::parse_words(&words) {
         Ok(parsed) => println!("derive:     {parsed:?}"),
         // Help (`-h`) included, wrapped to `COLUMNS` or, with the
         // `terminal-size` feature, to the terminal.

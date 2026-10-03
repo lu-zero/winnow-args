@@ -31,7 +31,7 @@ fn main() {
 }
 ```
 
-Tests call `Cli::try_parse_from(["-v", "a"])`, without the program name. The
+Tests call `Cli::parse_from(["-v", "a"])`, without the program name. The
 crate docs list the entry points and map clap's attributes to these; each
 derive's page lists every attribute it takes.
 

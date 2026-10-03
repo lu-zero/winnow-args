@@ -30,7 +30,7 @@ enum Command {
 
 fn parse(line: &[&str], env: &[(&str, &str)]) -> Result<Cli, Error> {
     let words = crate::words(line);
-    with_env(env, || Cli::parse_from(&words))
+    with_env(env, || Cli::parse_words(&words))
 }
 
 fn ok(line: &[&str]) -> Cli {

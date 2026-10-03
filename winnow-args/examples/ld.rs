@@ -1086,11 +1086,11 @@ fn main() {
         .and_then(|n| n.parse::<usize>().ok())
     {
         for _ in 0..n {
-            let _ = std::hint::black_box(Cli::parse_from(std::hint::black_box(&words)));
+            let _ = std::hint::black_box(Cli::parse_words(std::hint::black_box(&words)));
         }
         return;
     }
-    match Cli::parse_from(&words) {
+    match Cli::parse_words(&words) {
         Ok(cli) => {
             for item in cli.items {
                 let item = match item {

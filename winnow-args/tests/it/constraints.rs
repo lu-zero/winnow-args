@@ -4,7 +4,7 @@ use winnow_args::{Args, Error, ErrorKind, with_env};
 
 fn parse<T: Args>(line: &[&str], env: &[(&str, &str)]) -> Result<T, Error> {
     let words = crate::words(line);
-    with_env(env, || T::parse_from(&words))
+    with_env(env, || T::parse_words(&words))
 }
 
 fn err<T: Args + std::fmt::Debug>(line: &[&str], env: &[(&str, &str)]) -> Error {

@@ -50,7 +50,7 @@ fn words<'a>(line: &'a [&'a str]) -> Vec<&'a BStr> {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Cli::parse_from(&words);
+    let b = Cli::parse_words(&words);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -113,21 +113,21 @@ struct Strings {
 #[test]
 fn string_choices_are_checked_before_conversion() {
     let line = words(&["-s", "zsh", "up"]);
-    let parsed = Strings::parse_from(&line).unwrap();
+    let parsed = Strings::parse_words(&line).unwrap();
     assert_eq!(
         (parsed.shell.as_deref(), parsed.direction.as_deref()),
         (Some("zsh"), Some("up"))
     );
 
     let line = words(&["--shell=tcsh"]);
-    let e = Strings::parse_from(&line).unwrap_err();
+    let e = Strings::parse_words(&line).unwrap_err();
     assert_eq!(
         (e.kind(), e.token(), e.value()),
         (ErrorKind::InvalidChoice, Some("--shell"), Some("tcsh"))
     );
 
     let line = words(&["-s", "bash", "left"]);
-    let e = Strings::parse_from(&line).unwrap_err();
+    let e = Strings::parse_words(&line).unwrap_err();
     assert_eq!(
         (e.kind(), e.token(), e.offset()),
         (ErrorKind::InvalidChoice, Some("DIRECTION"), 8)
@@ -191,7 +191,7 @@ struct Modes {
 
 #[test]
 fn a_hidden_variant_is_accepted_but_never_offered() {
-    let parse = |line: &[&str]| Modes::try_parse_from(line).map(|m| m.mode);
+    let parse = |line: &[&str]| Modes::parse_from(line).map(|m| m.mode);
     assert_eq!(parse(&["--mode=secret"]).unwrap(), Some(Mode::Secret));
     let e = parse(&["--mode=bogus"]).unwrap_err();
     assert!(e.to_string().ends_with("expected one of shown"), "{e}");

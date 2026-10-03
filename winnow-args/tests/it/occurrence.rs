@@ -34,7 +34,7 @@ struct Ld {
 }
 
 fn parse(line: &[&str]) -> Result<Vec<Item>, Error> {
-    Ld::try_parse_from(line).map(|ld| ld.opts)
+    Ld::parse_from(line).map(|ld| ld.opts)
 }
 
 fn spanned(value: &str, offset: usize, attached: bool) -> Spanned<String> {
@@ -114,7 +114,7 @@ fn skip_variants_are_not_spelled() {
     }
     let words: Vec<&BStr> = ["--nope"].iter().map(BStr::new).collect();
     assert_eq!(
-        S::parse_from(&words).unwrap_err().kind(),
+        S::parse_words(&words).unwrap_err().kind(),
         ErrorKind::UnknownFlag
     );
 }
@@ -148,7 +148,7 @@ fn a_bundle_is_an_item_before_its_letters() {
         .map(BStr::new)
         .collect();
     assert_eq!(
-        Grouper::parse_from(&words).unwrap().items,
+        Grouper::parse_words(&words).unwrap().items,
         [
             Grouping::StripAll,
             Grouping::Grouped("-sS".into()),

@@ -24,7 +24,7 @@ struct Ld {
 }
 
 fn parse(line: &[&str]) -> Result<Ld, Error> {
-    Ld::try_parse_from(line)
+    Ld::parse_from(line)
 }
 
 #[test]

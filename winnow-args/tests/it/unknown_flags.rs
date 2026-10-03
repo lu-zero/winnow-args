@@ -55,7 +55,7 @@ struct RunArgs {
 }
 
 fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
-    T::try_parse_from(line)
+    T::parse_from(line)
 }
 
 fn strings(words: &[&str]) -> Vec<String> {
@@ -183,7 +183,7 @@ struct LongOnlyLenient {
 
 #[test]
 fn long_only_lenient() {
-    let parsed = LongOnlyLenient::try_parse_from(["-shared", "-sQ", "-bogus", "x"]).unwrap();
+    let parsed = LongOnlyLenient::parse_from(["-shared", "-sQ", "-bogus", "x"]).unwrap();
     assert!(parsed.shared);
     assert!(!parsed.strip);
     assert_eq!(parsed.args, ["-sQ", "-bogus", "x"]);
@@ -205,7 +205,7 @@ struct Collect {
 
 #[test]
 fn unknown_field_collects_apart_from_positionals() {
-    let parsed = Collect::try_parse_from([
+    let parsed = Collect::parse_from([
         "-v", "--nope", "a", "-j2", "-vx", "--jobs=3", "-Z", "--", "-q",
     ])
     .unwrap();

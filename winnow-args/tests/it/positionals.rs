@@ -76,7 +76,7 @@ impl From<Derived> for Cli {
 fn parse(line: &[&str]) -> Result<Cli, Error> {
     let words = crate::words(line);
     let a = combinator.parse_next(&mut Argv::new(&words));
-    let b = Derived::parse_from(&words).map(Cli::from);
+    let b = Derived::parse_words(&words).map(Cli::from);
     assert_eq!(a, b, "combinator and derive disagree on {line:?}");
     a
 }
@@ -154,17 +154,17 @@ struct One {
 
 #[test]
 fn extra_and_invalid_words() {
-    assert_eq!(One::parse_from(&[BStr::new("7")]).unwrap().n, 7);
+    assert_eq!(One::parse_words(&[BStr::new("7")]).unwrap().n, 7);
 
     let words = [BStr::new("1"), BStr::new("2")];
-    let e = One::parse_from(&words).unwrap_err();
+    let e = One::parse_words(&words).unwrap_err();
     assert_eq!(
         (e.kind(), e.token(), e.offset()),
         (ErrorKind::UnexpectedArg, Some("2"), 2)
     );
 
     let words = [BStr::new("x")];
-    let e = One::parse_from(&words).unwrap_err();
+    let e = One::parse_words(&words).unwrap_err();
     assert_eq!(
         (e.kind(), e.token(), e.value()),
         (ErrorKind::InvalidValue, Some("N"), Some("x"))

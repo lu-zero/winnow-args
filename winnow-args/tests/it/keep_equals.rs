@@ -38,11 +38,11 @@ fn words<'a>(line: &'a [&'a str]) -> Vec<&'a BStr> {
 fn an_attached_equals_is_dropped_by_default_and_kept_on_request() {
     let line = ["-L=foo", "-Lbar", "-L", "=baz"];
     assert_eq!(
-        Plain::parse_from(&words(&line)).unwrap().dirs,
+        Plain::parse_words(&words(&line)).unwrap().dirs,
         ["foo", "bar", "=baz"]
     );
     assert_eq!(
-        Kept::parse_from(&words(&line)).unwrap().dirs,
+        Kept::parse_words(&words(&line)).unwrap().dirs,
         ["=foo", "bar", "=baz"]
     );
 }
@@ -51,7 +51,7 @@ fn an_attached_equals_is_dropped_by_default_and_kept_on_request() {
 fn a_long_option_s_equals_still_separates() {
     let line = ["-L=foo", "--library-path=bar", "-library-path=baz"];
     assert_eq!(
-        Ld::parse_from(&words(&line)).unwrap().items,
+        Ld::parse_words(&words(&line)).unwrap().items,
         [
             Item::Dir("=foo".into()),
             Item::Dir("bar".into()),

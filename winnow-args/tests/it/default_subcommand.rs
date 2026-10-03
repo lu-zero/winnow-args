@@ -4,7 +4,7 @@
 use winnow_args::{Args, Error, ErrorKind, Subcommand};
 
 fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
-    T::try_parse_from(line)
+    T::parse_from(line)
 }
 
 #[derive(Args, Debug, PartialEq)]

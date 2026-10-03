@@ -45,7 +45,7 @@ fn on() -> bool {
 }
 
 fn parse(line: &[&str]) -> Result<Cli, Error> {
-    with_env(&[], || Cli::try_parse_from(line))
+    with_env(&[], || Cli::parse_from(line))
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn a_function_gives_the_default_after_the_command_line_and_the_environment() {
     let cli = parse(&["-j2", "--dir", "x", "--no-cache"]).unwrap();
     assert_eq!((cli.jobs, cli.cache), (2, false));
     assert_eq!(cli.dir, ["x"]);
-    let from_env = with_env(&[("JOBS", "3")], || Cli::try_parse_from::<_, &str>([]));
+    let from_env = with_env(&[("JOBS", "3")], || Cli::parse_from::<_, &str>([]));
     assert_eq!(from_env.unwrap().jobs, 3);
 }
 

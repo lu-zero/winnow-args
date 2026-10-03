@@ -73,7 +73,7 @@ struct Must {
 }
 
 fn parse<T: Args>(line: &[&str]) -> Result<T, Error> {
-    T::try_parse_from(line)
+    T::parse_from(line)
 }
 
 #[test]
