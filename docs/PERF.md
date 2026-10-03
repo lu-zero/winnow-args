@@ -1150,7 +1150,7 @@ The measured lines are unchanged: 2 186 and 3 476 warm instructions.
 
 ## 50. A full pass, after the review
 
-At `a6f3e92`, pinned to one core (node 3), `release` unless said.
+At `1ba617e`, pinned to one core (node 3), `release` unless said.
 
 **Frameworks** (`just perf`; instructions for one cold parse, and warm
 nanoseconds a parse). winnow-args takes about half of usage's instructions on
@@ -1269,10 +1269,10 @@ call, `set -f +f` 77.8 → 5.0 µs. Step 50 has the current numbers.
 
 ## 53. After the API and documentation rework
 
-`d964cec` (public `BStr`, `value_optional` gone) through the doc fixes
+`08d2b28` (public `BStr`, `value_optional` gone) through the doc fixes
 (hidden `ValueEnum` variants out of errors, `Shell: FromArg`, role fields
 checked). Pinned (node 3, core 96), `perf instructions:u`. Warm instructions
-per parse on the bench lines, before (`1157798`) / after:
+per parse on the bench lines, before (`edc97af`) / after:
 
 | line | release | release-lto |
 |---|---|---|
