@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: a flattened struct or the sequence enum declares a flag that this struct, or another of them, also declares
+  --> tests/ui/clash.rs:10:10
+   |
+10 | #[derive(Args)]
+   |          ^^^^ evaluation of `<Cli as winnow_args::Args>::HELP::_` failed here

@@ -1,0 +1,47 @@
+error: `values` is at least 1, and a range does not end below its start
+  --> tests/ui/values.rs:10:26
+   |
+10 |     #[arg(long, values = 0)]
+   |                          ^
+
+error: `values` is at least 1, and a range does not end below its start
+  --> tests/ui/values.rs:16:26
+   |
+16 |     #[arg(long, values = 3..=2)]
+   |                          ^
+
+error: `values` is for a `Vec<T>` flag, without `delimiter` or `default_missing`
+  --> tests/ui/values.rs:22:5
+   |
+22 |     #[arg(long, values = 1..)]
+   |     ^
+
+error: a range of `values` takes detached words: not with `require_equals`
+  --> tests/ui/values.rs:28:5
+   |
+28 |     #[arg(long, values = 1.., require_equals)]
+   |     ^
+
+error: `value_terminator` ends a range of `values` (`values = 1..`)
+  --> tests/ui/values.rs:34:5
+   |
+34 |     #[arg(long, value_terminator = ";")]
+   |     ^
+
+error: `default_fn` is for a field that takes a value, or `negate`, without `default`
+  --> tests/ui/values.rs:40:5
+   |
+40 |     #[arg(long, default = "1", default_fn = four)]
+   |     ^
+
+error: `default_note` describes a `default_fn`
+  --> tests/ui/values.rs:46:5
+   |
+46 |     #[arg(long, default_note = "one per core")]
+   |     ^
+
+error: `default_fn` is for a field that takes a value, or `negate`, without `default`
+  --> tests/ui/values.rs:52:5
+   |
+52 |     #[arg(long, default_fn = four)]
+   |     ^

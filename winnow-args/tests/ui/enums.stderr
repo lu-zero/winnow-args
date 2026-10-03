@@ -1,0 +1,35 @@
+error: a `ValueEnum` variant holds no data
+ --> tests/ui/enums.rs:7:5
+  |
+7 |     Rgb(u8, u8, u8),
+  |     ^^^
+
+error: expected "kebab-case", "lowercase", "UPPERCASE", "snake_case" or "verbatim"
+  --> tests/ui/enums.rs:11:20
+   |
+11 | #[arg(rename_all = "Title Case")]
+   |                    ^^^^^^^^^^^^
+
+error: `same` is already used by `One`
+  --> tests/ui/enums.rs:21:5
+   |
+21 |     Two,
+   |     ^^^
+
+error: expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`
+  --> tests/ui/enums.rs:26:11
+   |
+26 |     #[arg(short = 'r')]
+   |           ^^^^^
+
+error: at most one positional, one `unknown` and one `bundle` variant
+  --> tests/ui/enums.rs:34:5
+   |
+34 |     #[arg(positional)]
+   |     ^
+
+error: `--lazy` is already used by `Lazy`
+  --> tests/ui/enums.rs:42:5
+   |
+42 |     #[arg(long = "lazy")]
+   |     ^

@@ -40,3 +40,6 @@ required-features = ["derive"]
 [[example]]
 name = "ld"
 required-features = ["derive"]
+
+[dev-dependencies]
+trybuild = "1"

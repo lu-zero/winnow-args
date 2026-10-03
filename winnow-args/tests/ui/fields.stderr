@@ -1,0 +1,47 @@
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, `value_terminator`, `default_fn`, `default_note`, `default_if`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `group`, `help`, `long_help`, `help_heading`, `hide`
+ --> tests/ui/fields.rs:6:17
+  |
+6 |     #[arg(long, hdie)]
+  |                 ^^^^
+
+error: `delimiter` needs a `Vec<T>` field to put the pieces in
+  --> tests/ui/fields.rs:12:5
+   |
+12 |     #[arg(long, delimiter = ',')]
+   |     ^
+
+error: `default` needs a field that takes a value, or `negate`
+  --> tests/ui/fields.rs:18:5
+   |
+18 |     #[arg(long, default = "true")]
+   |     ^
+
+error: `default_missing` is for flags that take a value
+  --> tests/ui/fields.rs:24:5
+   |
+24 |     #[arg(long, default_missing = "x")]
+   |     ^
+
+error: `stop_flags` is for positional fields
+  --> tests/ui/fields.rs:30:5
+   |
+30 |     #[arg(long, stop_flags)]
+   |     ^
+
+error: `negate` is for `bool` flags
+  --> tests/ui/fields.rs:36:5
+   |
+36 |     #[arg(long, negate)]
+   |     ^
+
+error: `plus` needs `#[arg(plus_options)]` on the struct
+  --> tests/ui/fields.rs:43:5
+   |
+43 |     trace: Option<bool>,
+   |     ^^^^^
+
+error: `Args` needs a struct with named fields
+  --> tests/ui/fields.rs:47:13
+   |
+47 | struct Tuple(bool);
+   |             ^^^^^^

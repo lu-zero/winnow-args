@@ -89,6 +89,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Completion scripts for bash, zsh, fish, elvish, PowerShell, answered by
       the program from its help data; the answers are tested, the bash and zsh
       scripts tried by hand
+- [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate
 
@@ -194,7 +195,6 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       diff) work from a winnow-args program; markdown and man pages directly
 - [ ] Metadata usage carries: `effect`, `author`, `surface`, `available_if`
 - [ ] `no_std` + `alloc`
-- [ ] A compile-fail test harness (`trybuild`) pinning the derive's errors
 
 ### Conformance, size, ports
 

@@ -3959,7 +3959,7 @@ fn value_count(count: &syn::Expr) -> syn::Result<(usize, Option<usize>)> {
     if min == 0 || max.is_some_and(|max| max < min) {
         return Err(syn::Error::new(
             count.span(),
-            "a flag takes at least one value, and at most no fewer",
+            "`values` is at least 1, and a range does not end below its start",
         ));
     }
     Ok((min, max))
