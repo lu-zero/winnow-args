@@ -15,6 +15,9 @@ enum Item {
     /// `--build-id` alone, or `--build-id=sha1`; never the next word.
     #[arg(long, require_equals, default_missing = "\u{0}")]
     BuildId(String),
+    /// `--task=lint`; a bare `--task` is `None`, not an error.
+    #[arg(long, require_equals)]
+    Task(Option<String>),
     #[arg(short = 'z')]
     Z(Spanned<String>),
     /// Built from a `-z` keyword, never parsed.
@@ -64,6 +67,18 @@ fn require_equals_with_a_default() {
             Item::BuildId("\u{0}".into()),
             Item::Input(spanned("a.o", 11, false)),
             Item::BuildId("sha1".into()),
+        ]
+    );
+}
+
+#[test]
+fn require_equals_on_an_option_field() {
+    assert_eq!(
+        parse(&["--task=lint", "a.o", "--task"]).unwrap(),
+        [
+            Item::Task(Some("lint".into())),
+            Item::Input(spanned("a.o", 12, false)),
+            Item::Task(None),
         ]
     );
 }

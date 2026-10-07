@@ -3,7 +3,7 @@
 use winnow::combinator::alt;
 use winnow::prelude::*;
 use winnow_args::combinator::{Named, args, long, positional, short};
-use winnow_args::{Args, Argv, Error, ErrorKind};
+use winnow_args::{Args, Argv, Error};
 
 #[derive(Args, Debug, PartialEq, Default)]
 struct Cli {
@@ -22,7 +22,7 @@ const DEBUG: Named = long("debug").require_equals();
 fn combinator(input: &mut Argv<'_>) -> Result<Cli, Error> {
     let mut cli = Cli::default();
     args(alt((
-        INSPECT.argument_as().map(|i| cli.inspect = Some(i)),
+        INSPECT.argument_opt_as().map(|i| cli.inspect = i),
         DEBUG.argument_or("9229").map(|d| cli.debug = Some(d)),
         positional("REST").map(|r| cli.rest = Some(r)),
     )))
@@ -57,12 +57,19 @@ fn only_an_attached_value_binds() {
 }
 
 #[test]
-fn the_next_word_is_refused() {
-    // long-/short-value-require-equals-refuses-detached
-    for line in [&["--inspect", "9229"][..], &["-i", "9229"]] {
-        let e = parse(line).unwrap_err();
-        assert_eq!(e.kind(), ErrorKind::MissingValue, "{line:?}");
-    }
+fn a_bare_flag_is_none() {
+    // long-value-require-equals-refuses-detached: diverges. An `Option` field
+    // holds `None` for a bare flag, and the next word is a positional.
+    assert_eq!(parse(&["--inspect"]).unwrap().inspect, None);
+    assert_eq!(parse(&["-i"]).unwrap().inspect, None);
+    assert_eq!(
+        parse(&["--inspect", "9229"]).unwrap(),
+        Cli {
+            inspect: None,
+            debug: None,
+            rest: Some("9229".into())
+        }
+    );
 }
 
 #[test]

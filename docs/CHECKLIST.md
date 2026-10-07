@@ -52,7 +52,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `choices(…)`, `ValueEnum` (`name`, `alias`,
       `alias_hidden`, `hide`, `rename_all`)
 - [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
-      `default_note`); `default_missing` for an optional value
+      `default_note`); `default_missing` for an optional value; an `Option`
+      field with `require_equals` holds `None` for a bare flag
 - [x] `keywords`: `-z now` is `--now` of a nested `Args` type, in order
 - [x] `@file` response files (`response`): nested 10 deep, 4096 files, GNU quoting
 
@@ -116,6 +117,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ## Decisions
 
+- **A bare `require_equals` flag on an `Option` field** is `None`, not a
+  missing-value error (usage's corpus has no optional-argument flag; this is
+  getopt's `optional_argument`, which mold's port needs).
 - **`--verbose=x` on a switch** is an error (clap, bpaf), not dropped (usage).
 - **An unknown letter in a bundle** fails the whole bundle before any letter
   applies; lenient structs check a bundle of two or more letters whole.

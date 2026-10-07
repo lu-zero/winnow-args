@@ -68,7 +68,7 @@ use syn::{
 /// | `bool` | a switch | |
 /// | integer, with `count` | how many times it was given | |
 /// | `T` | one value; an error if absent and without `env` or `default` | a required word |
-/// | `Option<T>` | one value, or `None` | an optional word |
+/// | `Option<T>` | one value, or `None`; with `require_equals`, a bare flag is `None` | an optional word |
 /// | `Vec<T>` | one value per occurrence | every word left |
 /// | `Option<bool>`, with `plus` | `-x` is `Some(true)`, `+x` `Some(false)` | |
 ///
@@ -147,7 +147,7 @@ use syn::{
 ///   in order; the selector is as for the rules below.
 /// - `default_missing = "…"`: the value of a flag given without one, which makes its value optional.
 /// - `require_equals`: the value only attached (`--name=v`, `-nv`); with `default_missing`, a bare flag
-///   leaves the next word alone.
+///   leaves the next word alone, and on an `Option` field a bare flag is `None`.
 /// - `keep_equals`: a short flag's attached value keeps a leading `=` (`-L=dir`).
 /// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
 /// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
@@ -668,6 +668,13 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 .filter(|s| s.ident == "Spanned")
                 .and_then(inner)
         });
+        // An `Option<T>` field takes `T`, and a bare flag is `None` under
+        // `require_equals`, not a converted default.
+        let optional = takes.and_then(|ty| {
+            last_segment(ty)
+                .filter(|s| s.ident == "Option")
+                .and_then(inner)
+        });
         let wrap = |value: TokenStream2, offset: TokenStream2, attached: TokenStream2| {
             if spanned.is_some() {
                 quote! {
@@ -750,7 +757,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         let choices = match takes {
             Some(ty) => {
-                let ty = spanned.unwrap_or(ty);
+                let ty = spanned.or(optional).unwrap_or(ty);
                 quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
             }
             None => quote!(&[]),
@@ -772,7 +779,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident))
             },
             Some(ty) => {
-                let ty = spanned.unwrap_or(ty);
+                let ty = spanned.or(optional).unwrap_or(ty);
                 let options = quote! {
                     ::winnow_args::token::ValueOptions {
                         negative_numbers: #negative_numbers,
@@ -781,32 +788,46 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         keep_equals: #keep_equals,
                     }
                 };
-                let read = match &default_missing {
-                    Some(missing) => {
-                        let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
-                        quote! {
-                            __arg.read_value_or_with(
-                                __input,
-                                #options,
-                                ::winnow_args::__private::BStr::new(#bytes),
-                            )
-                        }
-                    }
-                    None => quote!(__arg.read_value_with(__input, #options)?),
-                };
+                let attached = spanned
+                    .is_some()
+                    .then(|| quote!(let __attached = __arg.has_attached_value(__input);));
                 let value = wrap(
                     quote!(__arg.convert::<#ty>(__value)?),
                     quote!(__arg.offset()),
                     quote!(__attached),
                 );
-                let attached = spanned
-                    .is_some()
-                    .then(|| quote!(let __attached = __arg.has_attached_value(__input);));
+                let item = if optional.is_some() && require_equals && default_missing.is_none() {
+                    quote! {
+                        if let ::core::option::Option::Some(__value) =
+                            __arg.read_value_opt_with(__input, #options)
+                        {
+                            Self::#ident(::core::option::Option::Some(#value))
+                        } else {
+                            Self::#ident(::core::option::Option::None)
+                        }
+                    }
+                } else {
+                    let read = match &default_missing {
+                        Some(missing) => {
+                            let bytes = LitByteStr::new(missing.as_bytes(), Span::call_site());
+                            quote! {
+                                __arg.read_value_or_with(
+                                    __input,
+                                    #options,
+                                    ::winnow_args::__private::BStr::new(#bytes),
+                                )
+                            }
+                        }
+                        None => quote!(__arg.read_value_with(__input, #options)?),
+                    };
+                    quote! {{
+                        let __value = #read;
+                        Self::#ident(#value)
+                    }}
+                };
                 quote! {
                     #attached
-                    let __value = #read;
-                    {
-                    let __item = Self::#ident(#value);
+                    let __item = #item;
                     // Read here, so a value only printed is not dead code.
                     match &__item {
                         Self::#ident(__read) => {
@@ -816,7 +837,6 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         _ => {}
                     }
                     ::core::result::Result::Ok(::core::option::Option::Some(__item))
-                }
                 }
             }
         };
@@ -1470,7 +1490,8 @@ impl Field {
         let hide = self.hide;
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
-        let optional_value = self.default_missing.is_some();
+        let optional_value = self.default_missing.is_some()
+            || require_equals && matches!(self.kind, Kind::Optional(_));
         let values = self.values;
         let more_values = self.values_max.is_some();
         let required = matches!(self.kind, Kind::Required(_))
@@ -2007,12 +2028,44 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 __arg.check_switch()?;
                 #ident = #ident.saturating_add(1);
             },
-            Kind::Optional(ty) | Kind::Required(ty) => {
+            Kind::Required(ty) => {
                 let value = f.flag_value(ty, quote!(__value));
                 let read = f.read();
                 quote! {
                     let __value = #read;
                     #ident = ::core::option::Option::Some(#value);
+                }
+            }
+            Kind::Optional(ty) => {
+                let value = f.flag_value(ty, quote!(__value));
+                match &f.default_missing {
+                    // `require_equals` is getopt's `optional_argument`: a bare
+                    // flag holds `None`. `default_missing` names what a bare
+                    // flag holds instead.
+                    Some(_) => {
+                        let read = f.read();
+                        quote! {
+                            let __value = #read;
+                            #ident = ::core::option::Option::Some(#value);
+                        }
+                    }
+                    None if f.require_equals => {
+                        let options = f.value_options();
+                        quote! {
+                            if let ::core::option::Option::Some(__value) =
+                                __arg.read_value_opt_with(__input, #options)
+                            {
+                                #ident = ::core::option::Option::Some(#value);
+                            }
+                        }
+                    }
+                    None => {
+                        let read = f.read();
+                        quote! {
+                            let __value = #read;
+                            #ident = ::core::option::Option::Some(#value);
+                        }
+                    }
                 }
             }
             Kind::Many(ty) => match f.delimiter {

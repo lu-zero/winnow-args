@@ -201,6 +201,25 @@ impl<const N: usize> Named<N> {
         })
     }
 
+    /// An option whose value may be left off: a bare `--name`, or one followed
+    /// by another flag, gives `None`. What an `Option` field holds.
+    pub fn argument_opt<'i>(mut self) -> impl Parser<Argv<'i>, Option<&'i BStr>, Error> {
+        trace("argument_opt", move |input: &mut Argv<'i>| {
+            let arg = self.parse_next(input)?;
+            Ok(arg.read_value_opt_with(input, self.options))
+        })
+    }
+
+    /// [`Named::argument_opt`], converted with [`FromArg`].
+    pub fn argument_opt_as<'i, T: FromArg>(mut self) -> impl Parser<Argv<'i>, Option<T>, Error> {
+        trace("argument_opt_as", move |input: &mut Argv<'i>| {
+            let arg = self.parse_next(input)?;
+            arg.read_value_opt_with(input, self.options)
+                .map(|v| arg.convert(v))
+                .transpose()
+        })
+    }
+
     /// An option whose value is split on `delimiter`, each piece converted:
     /// `--tags a,b` gives two.
     pub fn arguments_as<'i, T: FromArg>(

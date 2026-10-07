@@ -615,7 +615,7 @@ fn help_spells_every_form_of_a_flag() {
         "  -o <OPT>...",
         "  +o <OPT>...",
         "  -l, -L",
-        "      --inspect=<PORT>",
+        "      --inspect[=<PORT>]",
         "      --pager [<WHEN>]",
         "      --build-id[=<KIND>]",
         "      --platform <V> <V> <V>...",

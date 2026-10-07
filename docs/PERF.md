@@ -1320,3 +1320,18 @@ A struct that declares none of them generates the same code: the bench lines
 are unchanged from step 54 in both profiles (2 143 and 3 596 warm
 instructions in `release`, 1 773 and 3 407 in `release-lto`), and so are the
 examples.
+
+## 56. `Option` + `require_equals`: a bare flag is `None`
+
+`Arg::read_value_opt_with` and the `argument_opt`/`argument_opt_as`
+combinators. An `Option` field with `require_equals` and no
+`default_missing` holds `None` for a bare flag where it errored before,
+and its help shows `[=<V>]`. `default_missing` keeps its meaning (a
+bare flag holds that value), and a detached `Option` field still
+refuses a bare flag, as usage's corpus has it. What the mold port used
+a `"\0"` sentinel for needs no sentinel now.
+
+A struct that declares none of it generates the same code: the bench
+lines are unchanged from step 55, and so are the examples — ld 1 101
+and 6 052 warm instructions, brush builtins within a count of the step
+55 numbers, with the change and without, rebuilt each way.

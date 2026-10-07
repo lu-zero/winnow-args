@@ -252,6 +252,19 @@ impl<'i> Arg<'i> {
         self.next_value(input, options).unwrap_or(missing)
     }
 
+    /// [`Arg::read_value`] for a flag whose value may be left out, told apart
+    /// from a value of zero length: `--color` alone or before another flag
+    /// gives `None`, `--color=` gives `Some(b"")`. What an `Option` field
+    /// stores.
+    #[inline(always)]
+    pub fn read_value_opt_with(
+        &self,
+        input: &mut Argv<'i>,
+        options: ValueOptions,
+    ) -> Option<&'i BStr> {
+        self.next_value(input, options)
+    }
+
     #[inline(always)]
     fn next_value(&self, input: &mut Argv<'i>, options: ValueOptions) -> Option<&'i BStr> {
         match self {
