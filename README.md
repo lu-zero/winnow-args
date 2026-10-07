@@ -48,6 +48,8 @@ process, and time per parse in a hot loop.
 Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
 profile, pinned to one core.
 
+![Instructions per parse for the two command lines, log scale](./docs/performance.svg)
+
 | | example, instructions | time | mise, instructions | time |
 |---|---:|---:|---:|---:|
 | winnow-args | 2 939 | 196 ns | 4 012 | 328 ns |
