@@ -3,6 +3,16 @@
 What changed in each release of `winnow-args` and `winnow-args-derive`, which
 are released together. Versions follow [semver](https://semver.org).
 
+## 0.1.2 (2026-10-07)
+
+- **Added**: an `Option` field with `require_equals` holds `None` for a bare
+  flag — getopt's `optional_argument`, without the `"\0"` sentinel a
+  `default_missing` needed. Help shows the value as optional, the combinators
+  gain `argument_opt` and `argument_opt_as`, the token layer
+  `Arg::read_value_opt_with`. A detached `Option` field still refuses a bare
+  flag, as usage's corpus has it.
+- **Documentation**: a graph of the performance table.
+
 ## 0.1.1 (2026-10-03)
 
 - **Fixed**: the crate did not build for a 32-bit target, wasm32 included. A
