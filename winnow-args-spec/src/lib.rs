@@ -15,7 +15,7 @@ use std::path::Path;
 use toml::Table;
 use toml::Value;
 
-/// A failure while reading or stitching fragments.
+/// A failure while reading or stitching fragments, or naming their pages.
 #[derive(Debug)]
 pub struct Error {
     message: String,
@@ -522,6 +522,21 @@ pub fn pages<'a>(root: &'a Command, bin: &str) -> Vec<Page<'a>> {
     let mut out = Vec::new();
     walk(root, vec![bin.to_owned()], &[], &mut out);
     out
+}
+
+/// Errors when two page paths join to one file name.
+///
+/// Renderers join the path with `-`. `tool use add` and `tool use-add` would
+/// be the same file, and the second page would replace the first.
+pub fn distinct_page_stems(pages: &[Page<'_>]) -> Result<(), Error> {
+    let mut seen = HashSet::new();
+    for page in pages {
+        let stem = page.path.join("-");
+        if !seen.insert(stem.clone()) {
+            return Err(Error::new(format!("two pages would be named {stem}")));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -1142,6 +1157,62 @@ mod tests {
                 .any(|global| global.item.long.as_deref() == Some("verbose"))
         );
         assert!(pages[0].globals.is_empty());
+        assert!(distinct_page_stems(&pages).is_ok());
+    }
+
+    #[test]
+    fn hyphen_joined_paths_that_are_one_file_are_an_error() {
+        let command = Catalog::from_pairs([
+            (
+                "Cli",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Cli"
+                subcommand = "Ops"
+                "#,
+            ),
+            (
+                "Ops",
+                r#"
+                version = 1
+                kind = "subcommands"
+                ident = "Ops"
+
+                [[variant]]
+                name = "use"
+                ty = "Use"
+
+                [[variant]]
+                name = "use-add"
+                "#,
+            ),
+            (
+                "Use",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Use"
+                subcommand = "More"
+                "#,
+            ),
+            (
+                "More",
+                r#"
+                version = 1
+                kind = "subcommands"
+                ident = "More"
+
+                [[variant]]
+                name = "add"
+                "#,
+            ),
+        ])
+        .unwrap()
+        .stitch("Cli")
+        .unwrap();
+        let error = distinct_page_stems(&pages(&command, "tool")).unwrap_err();
+        assert!(error.to_string().contains("tool-use-add"), "{error}");
     }
 
     #[test]

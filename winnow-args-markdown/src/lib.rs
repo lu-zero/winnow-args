@@ -10,12 +10,18 @@ use winnow_args_spec::{Command, Global, Item, Page, Sub, pages};
 /// The root page and one page per visible subcommand.
 ///
 /// Each pair is `(file name, markdown)`. The file name joins the path with
-/// `-`, so `tool use add` is `tool-use-add.md`.
-pub fn render_pages(root: &Command, bin: &str) -> Vec<(String, String)> {
-    pages(root, bin)
+/// `-`, so `tool use add` is `tool-use-add.md`. Two paths that join to one
+/// name are an error.
+pub fn render_pages(
+    root: &Command,
+    bin: &str,
+) -> Result<Vec<(String, String)>, winnow_args_spec::Error> {
+    let pages = pages(root, bin);
+    winnow_args_spec::distinct_page_stems(&pages)?;
+    Ok(pages
         .iter()
         .map(|page| (file_name(&page.path), render(page)))
-        .collect()
+        .collect())
 }
 
 /// One page.
@@ -204,7 +210,7 @@ fn escape(text: &str) -> String {
 
 fn push_escaped(out: &mut String, text: &str) {
     for char in text.chars() {
-        if matches!(char, '\\' | '*' | '_' | '[' | ']') {
+        if matches!(char, '\\' | '*' | '_' | '[' | ']' | '<' | '>' | '&') {
             out.push('\\');
         }
         out.push(char);
@@ -286,7 +292,7 @@ mod tests {
         };
         Command {
             name: "tool".to_owned(),
-            about: "Use *wild* and `code`.".to_owned(),
+            about: "Use *wild* and `a<b>` for <FILE> & co.".to_owned(),
             long_about: String::new(),
             after_help: String::new(),
             after_long_help: String::new(),
@@ -309,7 +315,7 @@ mod tests {
 
     #[test]
     fn pages_escape_prose_and_link_subcommands() {
-        let pages = render_pages(&command(), "tool");
+        let pages = render_pages(&command(), "tool").unwrap();
         assert_eq!(
             pages
                 .iter()
@@ -318,7 +324,10 @@ mod tests {
             ["tool.md", "tool-use.md"]
         );
         let root = &pages[0].1;
-        assert!(root.contains("Use \\*wild\\* and `code`."), "{root}");
+        assert!(
+            root.contains("Use \\*wild\\* and `a<b>` for \\<FILE\\> \\& co."),
+            "{root}"
+        );
         assert!(
             root.contains("[`use`](tool-use.md), `u` — Install \\*now\\*."),
             "{root}"

@@ -133,8 +133,11 @@ fn generate(cli: &Cli) -> Result<(), String> {
         Some(path) => root.join(path),
         None => root.join("target/docs").join(name),
     };
-    let markdown = winnow_args_markdown::render_pages(&command, &bin);
-    let manual = Manual::default().render_pages(&command, &bin);
+    let markdown =
+        winnow_args_markdown::render_pages(&command, &bin).map_err(|error| error.to_string())?;
+    let manual = Manual::default()
+        .render_pages(&command, &bin)
+        .map_err(|error| error.to_string())?;
     write_pairs(&out.join("md"), &markdown)?;
     write_pairs(&out.join("man"), &manual)?;
     println!(

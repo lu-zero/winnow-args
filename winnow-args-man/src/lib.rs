@@ -36,15 +36,21 @@ impl Manual {
     /// The root page and one page per visible subcommand.
     ///
     /// Each pair is `(file name, roff)`. `tool use` in section 1 is
-    /// `tool-use.1`.
-    pub fn render_pages(&self, root: &Command, bin: &str) -> Vec<(String, String)> {
-        pages(root, bin)
+    /// `tool-use.1`. Two paths that join to one name are an error.
+    pub fn render_pages(
+        &self,
+        root: &Command,
+        bin: &str,
+    ) -> Result<Vec<(String, String)>, winnow_args_spec::Error> {
+        let pages = pages(root, bin);
+        winnow_args_spec::distinct_page_stems(&pages)?;
+        Ok(pages
             .iter()
             .map(|page| {
                 let file = format!("{}.{}", page.path.join("-"), self.section);
                 (file, self.render(page))
             })
-            .collect()
+            .collect())
     }
 
     /// One page.
@@ -149,7 +155,9 @@ impl Manual {
         } else {
             command.after_long_help.as_str()
         };
+        // A .TP keeps following lines in that tagged paragraph until a paragraph macro.
         if !after.is_empty() {
+            doc.control("PP", std::iter::empty::<&str>());
             lines(&mut doc, after);
         }
         doc.render()
@@ -272,5 +280,32 @@ mod tests {
         );
         assert!(page.lines().all(|line| !line.starts_with(".so")), "{page}");
         assert!(page.contains("evil"), "{page}");
+    }
+
+    #[test]
+    fn after_help_closes_the_tagged_paragraph() {
+        let mut file = blank();
+        file.long = Some("file".to_owned());
+        file.help = "A path.".to_owned();
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            long_about: String::new(),
+            after_help: "See also.".to_owned(),
+            after_long_help: String::new(),
+            items: vec![file],
+            subcommands: Vec::new(),
+            subcommand_required: false,
+            help_flag: false,
+            help_short: false,
+            long_only: false,
+            unknown_flags_value: false,
+            package_version: None,
+        };
+        let page = Manual::default().render(&pages(&command, "tool")[0]);
+        assert!(
+            page.contains(".TP\n\\fB\\-\\-file\\fR\nA path.\n.PP\nSee also.\n"),
+            "{page}"
+        );
     }
 }
