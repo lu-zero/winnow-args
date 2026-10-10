@@ -11,6 +11,8 @@ members = [
     "winnow-args-spec",
     "winnow-args-markdown",
     "winnow-args-man",
+    "examples/just-docs",
+    "examples/xtask-docs",
     "xtask",
 ]
 # bpaf 0.10 comes from git: kept out, so that it going out of sync breaks nothing.
