@@ -45,11 +45,14 @@ check:
     done
     run cargo clippy --workspace --all-targets --all-features -- -D warnings
     run cargo clippy -p bench --all-targets --no-default-features -- -D warnings
-    RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args -p winnow-args-derive --no-deps --all-features
+    RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args -p winnow-args-derive -p winnow-args-spec --no-deps --all-features
     # A link to an item behind a feature only breaks with the feature off.
     RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args --no-deps --no-default-features
     RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args --no-deps --no-default-features --features help-text
     run cargo test --workspace --all-features
+    # The fragments the derive writes, read back. Only this test: the others
+    # reuse type names, and a fragment is filed under its type's name.
+    WINNOW_ARGS_SPEC="$PWD/target/spec-test" run cargo test -p winnow-args --all-features --test spec_fragments
     exit "$status"
 
 # Regenerate a generated source:
