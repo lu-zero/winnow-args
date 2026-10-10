@@ -1,8 +1,13 @@
-# Development tasks: `just --list`. Each recipe is a bash script; arguments
-# are passed to it as `$@`, and settings such as `PROFILE` and `PIN` are read
-# from the environment.
+# Development tasks. `just` with no arguments lists them. Each recipe is a
+# bash script; arguments are passed to it as `$@`, and settings such as
+# `PROFILE` and `PIN` are read from the environment.
 
 set positional-arguments
+
+# `just` alone lists the recipes. Private, so the list does not include it.
+[private]
+default:
+    @just --list
 
 # Build, lint, document and test every feature configuration, warning-free.
 [doc("Every feature set and profile: build, clippy, docs, tests")]
