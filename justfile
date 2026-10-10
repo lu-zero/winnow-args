@@ -45,7 +45,7 @@ check:
     done
     run cargo clippy --workspace --all-targets --all-features -- -D warnings
     run cargo clippy -p bench --all-targets --no-default-features -- -D warnings
-    RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args -p winnow-args-derive -p winnow-args-spec --no-deps --all-features
+    RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args -p winnow-args-derive -p winnow-args-spec -p winnow-args-markdown -p winnow-args-man --no-deps --all-features
     # A link to an item behind a feature only breaks with the feature off.
     RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args --no-deps --no-default-features
     RUSTDOCFLAGS='-D warnings' run cargo doc -p winnow-args --no-deps --no-default-features --features help-text
