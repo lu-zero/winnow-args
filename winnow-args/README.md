@@ -65,7 +65,7 @@ fn main() {
 A test calls `Cli::parse_from(["-v", "a"])`, without the program name, and
 gets a `Result`. The same command line written by hand, with
 `winnow_args::combinator`, is next to this derive in
-[`examples/example.rs`](https://github.com/lu-zero/winnow-args/blob/HEAD/winnow-args/examples/example.rs).
+[`examples/example.rs`](https://github.com/lu-zero/winnow-args/blob/HEAD/examples/example.rs).
 The [crate docs](https://docs.rs/winnow-args) list the entry points, and each
 derive's page lists every attribute it takes.
 

@@ -27,18 +27,22 @@ terminal_size = { version = "0.4", optional = true }
 
 [[example]]
 name = "example"
+path = "../examples/example.rs"
 required-features = ["derive"]
 
 [[example]]
 name = "help"
+path = "../examples/help.rs"
 required-features = ["derive"]
 
 [[example]]
 name = "brush_builtins"
+path = "../examples/brush_builtins.rs"
 required-features = ["derive"]
 
 [[example]]
 name = "ld"
+path = "../examples/ld.rs"
 required-features = ["derive"]
 
 [dev-dependencies]
