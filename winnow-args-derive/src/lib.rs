@@ -32,7 +32,8 @@
 //!
 //! A value's choices are found under the name of its type. Where that name is
 //! an alias, or the type implements `FromArg` by hand, the build with the
-//! variable set fails at the field until `choices(...)` states them there.
+//! variable set fails at the field until `choices(...)` states them there,
+//! and fails again if what is stated is not what the type accepts.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -1089,19 +1090,34 @@ fn spec_type(ty: &Type) -> syn::Result<String> {
     })
 }
 
-/// The type of a field's value, where its choices are looked for.
-fn choices_type(field: &Field) -> Option<&Type> {
-    if !field.takes_value()
-        || field.choices.is_some()
-        || field.keywords
-        || matches!(field.role, Role::Subcommand)
-    {
+/// The type of a field's value.
+fn value_type(field: &Field) -> Option<&Type> {
+    if !field.takes_value() || field.keywords || matches!(field.role, Role::Subcommand) {
         return None;
     }
     match &field.kind {
         Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty) => Some(ty),
         Kind::Switch | Kind::Count(_) => None,
     }
+}
+
+/// The type of a field's value, where its choices are looked for: none when
+/// the field states them.
+fn choices_type(field: &Field) -> Option<&Type> {
+    value_type(field).filter(|_| field.choices.is_none())
+}
+
+/// A documentation build fails where the choices a field states are not
+/// those of its type, so that a list written twice cannot drift.
+fn spec_check_stated(generics: &syn::Generics, field: &Field) -> Option<TokenStream2> {
+    let stated = field.choices.as_ref()?;
+    let ty = value_type(field).filter(|_| generics.params.is_empty())?;
+    Some(quote::quote_spanned! {ty.span()=>
+        const _: () = ::core::assert!(
+            ::winnow_args::__private::stated_choices::<#ty>(&[#(#stated),*]),
+            "the choices stated on this field are not those of its type, in number, spelling or order",
+        );
+    })
 }
 
 /// The value type's name. Only a `ValueEnum` has a fragment under it.
@@ -3335,11 +3351,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let mut spec_checks = Vec::new();
     if spec::enabled() {
-        spec_checks.extend(
-            fields
-                .iter()
-                .filter_map(|field| spec_check(&input.generics, choices_type(field))),
-        );
+        spec_checks.extend(fields.iter().filter_map(|field| {
+            spec_check(&input.generics, choices_type(field))
+                .or_else(|| spec_check_stated(&input.generics, field))
+        }));
         let items = fields
             .iter()
             .filter(|field| !matches!(field.role, Role::Subcommand))

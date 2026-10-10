@@ -291,16 +291,37 @@ impl<K: FromArg, V: FromArg> FromArg for KeyValue<K, V> {
 /// through an alias, or one that implements [`FromArg`] by hand, does not.
 #[doc(hidden)]
 pub const fn documented_choices<T: FromArg>(name: &str) -> bool {
-    let (filed, name) = (T::SPEC.as_bytes(), name.as_bytes());
+    T::CHOICES.is_empty() || same(T::SPEC, name)
+}
+
+/// Whether the choices a field states are those of its type `T`, when `T`
+/// has any: what a documentation build shows is then what is accepted.
+#[doc(hidden)]
+pub const fn stated_choices<T: FromArg>(stated: &[&str]) -> bool {
     if T::CHOICES.is_empty() {
         return true;
     }
-    if filed.len() != name.len() {
+    if T::CHOICES.len() != stated.len() {
         return false;
     }
     let mut at = 0;
-    while at < name.len() {
-        if filed[at] != name[at] {
+    while at < stated.len() {
+        if !same(T::CHOICES[at], stated[at]) {
+            return false;
+        }
+        at += 1;
+    }
+    true
+}
+
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut at = 0;
+    while at < a.len() {
+        if a[at] != b[at] {
             return false;
         }
         at += 1;

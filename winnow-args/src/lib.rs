@@ -672,7 +672,7 @@ pub mod __private {
     pub use crate::help::concat_items;
     pub use crate::stream::Argv;
     pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
-    pub use crate::value::{ChoiceError, FromArg, documented_choices};
+    pub use crate::value::{ChoiceError, FromArg, documented_choices, stated_choices};
     pub use crate::{Globals, Subcommand, globals, inherit};
     pub use winnow::stream::BStr;
     pub type BoxError = crate::error::BoxError;
