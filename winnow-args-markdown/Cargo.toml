@@ -1,0 +1,14 @@
+[package]
+name = "winnow-args-markdown"
+description = "Markdown pages for a stitched winnow-args command"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["cli", "argument", "parser", "winnow"]
+categories = ["command-line-interface"]
+
+[dependencies]
+winnow-args-spec.workspace = true
