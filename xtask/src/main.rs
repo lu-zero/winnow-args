@@ -45,7 +45,7 @@ struct Generate {
 enum Generated {
     /// mold's `--features winnow-args` parser, from its `origin/main` one.
     Mold(Mold),
-    /// `winnow-args/examples/{brush_builtins,ld}.rs`, from the two ports.
+    /// `examples/{brush_builtins,ld}.rs`, from the two ports.
     Examples(Examples),
     /// `benchmarks/shadows/mise-wa`, from usage's mise shadow.
     MiseShadow,

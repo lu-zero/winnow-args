@@ -85,8 +85,9 @@ cargo run --example brush_builtins -- set -eu +x -o pipefail a b
 cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now
 ```
 
-`brush_builtins` and `ld` print what they parse, and say what to expect with
-`--help`. They are generated (`just gen examples BRUSH_DIR MOLD_DIR`) from two ports:
+The sources are in [`examples/`](./examples/). `brush_builtins` and `ld` print
+what they parse, and say what to expect with `--help`. They are generated
+(`just gen examples BRUSH_DIR MOLD_DIR`) from two ports:
 
 - [brush](https://github.com/reubeno/brush), a bash-compatible shell: every
   builtin and the shell's own command line, its compatibility suite unchanged.
