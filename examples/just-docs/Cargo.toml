@@ -1,0 +1,9 @@
+# A program documented from its justfile: `just -f examples/just-docs/justfile docs`.
+[package]
+name = "just-docs"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+winnow-args = { workspace = true, features = ["help-text"] }
