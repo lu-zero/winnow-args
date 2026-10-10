@@ -33,7 +33,7 @@ crate docs; this page is about the repository.
 | Help prose left out of the binary by a feature | ✓ | – | – |
 | A CLI built at runtime, external subcommands | – | ✓ | ✓ |
 | Conditional requirements (`required_if`) | – | ✓ | ✓ |
-| Man pages | – | ✓ | ~ |
+| Man pages, markdown | ~ | ✓ | ~ |
 | "Did you mean" suggestions | – | – | ✓ |
 
 `✓` built in · `~` with some work, or in a companion crate · `–` not offered.
@@ -71,6 +71,9 @@ the brush and mold ports.
 
 - `winnow-args/`: the runtime, published.
 - `winnow-args-derive/`: the derives, published; used through `winnow-args`.
+- `winnow-args-spec/`, `winnow-args-man/`, `winnow-args-markdown/`: a derived
+  command read back from what the derive writes at compile time, and its man
+  and markdown pages. [`examples/`](./examples/README.md) shows the generator.
 - `benchmarks/` (unpublished): the same command lines in winnow-args, usage, bpaf
   and clap, for `just perf`.
 - `xtask/` (unpublished): the generators for the mold port, the examples and

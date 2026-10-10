@@ -3,6 +3,18 @@
 What changed in each release of `winnow-args` and `winnow-args-derive`, which
 are released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: man and markdown pages for a derived command. With
+  `WINNOW_ARGS_SPEC` set to an absolute directory, each derive also writes a
+  TOML description of its type; `winnow-args-spec` stitches them into a
+  command, `winnow-args-man` and `winnow-args-markdown` render one page per
+  command. The program is only checked, so pages can describe a target that
+  is installed and cannot be run. Unset, nothing is written and the generated
+  parser is unchanged.
+- **Changed**: the examples are in `examples/` at the top of the repository,
+  with a guide and two documentation generators, an xtask and a justfile.
+
 ## 0.1.2 (2026-10-07)
 
 - **Added**: an `Option` field with `require_equals` holds `None` for a bare

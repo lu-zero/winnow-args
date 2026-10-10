@@ -12,3 +12,9 @@ exactly what the program has now. Each crate is written under its own
 subdirectory, and a fragment is filed under its type's name: two types of one
 crate cannot share a name. Markdown and man pages are rendered by
 `winnow-args-markdown` and `winnow-args-man`.
+
+What the fragments do not hold: a type that implements `Args` or `FromArg` by
+hand writes none, so its flags or its choices are missing, and a program
+whose top level is a `Subcommand` enum has no command to start from. Types of
+two crates under one name cannot be loaded together; load one crate's
+directory.

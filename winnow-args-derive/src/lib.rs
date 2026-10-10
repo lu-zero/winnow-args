@@ -14,6 +14,16 @@
 //!
 //! The names are patterns of a `match`, which rustc compiles: no list of
 //! parsers is walked, whatever the number of flags.
+//!
+//! # Documentation
+//!
+//! When the environment variable `WINNOW_ARGS_SPEC` holds the absolute path of
+//! a directory, each derive also writes `CRATE/Type.toml` under it: what help
+//! knows of the type, with a flatten or a subcommand as the other type's name.
+//! `winnow-args-spec` reads them back, for `winnow-args-man` and
+//! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
+//! crate again when the variable changes. Two types of one crate under one
+//! name are an error then, since the name is the file.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
