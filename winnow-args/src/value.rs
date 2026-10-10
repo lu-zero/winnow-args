@@ -57,6 +57,11 @@ pub trait FromArg: Sized {
     /// it with each visible variant's name.
     const CHOICES: &'static [&'static str] = &[];
 
+    /// The name `#[derive(ValueEnum)]` files its choices under when the
+    /// documentation is built. Empty for an implementation written by hand.
+    #[doc(hidden)]
+    const SPEC: &'static str = "";
+
     /// Convert one value.
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }
@@ -279,6 +284,28 @@ impl<K: FromArg, V: FromArg> FromArg for KeyValue<K, V> {
             value: V::from_arg(BStr::new(&value[eq + 1..]))?,
         })
     }
+}
+
+/// Whether a documentation build finds `T`'s choices under `name`: it has
+/// none, or `#[derive(ValueEnum)]` filed them under that name. A type named
+/// through an alias, or one that implements [`FromArg`] by hand, does not.
+#[doc(hidden)]
+pub const fn documented_choices<T: FromArg>(name: &str) -> bool {
+    let (filed, name) = (T::SPEC.as_bytes(), name.as_bytes());
+    if T::CHOICES.is_empty() {
+        return true;
+    }
+    if filed.len() != name.len() {
+        return false;
+    }
+    let mut at = 0;
+    while at < name.len() {
+        if filed[at] != name[at] {
+            return false;
+        }
+        at += 1;
+    }
+    true
 }
 
 #[cfg(test)]

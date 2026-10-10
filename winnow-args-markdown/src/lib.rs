@@ -53,7 +53,7 @@ pub fn render(page: &Page<'_>) -> String {
     if !grouped.arguments.is_empty() {
         heading(&mut out, "Arguments");
         for item in grouped.arguments {
-            push_item(&mut out, item, command.long_only, "");
+            push_item(&mut out, item, "");
         }
         out.push('\n');
     }
@@ -61,7 +61,7 @@ pub fn render(page: &Page<'_>) -> String {
     if !grouped.options.is_empty() || !builtins.is_empty() {
         heading(&mut out, "Options");
         for item in grouped.options {
-            push_item(&mut out, item, command.long_only, "");
+            push_item(&mut out, item, "");
         }
         for (synopsis, blurb) in builtins {
             push_term(&mut out, synopsis, blurb, "");
@@ -71,18 +71,18 @@ pub fn render(page: &Page<'_>) -> String {
     for (title, items) in grouped.headings {
         heading(&mut out, title);
         for item in items {
-            push_item(&mut out, item, command.long_only, "");
+            push_item(&mut out, item, "");
         }
         out.push('\n');
     }
     if !page.globals.is_empty() {
         heading(&mut out, "Global options");
-        for global in &page.globals {
-            push_item(&mut out, global.item, global.long_only, "");
+        for item in &page.globals {
+            push_item(&mut out, item, "");
         }
         out.push('\n');
     }
-    if let Some(note) = command.unknown_flags_note() {
+    for note in command.notes() {
         out.push_str(note);
         out.push_str("\n\n");
     }
@@ -118,19 +118,14 @@ fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub) {
     out.push('\n');
 }
 
-fn push_item(out: &mut String, item: &Item, long_only: bool, indent: &str) {
-    push_term(
-        out,
-        &item.synopsis(long_only),
-        &escape(&item.description()),
-        indent,
-    );
+fn push_item(out: &mut String, item: &Item, indent: &str) {
+    push_term(out, &item.synopsis(), &escape(&item.description()), indent);
     if let Some(vocabulary) = &item.vocabulary {
         out.push_str(indent);
         out.push_str("  Vocabulary:\n");
         let nested = format!("{indent}  ");
         for child in vocabulary.items.iter().filter(|item| !item.hide) {
-            push_item(out, child, vocabulary.long_only, &nested);
+            push_item(out, child, &nested);
         }
     }
 }

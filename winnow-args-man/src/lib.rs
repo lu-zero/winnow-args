@@ -5,7 +5,7 @@
 
 #![warn(missing_docs)]
 
-use roff::{Inline, Roff, bold, italic, roman};
+use roff::{Inline, Roff};
 use winnow_args_spec::{Command, Item, Page, Sub, pages};
 
 /// Header fields of a manual page. They are not part of the command.
@@ -33,6 +33,26 @@ impl Default for Manual {
 }
 
 impl Manual {
+    /// The day `seconds` after the Unix epoch falls on, in UTC, as a header
+    /// shows it: `2026-10-10`. A reproducible build passes
+    /// `SOURCE_DATE_EPOCH`.
+    pub fn date_of(seconds: u64) -> String {
+        // Days to a civil date, counted from a March that starts the year.
+        let days = seconds / 86_400 + 719_468;
+        let (era, day_of_era) = (days / 146_097, days % 146_097);
+        let year_of_era =
+            (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+        let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+        let month = (5 * day_of_year + 2) / 153;
+        let day = day_of_year - (153 * month + 2) / 5 + 1;
+        let (month, year) = if month < 10 {
+            (month + 3, year_of_era + era * 400)
+        } else {
+            (month - 9, year_of_era + era * 400 + 1)
+        };
+        format!("{year:04}-{month:02}-{day:02}")
+    }
+
     /// The root page and one page per visible subcommand.
     ///
     /// Each pair is `(file name, roff)`. `tool use` in section 1 is
@@ -78,13 +98,14 @@ impl Manual {
         doc.text([roman(command.usage(&page.path))]);
 
         let body = command.prose();
-        if !body.is_empty() || command.unknown_flags_note().is_some() {
+        let notes = command.notes();
+        if !body.is_empty() || !notes.is_empty() {
             doc.control("SH", ["DESCRIPTION"]);
             if !body.is_empty() {
                 doc.text([roman(body)]);
             }
-            if let Some(note) = command.unknown_flags_note() {
-                if !body.is_empty() {
+            for (index, note) in notes.into_iter().enumerate() {
+                if index > 0 || !body.is_empty() {
                     doc.control("PP", std::iter::empty::<&str>());
                 }
                 doc.text([roman(note)]);
@@ -108,14 +129,14 @@ impl Manual {
         if !grouped.arguments.is_empty() {
             doc.control("SH", ["ARGUMENTS"]);
             for item in grouped.arguments {
-                item_tp(&mut doc, item, command.long_only);
+                item_tp(&mut doc, item);
             }
         }
         let builtins = command.builtins();
         if !grouped.options.is_empty() || !builtins.is_empty() {
             doc.control("SH", ["OPTIONS"]);
             for item in grouped.options {
-                item_tp(&mut doc, item, command.long_only);
+                item_tp(&mut doc, item);
             }
             for (synopsis, blurb) in builtins {
                 term(&mut doc, vec![bold(synopsis)], blurb);
@@ -124,13 +145,13 @@ impl Manual {
         for (title, items) in grouped.headings {
             doc.control("SH", [arg(title).as_str()]);
             for item in items {
-                item_tp(&mut doc, item, command.long_only);
+                item_tp(&mut doc, item);
             }
         }
         if !page.globals.is_empty() {
             doc.control("SH", ["GLOBAL OPTIONS"]);
-            for global in &page.globals {
-                item_tp(&mut doc, global.item, global.long_only);
+            for item in &page.globals {
+                item_tp(&mut doc, item);
             }
         }
         let after = command.after();
@@ -149,8 +170,35 @@ fn arg(text: &str) -> String {
     if text.is_empty() {
         "\"\"".to_owned()
     } else {
-        text.replace('"', "\\(dq")
+        printable(text)
+            .replace(['\n', '\t'], " ")
+            .replace('"', "\\(dq")
     }
+}
+
+/// Text without the control characters a formatter refuses or a terminal
+/// would act on: an escape or a bell in a default value. A tab is a space.
+fn printable(text: &str) -> String {
+    text.chars()
+        .filter_map(|char| match char {
+            '\n' => Some('\n'),
+            '\t' => Some(' '),
+            char if char.is_control() => None,
+            char => Some(char),
+        })
+        .collect()
+}
+
+fn roman(text: impl AsRef<str>) -> Inline {
+    roff::roman(printable(text.as_ref()))
+}
+
+fn bold(text: impl AsRef<str>) -> Inline {
+    roff::bold(printable(text.as_ref()))
+}
+
+fn italic(text: impl AsRef<str>) -> Inline {
+    roff::italic(printable(text.as_ref()))
 }
 
 fn one_line(text: &str) -> String {
@@ -165,21 +213,21 @@ fn term(doc: &mut Roff, tag: Vec<Inline>, body: &str) {
     }
 }
 
-fn item_tp(doc: &mut Roff, item: &Item, long_only: bool) {
-    term(doc, tag(item, long_only), &item.description());
+fn item_tp(doc: &mut Roff, item: &Item) {
+    term(doc, tag(item), &item.description());
     if let Some(vocabulary) = &item.vocabulary {
         // Indented, so that the next flag is not read as one more keyword.
         doc.control("RS", std::iter::empty::<&str>());
         doc.text([roman("Vocabulary:")]);
         for child in vocabulary.items.iter().filter(|item| !item.hide) {
-            item_tp(doc, child, vocabulary.long_only);
+            item_tp(doc, child);
         }
         doc.control("RE", std::iter::empty::<&str>());
     }
 }
 
-fn tag(item: &Item, long_only: bool) -> Vec<Inline> {
-    let mut tag = vec![bold(item.names(long_only))];
+fn tag(item: &Item) -> Vec<Inline> {
+    let mut tag = vec![bold(item.names())];
     if !item.positional {
         let suffix = item.value_suffix();
         if !suffix.is_empty() {
@@ -238,6 +286,25 @@ mod tests {
             "{page}"
         );
         assert!(page.contains(".SH \"Say \\(dqhi\\(dq\"\n"), "{page}");
+    }
+
+    #[test]
+    fn a_date_is_the_utc_day_and_control_characters_are_dropped() {
+        assert_eq!(Manual::date_of(0), "1970-01-01");
+        assert_eq!(Manual::date_of(951_782_400), "2000-02-29");
+        assert_eq!(Manual::date_of(951_868_799), "2000-02-29");
+        assert_eq!(Manual::date_of(1_798_761_600), "2027-01-01");
+        let flag = Item {
+            long: Some("bell".to_owned()),
+            help: "Ring\u{7} the\u{1b}[0m bell.\tLoudly.".to_owned(),
+            ..Item::default()
+        };
+        let command = Command {
+            items: vec![flag],
+            ..Command::default()
+        };
+        let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
+        assert!(page.contains("Ring the[0m bell. Loudly.\n"), "{page}");
     }
 
     #[test]

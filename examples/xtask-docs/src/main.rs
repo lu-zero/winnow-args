@@ -155,6 +155,11 @@ fn generate(cli: &Cli) -> Result<()> {
         Some(path) => path.clone(),
         None => root.join("target/docs").join(name),
     };
+    // A reproducible build gives the date; any other is dated today.
+    let seconds = match env::var("SOURCE_DATE_EPOCH") {
+        Ok(seconds) => seconds.parse()?,
+        Err(_) => SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+    };
     let mut markdown = Vec::new();
     let mut manual = Vec::new();
     for (given, fallback, ty) in &roots {
@@ -165,7 +170,15 @@ fn generate(cli: &Cli) -> Result<()> {
             &command.name
         });
         markdown.extend(winnow_args_markdown::render_pages(&command, bin)?);
-        manual.extend(Manual::default().render_pages(&command, bin)?);
+        let header = Manual {
+            date: Manual::date_of(seconds),
+            source: match &command.package_version {
+                Some(version) => format!("{bin} {version}"),
+                None => String::new(),
+            },
+            ..Manual::default()
+        };
+        manual.extend(header.render_pages(&command, bin)?);
     }
     for pages in [&markdown, &manual] {
         let mut seen = HashSet::new();

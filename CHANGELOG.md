@@ -12,6 +12,8 @@ are released together. Versions follow [semver](https://semver.org).
   command. The program is only checked, so pages can describe a target that
   is installed and cannot be run. Unset, nothing is written and the generated
   parser is unchanged.
+- **Added**: `FromArg::SPEC`, hidden, which `#[derive(ValueEnum)]` sets: a
+  documentation build uses it to refuse a value whose choices it cannot find.
 - **Changed**: the examples are in `examples/` at the top of the repository,
   with a guide and two documentation generators, an xtask and a justfile.
 

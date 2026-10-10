@@ -29,6 +29,10 @@
 //! target under one name are an error then, since the name is the file, and
 //! a test or a doctest would write its types beside the program's.
 //! rust-analyzer's macro server writes nothing.
+//!
+//! A value's choices are found under the name of its type. Where that name is
+//! an alias, or the type implements `FromArg` by hand, the build with the
+//! variable set fails at the field until `choices(...)` states them there.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -621,6 +625,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut help_items = Vec::new();
     let spec_on = spec::enabled();
     let mut spec_rows = Vec::new();
+    let mut spec_checks = Vec::new();
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
     // variant's default.
     let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
@@ -767,6 +772,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     false,
                 ));
                 if spec_on {
+                    spec_checks.extend(spec_check(&input.generics, Some(ty)));
                     spec_rows.push(occurrence_spec(
                         variant,
                         spec::ItemDoc {
@@ -831,6 +837,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
         if spec_on {
             let value_ty = takes.map(|ty| spanned.or(optional).unwrap_or(ty));
+            spec_checks.extend(spec_check(&input.generics, value_ty));
             spec_rows.push(occurrence_spec(
                 variant,
                 spec::ItemDoc {
@@ -972,6 +979,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         )?;
     }
     Ok(quote! {
+        #(#spec_checks)*
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
             const PREFIXES: &'static [u8] = &[#(#prefixes),*];
 
@@ -1081,15 +1089,38 @@ fn spec_type(ty: &Type) -> syn::Result<String> {
     })
 }
 
-/// The value type's name. Only a `ValueEnum` has a fragment under it.
-fn choices_link(field: &Field) -> Option<String> {
-    if !field.takes_value() {
+/// The type of a field's value, where its choices are looked for.
+fn choices_type(field: &Field) -> Option<&Type> {
+    if !field.takes_value()
+        || field.choices.is_some()
+        || field.keywords
+        || matches!(field.role, Role::Subcommand)
+    {
         return None;
     }
-    let (Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty)) = &field.kind else {
-        return None;
-    };
-    type_ident(ty)
+    match &field.kind {
+        Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty) => Some(ty),
+        Kind::Switch | Kind::Count(_) => None,
+    }
+}
+
+/// The value type's name. Only a `ValueEnum` has a fragment under it.
+fn choices_link(field: &Field) -> Option<String> {
+    choices_type(field).and_then(type_ident)
+}
+
+/// A documentation build fails where a value has choices its fragment cannot
+/// name, so that a page never leaves them out. A generic type is not checked:
+/// a constant cannot name its parameters.
+fn spec_check(generics: &syn::Generics, ty: Option<&Type>) -> Option<TokenStream2> {
+    let ty = ty.filter(|_| generics.params.is_empty())?;
+    let name = type_ident(ty)?;
+    Some(quote::quote_spanned! {ty.span()=>
+        const _: () = ::core::assert!(
+            ::winnow_args::__private::documented_choices::<#ty>(#name),
+            "the documentation cannot find the choices of this value: its type is named through an alias, or implements `FromArg` by hand. State them on the field, as `choices(\"a\", \"b\")`",
+        );
+    })
 }
 
 /// A bare `version` becomes `env!("CARGO_PKG_VERSION")` in help. Cargo has
@@ -1156,11 +1187,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         default: field.default.clone().or_else(|| field.default_note.clone()),
         env: field.env.clone(),
         choices: field.choices.clone().unwrap_or_default(),
-        choices_ty: if field.choices.is_some() || keywords.is_some() {
-            None
-        } else {
-            choices_link(field)
-        },
+        choices_ty: choices_link(field),
         require_equals: field.require_equals,
         global: field.is_global(),
         optional_value: field.default_missing.is_some()
@@ -1229,9 +1256,11 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             &spec_choices,
         )?;
     }
+    let filed = input.ident.unraw().to_string();
     Ok(quote! {
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
             const CHOICES: &'static [&'static str] = &[#(#visible),*];
+            const SPEC: &'static str = #filed;
 
             fn from_arg(
                 __value: &::winnow_args::__private::BStr,
@@ -3304,7 +3333,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             &__ALL
         })
     };
+    let mut spec_checks = Vec::new();
     if spec::enabled() {
+        spec_checks.extend(
+            fields
+                .iter()
+                .filter_map(|field| spec_check(&input.generics, choices_type(field))),
+        );
         let items = fields
             .iter()
             .filter(|field| !matches!(field.role, Role::Subcommand))
@@ -3342,6 +3377,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
 
     Ok(quote! {
+        #(#spec_checks)*
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: #program_name,

@@ -93,9 +93,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Man and markdown pages, one per command, from TOML fragments the derive
       writes when `WINNOW_ARGS_SPEC` is set: the program is checked, not run,
       so the pages describe any installed target
-- [ ] In those pages: choices of a hand-written `FromArg` or through a type
-      alias unless the field states them (`choices`), two types of one target
-      under one name
+- [x] A documentation build fails where a value's choices are out of the
+      derive's sight (a type alias, a hand-written `FromArg`), until the field
+      states them
+- [ ] In those pages: two types of one target under one name
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate

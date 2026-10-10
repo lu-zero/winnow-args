@@ -15,11 +15,12 @@ is the type of that name in the same crate, else the only one in the others;
 `CRATE::Type` names the root when two crates have one. Markdown and man pages are rendered by
 `winnow-args-markdown` and `winnow-args-man`.
 
-What the fragments do not hold: a type that implements `Args` or `FromArg` by
-hand writes none, so its flags or its choices are missing, and so are the
-choices of a field declared through a type alias, which the derive cannot see
-through. `choices` on the field states them, and a fragment written by hand
-beside the others stands for a hand-written `Args`.
+A page's rows are those of `--help`. What help does not say is a sentence of
+the page: under `long_only`, that a long option may also be spelled with one
+dash.
 
-Under `long_only`, a page lists the one-dash spelling of each long name beside
-the two-dash one. `--help` shows only the latter.
+The derive names a value's type, and finds its choices under that name. A type
+named through an alias, or one that implements `FromArg` by hand, has choices
+the name does not lead to: the documentation build stops there, and `choices`
+on the field states them. A type that implements `Args` by hand writes no
+fragment; one written by hand beside the others stands for it.

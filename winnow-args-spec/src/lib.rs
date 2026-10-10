@@ -144,15 +144,6 @@ pub struct Item {
     pub vocabulary: Option<Box<Command>>,
 }
 
-/// A global flag inherited from an ancestor command.
-#[derive(Debug, Clone, Copy)]
-pub struct Global<'a> {
-    /// The flag.
-    pub item: &'a Item,
-    /// `long_only` of the command that declared it.
-    pub long_only: bool,
-}
-
 /// Visible flags and positionals in the order help lists them.
 #[derive(Debug)]
 pub struct Grouped<'a> {
@@ -172,7 +163,7 @@ pub struct Page<'a> {
     /// The command this page documents.
     pub command: &'a Command,
     /// Global flags inherited from parents, in the order they were declared.
-    pub globals: Vec<Global<'a>>,
+    pub globals: Vec<&'a Item>,
 }
 
 /// Fragments loaded from a directory or from strings, by crate and type name.
@@ -459,10 +450,17 @@ impl Command {
         rows
     }
 
-    /// The sentence for `unknown_flags = "value"`.
-    pub fn unknown_flags_note(&self) -> Option<&'static str> {
-        self.unknown_flags_value
-            .then_some("A word that looks like a flag and names none is a positional value.")
+    /// What the rows of a page do not say about how this command reads its
+    /// words: `long_only`, and `unknown_flags = "value"`.
+    pub fn notes(&self) -> Vec<&'static str> {
+        let mut notes = Vec::new();
+        if self.long_only {
+            notes.push("A long option may also be spelled with one dash.");
+        }
+        if self.unknown_flags_value {
+            notes.push("A word that looks like a flag and names none is a positional value.");
+        }
+        notes
     }
 }
 
@@ -524,12 +522,15 @@ impl Item {
         if self.stop_flags {
             append_note(&mut text, "Flags stop once this argument has a value.");
         }
+        if self.two_dashes {
+            append_note(&mut text, "Spelled with two dashes only.");
+        }
         text
     }
 
     /// The left-hand spelling help prints for this item.
-    pub fn synopsis(&self, long_only: bool) -> String {
-        let mut line = self.names(long_only);
+    pub fn synopsis(&self) -> String {
+        let mut line = self.names();
         if !self.positional {
             line.push_str(&self.value_suffix());
         }
@@ -538,9 +539,10 @@ impl Item {
 
     /// [`synopsis`](Self::synopsis) without the value placeholder of a flag.
     ///
-    /// Under `long_only`, a long name also contributes its one-dash form,
-    /// unless the item refuses that form.
-    pub fn names(&self, long_only: bool) -> String {
+    /// A long name is shown with two dashes, as help shows it. Under
+    /// `long_only` its one-dash spelling is a sentence of the page, in
+    /// [`Command::notes`].
+    pub fn names(&self) -> String {
         if self.positional {
             return positional_placeholder(self);
         }
@@ -554,7 +556,9 @@ impl Item {
         if let Some(plus) = self.plus {
             names.push(format!("+{plus}"));
         }
-        push_long(&mut names, self.long.as_deref(), long_only, self.two_dashes);
+        if let Some(long) = &self.long {
+            names.push(format!("--{long}"));
+        }
         let mut line = names.join(", ");
         if let Some(negate) = &self.negate {
             if !line.is_empty() {
@@ -615,25 +619,16 @@ pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
 fn walk<'a>(
     command: &'a Command,
     path: Vec<String>,
-    ancestors: &[Global<'a>],
+    ancestors: &[&'a Item],
     out: &mut Vec<Page<'a>>,
 ) {
     let globals = ancestors
         .iter()
         .copied()
-        .filter(|ancestor| !ancestor.item.hide && !ancestor.item.positional)
+        .filter(|item| !item.hide && !item.positional)
         .collect();
     let mut next = ancestors.to_vec();
-    next.extend(
-        command
-            .items
-            .iter()
-            .filter(|item| item.global)
-            .map(|item| Global {
-                item,
-                long_only: command.long_only,
-            }),
-    );
+    next.extend(command.items.iter().filter(|item| item.global));
     out.push(Page {
         path: path.clone(),
         command,
@@ -644,16 +639,6 @@ fn walk<'a>(
         child.push(sub.name.clone());
         walk(&sub.command, child, &next, out);
     }
-}
-
-fn push_long(names: &mut Vec<String>, long: Option<&str>, long_only: bool, two_dashes: bool) {
-    let Some(long) = long else {
-        return;
-    };
-    if long_only && !two_dashes {
-        names.push(format!("-{long}"));
-    }
-    names.push(format!("--{long}"));
 }
 
 fn positional_placeholder(item: &Item) -> String {
@@ -1238,7 +1223,7 @@ mod tests {
             pages[1]
                 .globals
                 .iter()
-                .any(|global| global.item.long.as_deref() == Some("verbose"))
+                .any(|global| global.long.as_deref() == Some("verbose"))
         );
         assert!(pages[0].globals.is_empty());
     }
@@ -1507,11 +1492,15 @@ mod tests {
         .unwrap();
         assert_eq!(command.package_version.as_deref(), Some("1.2.3"));
         assert_eq!(
-            command.items[0].synopsis(command.long_only),
-            "-f, -force, --force / --no-force=<MODE>"
+            command.items[0].synopsis(),
+            "-f, --force / --no-force=<MODE>"
         );
         assert!(command.items[0].choices.is_empty());
-        assert_eq!(command.items[1].synopsis(false), "<FILE>...");
+        assert_eq!(command.items[1].synopsis(), "<FILE>...");
+        assert_eq!(
+            command.notes(),
+            ["A long option may also be spelled with one dash."]
+        );
         assert_eq!(
             command.items[0].description(),
             "Force it. [default: on] The rest of the word is the value."
