@@ -17,9 +17,14 @@ pub(crate) fn enabled() -> bool {
 }
 
 fn dir() -> Option<PathBuf> {
-    std::env::var_os("WINNOW_ARGS_SPEC")
-        .filter(|dir| !dir.is_empty())
-        .map(PathBuf::from)
+    let dir = std::env::var_os("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty())?;
+    // An editor's macro server expands a type again at each edit, for no
+    // build: with the variable in its environment it writes nothing.
+    let editor = std::env::current_exe().is_ok_and(|exe| {
+        exe.file_stem()
+            .is_some_and(|name| name.to_string_lossy().starts_with("rust-analyzer"))
+    });
+    (!editor).then(|| PathBuf::from(dir))
 }
 
 #[derive(Default)]
@@ -93,10 +98,14 @@ pub(crate) fn write_args(span: Span, doc: &ArgsDoc) -> syn::Result<()> {
 pub(crate) fn write_subcommands(
     span: Span,
     ident: &str,
+    about: &str,
+    long_about: &str,
     variants: &[VariantDoc],
 ) -> syn::Result<()> {
     let mut out = String::new();
     header(&mut out, "subcommands", ident);
+    field(&mut out, "about", about);
+    field(&mut out, "long_about", long_about);
     for variant in variants {
         out.push('\n');
         out.push_str("[[variant]]\n");

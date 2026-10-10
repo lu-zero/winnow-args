@@ -31,7 +31,7 @@ pub fn render(page: &Page<'_>) -> String {
     out.push_str("\n\n");
     let about = command.prose();
     if !about.is_empty() {
-        out.push_str(&escape(about));
+        out.push_str(&blocks(about));
         out.push_str("\n\n");
     }
 
@@ -88,7 +88,7 @@ pub fn render(page: &Page<'_>) -> String {
     }
     let after = command.after();
     if !after.is_empty() {
-        out.push_str(&escape(after));
+        out.push_str(&blocks(after));
         out.push_str("\n\n");
     }
     finish(out)
@@ -147,10 +147,39 @@ fn push_term(out: &mut String, synopsis: &str, description: &str, indent: &str) 
     out.push('\n');
 }
 
-/// Escape Markdown outside paired backtick spans.
-fn escape(text: &str) -> String {
+/// The text of a page, outside its lists. A run of lines indented by four
+/// spaces or a tab is kept as written, in a code fence: that is how an
+/// example in after-help is laid out, and a paragraph would fold it into one
+/// line. The other lines are escaped.
+fn blocks(text: &str) -> String {
     let mut out = String::new();
-    let mut rest = text;
+    let mut fenced = false;
+    for line in text.split('\n') {
+        let kept = (line.starts_with("    ") || line.starts_with('\t')) && !line.trim().is_empty();
+        if kept != fenced {
+            out.push_str("```\n");
+            fenced = kept;
+        }
+        if kept {
+            out.push_str(line);
+        } else {
+            out.push_str(&escape(line));
+        }
+        out.push('\n');
+    }
+    if fenced {
+        out.push_str("```\n");
+    }
+    out.pop();
+    out
+}
+
+/// Escape Markdown outside paired backtick spans, and a `#` that would start
+/// a heading.
+fn escape(text: &str) -> String {
+    let text = &text.replace("\n#", "\n\\#");
+    let mut out = String::from(if text.starts_with('#') { "\\" } else { "" });
+    let mut rest = text.as_str();
     while let Some(open) = rest.find('`') {
         let Some(len) = rest[open + 1..].find('`') else {
             break;
@@ -211,6 +240,7 @@ mod tests {
         Command {
             name: "tool".to_owned(),
             about: "Use *wild* and `a<b>` for <FILE> & co.".to_owned(),
+            after_help: "Examples:\n    $ tool use <x>\n# not a heading".to_owned(),
             items: vec![verbose, file],
             subcommands: vec![winnow_args_spec::Sub {
                 name: "use".to_owned(),
@@ -256,6 +286,10 @@ mod tests {
         );
         assert!(root.contains("* `-V, --version` — Print version"), "{root}");
         assert!(root.contains("names none is a positional value"), "{root}");
+        assert!(
+            root.ends_with("Examples:\n```\n    $ tool use <x>\n```\n\\# not a heading\n"),
+            "{root}"
+        );
         let child = &pages[1].1;
         assert!(
             child.contains("## Global options\n\n* `-v, --verbose` — Say more."),

@@ -94,8 +94,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       writes when `WINNOW_ARGS_SPEC` is set: the program is checked, not run,
       so the pages describe any installed target
 - [ ] In those pages: choices of a hand-written `FromArg` or through a type
-      alias, a program whose top level is a `Subcommand` enum, two types of
-      one target under one name
+      alias unless the field states them (`choices`), two types of one target
+      under one name
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate

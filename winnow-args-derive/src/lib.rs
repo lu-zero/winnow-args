@@ -25,10 +25,10 @@
 //! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
 //! crate again when the variable changes.
 //!
-//! Set it for the documentation build alone, not in a shell or an editor: two
-//! types of one target under one name are an error then, since the name is
-//! the file, and a test or a doctest would write its types beside the
-//! program's.
+//! Set it for the documentation build alone, not in a shell: two types of one
+//! target under one name are an error then, since the name is the file, and
+//! a test or a doctest would write its types beside the program's.
+//! rust-analyzer's macro server writes nothing.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -396,12 +396,14 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         arms.push(quote!(#pattern => (#parse).map_err(|e| e.within(#primary)),));
         patterns.push(pattern);
     }
-    let (about, long_about) = docs(&input.attrs);
-    let (about, long_about) = (text(&about), text(&long_about));
+    let (about_text, long_about_text) = docs(&input.attrs);
+    let (about, long_about) = (text(&about_text), text(&long_about_text));
     if spec_on {
         spec::write_subcommands(
             input.ident.span(),
             &input.ident.unraw().to_string(),
+            &about_text,
+            &long_about_text,
             &spec_variants,
         )?;
     }

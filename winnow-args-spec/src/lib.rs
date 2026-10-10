@@ -185,7 +185,7 @@ pub struct Catalog {
 #[derive(Debug)]
 enum Fragment {
     Args(Box<ArgsFrag>),
-    Subcommands(Vec<VariantFrag>),
+    Subcommands(SubsFrag),
     Occurrence(Vec<ItemDraft>),
     Choices(Vec<String>),
 }
@@ -207,6 +207,13 @@ struct ArgsFrag {
     long_only: bool,
     unknown_flags_value: bool,
     package_version: Option<String>,
+}
+
+#[derive(Debug)]
+struct SubsFrag {
+    about: String,
+    long_about: String,
+    variants: Vec<VariantFrag>,
 }
 
 #[derive(Debug)]
@@ -301,7 +308,8 @@ impl Catalog {
     /// Every command no other fragment names, sorted, each as
     /// [`stitch`](Self::stitch) takes it.
     ///
-    /// Flatten, sequence, subcommand and keywords count as names.
+    /// Flatten, sequence, subcommand and keywords count as names. A subcommand
+    /// enum nothing names is a command: a program may be one.
     pub fn roots(&self) -> Vec<String> {
         let mut referenced = HashSet::new();
         for (krate, fragments) in &self.crates {
@@ -314,7 +322,8 @@ impl Catalog {
                         .chain(&args.subcommand)
                         .chain(args.items.iter().filter_map(|item| item.keywords.as_ref()))
                         .collect(),
-                    Fragment::Subcommands(variants) => variants
+                    Fragment::Subcommands(subs) => subs
+                        .variants
                         .iter()
                         .filter_map(|variant| variant.ty.as_ref())
                         .collect(),
@@ -330,7 +339,7 @@ impl Catalog {
         let mut roots = Vec::new();
         for (krate, fragments) in &self.crates {
             for (ident, fragment) in fragments {
-                if !matches!(fragment, Fragment::Args(_))
+                if !matches!(fragment, Fragment::Args(_) | Fragment::Subcommands(_))
                     || referenced.contains(&(krate.as_str(), ident.as_str()))
                 {
                     continue;
@@ -688,7 +697,11 @@ fn parse_fragment(text: &str) -> Result<(String, Fragment), Error> {
     let kind = req_str(&table, "kind")?;
     let fragment = match kind.as_str() {
         "args" => Fragment::Args(Box::new(parse_args(&table)?)),
-        "subcommands" => Fragment::Subcommands(parse_variants(&table)?),
+        "subcommands" => Fragment::Subcommands(SubsFrag {
+            about: opt_str(&table, "about")?,
+            long_about: opt_str(&table, "long_about")?,
+            variants: parse_variants(&table)?,
+        }),
         "occurrence" => Fragment::Occurrence(parse_items(&table)?),
         "choices" => Fragment::Choices(strings(&table, "choices")?),
         other => return Err(Error::new(format!("unknown kind `{other}`"))),
@@ -820,8 +833,24 @@ impl Catalog {
         if stack.contains(&(krate, ident)) {
             return Err(Error::new(format!("`{ident}` refers to itself")));
         }
-        let Fragment::Args(args) = fragment else {
-            return Err(Error::new(format!("`{ident}` is not a command")));
+        let args = match fragment {
+            Fragment::Args(args) => args,
+            // An enum that is the whole command line.
+            Fragment::Subcommands(subs) => {
+                stack.push((krate, ident));
+                let subcommands = self.variants(krate, subs, stack)?;
+                stack.pop();
+                return Ok(Command {
+                    about: subs.about.clone(),
+                    long_about: subs.long_about.clone(),
+                    subcommands,
+                    subcommand_required: true,
+                    help_flag: true,
+                    help_short: true,
+                    ..Command::default()
+                });
+            }
+            _ => return Err(Error::new(format!("`{ident}` is not a command"))),
         };
         stack.push((krate, ident));
         let mut items = Vec::new();
@@ -873,11 +902,20 @@ impl Catalog {
             return Ok(Vec::new());
         };
         let (krate, fragment) = self.fragment(from, name)?;
-        let Fragment::Subcommands(variants) = fragment else {
+        let Fragment::Subcommands(subs) = fragment else {
             return Err(Error::new(format!("`{name}` is not a subcommand enum")));
         };
+        self.variants(krate, subs, stack)
+    }
+
+    fn variants<'a>(
+        &'a self,
+        krate: &str,
+        frag: &'a SubsFrag,
+        stack: &mut Vec<(&'a str, &'a str)>,
+    ) -> Result<Vec<Sub>, Error> {
         let mut subs = Vec::new();
-        for variant in variants {
+        for variant in &frag.variants {
             let mut command = match &variant.ty {
                 Some(ty) => self.command(krate, ty, stack)?,
                 None => Command {
@@ -1350,6 +1388,42 @@ mod tests {
             .map(|item| item.long.as_deref().unwrap())
             .collect();
         assert_eq!(longs, ["mine", "shared"]);
+    }
+
+    #[test]
+    fn a_subcommand_enum_nothing_names_is_the_program() {
+        let catalog = Catalog::from_pairs([
+            (
+                "Tool",
+                r#"
+                version = 1
+                kind = "subcommands"
+                ident = "Tool"
+                about = "A tool."
+
+                [[variant]]
+                name = "run"
+                ty = "Run"
+                "#,
+            ),
+            (
+                "Run",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Run"
+                "#,
+            ),
+        ])
+        .unwrap();
+        assert_eq!(catalog.root().unwrap(), "Tool");
+        let command = catalog.stitch("Tool").unwrap();
+        assert_eq!(command.about, "A tool.");
+        assert!(command.subcommand_required);
+        assert_eq!(
+            command.usage(&["tool".to_owned()]),
+            "tool [OPTIONS] <COMMAND>"
+        );
     }
 
     #[test]

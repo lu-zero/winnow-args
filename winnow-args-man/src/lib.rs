@@ -56,7 +56,8 @@ impl Manual {
         let command = page.command;
         let mut doc = Roff::new();
         let name = page.stem();
-        let mut header = vec![arg(&name), arg(&self.section)];
+        // The title is in capitals by convention; NAME keeps the word as typed.
+        let mut header = vec![arg(&name.to_uppercase()), arg(&self.section)];
         if !self.date.is_empty() || !self.source.is_empty() || !self.manual.is_empty() {
             header.extend([arg(&self.date), arg(&self.source), arg(&self.manual)]);
         }
@@ -167,10 +168,13 @@ fn term(doc: &mut Roff, tag: Vec<Inline>, body: &str) {
 fn item_tp(doc: &mut Roff, item: &Item, long_only: bool) {
     term(doc, tag(item, long_only), &item.description());
     if let Some(vocabulary) = &item.vocabulary {
+        // Indented, so that the next flag is not read as one more keyword.
+        doc.control("RS", std::iter::empty::<&str>());
         doc.text([roman("Vocabulary:")]);
         for child in vocabulary.items.iter().filter(|item| !item.hide) {
             item_tp(doc, child, vocabulary.long_only);
         }
+        doc.control("RE", std::iter::empty::<&str>());
     }
 }
 
@@ -203,7 +207,7 @@ mod tests {
             ..Command::default()
         };
         let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
-        assert!(page.contains(".TH tool 1\n"), "{page}");
+        assert!(page.contains(".TH TOOL 1\n"), "{page}");
         assert!(
             page.contains("\\-\\-file") || page.contains("\\-file"),
             "{page}"
@@ -230,7 +234,7 @@ mod tests {
         };
         let page = manual.render(&pages(&command, "tool").unwrap()[0]);
         assert!(
-            page.contains(".TH tool 1 \"\" \"tool 1.0\" \"User Commands\"\n"),
+            page.contains(".TH TOOL 1 \"\" \"tool 1.0\" \"User Commands\"\n"),
             "{page}"
         );
         assert!(page.contains(".SH \"Say \\(dqhi\\(dq\"\n"), "{page}");

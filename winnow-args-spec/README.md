@@ -18,8 +18,8 @@ is the type of that name in the same crate, else the only one in the others;
 What the fragments do not hold: a type that implements `Args` or `FromArg` by
 hand writes none, so its flags or its choices are missing, and so are the
 choices of a field declared through a type alias, which the derive cannot see
-through. A program whose top level is a `Subcommand` enum has no command to
-start from.
+through. `choices` on the field states them, and a fragment written by hand
+beside the others stands for a hand-written `Args`.
 
 Under `long_only`, a page lists the one-dash spelling of each long name beside
 the two-dash one. `--help` shows only the latter.

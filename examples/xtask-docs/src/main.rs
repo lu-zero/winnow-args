@@ -68,7 +68,8 @@ struct Docs {
 
     /// Directory for the pages. The default is `target/docs/<name>`.
     ///
-    /// Its `md` and `man` subdirectories lose the pages of an earlier run.
+    /// Its `md` and `man` subdirectories lose the pages of an earlier run:
+    /// the files with a page's extension, and nothing else.
     #[arg(short, long)]
     out: Option<PathBuf>,
 
@@ -224,13 +225,20 @@ fn run(command: &mut Command, what: &str) -> Result<()> {
     }
 }
 
-/// The pages, and only these: `dir` is the generator's own, and a page left
-/// from an earlier run would describe a command that is gone.
+/// The pages, and no page of an earlier run: it would describe a command that
+/// is gone. Only files with a page's extension are removed.
 fn write_pairs(dir: &Path, pages: &[(String, String)]) -> Result<()> {
-    if dir.exists() {
-        fs::remove_dir_all(dir)?;
-    }
     fs::create_dir_all(dir)?;
+    let kinds: HashSet<_> = pages
+        .iter()
+        .filter_map(|(name, _)| Path::new(name).extension())
+        .collect();
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.is_file() && path.extension().is_some_and(|kind| kinds.contains(kind)) {
+            fs::remove_file(path)?;
+        }
+    }
     for (name, body) in pages {
         fs::write(dir.join(name), body)?;
     }
