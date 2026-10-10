@@ -52,7 +52,8 @@ check:
     run cargo test --workspace --all-features
     # The fragments the derive writes, read back. Only this test: the others
     # reuse type names, and a fragment is filed under its type's name.
-    WINNOW_ARGS_SPEC="$PWD/target/spec-test" run cargo test -p winnow-args --all-features --test spec_fragments
+    rm -rf target/spec-test
+    WINNOW_ARGS_SPEC="$PWD/target/spec-test/$(date +%s%N)" run cargo test -p winnow-args --all-features --test spec_fragments
     exit "$status"
 
 # Regenerate a generated source:

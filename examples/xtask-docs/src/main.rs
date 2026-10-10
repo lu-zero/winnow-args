@@ -67,6 +67,8 @@ struct Docs {
     package: Option<String>,
 
     /// Directory for the pages. The default is `target/docs/<name>`.
+    ///
+    /// Its `md` and `man` subdirectories lose the pages of an earlier run.
     #[arg(short, long)]
     out: Option<PathBuf>,
 
@@ -80,6 +82,7 @@ struct Docs {
     ///
     /// A crate with several commands names each one. `NAME=TYPE` also gives
     /// the word the pages call it, for a command that has no name of its own.
+    /// `CRATE::TYPE` is the type of one crate, when two have one of that name.
     #[arg(long, value_name = "[NAME=]TYPE")]
     root: Vec<String>,
 }
@@ -127,6 +130,12 @@ fn generate(cli: &Cli) -> Result<()> {
     check.env("WINNOW_ARGS_SPEC", &spec);
     run(&mut check, &format!("cargo check -p {package}"))?;
 
+    if !spec.is_dir() {
+        return Err(format!(
+            "no derive wrote a fragment: does {package} derive `Args`, and does `cargo check -p {package}` compile it?"
+        )
+        .into());
+    }
     let catalog = Catalog::load(&spec)?;
     // (the name given, the name of last resort, the type)
     let roots: Vec<(Option<&str>, &str, String)> = if docs.root.is_empty() {
@@ -136,13 +145,13 @@ fn generate(cli: &Cli) -> Result<()> {
             .iter()
             .map(|root| match root.split_once('=') {
                 Some((name, ty)) => (Some(name), ty, ty.to_owned()),
-                None => (None, root.as_str(), root.clone()),
+                // A crate is not part of the word a command goes by.
+                None => (None, root.rsplit("::").next().unwrap_or(root), root.clone()),
             })
             .collect()
     };
     let out = match &docs.out {
-        Some(path) if path.is_absolute() => path.clone(),
-        Some(path) => root.join(path),
+        Some(path) => path.clone(),
         None => root.join("target/docs").join(name),
     };
     let mut markdown = Vec::new();
@@ -156,6 +165,12 @@ fn generate(cli: &Cli) -> Result<()> {
         });
         markdown.extend(winnow_args_markdown::render_pages(&command, bin)?);
         manual.extend(Manual::default().render_pages(&command, bin)?);
+    }
+    for pages in [&markdown, &manual] {
+        let mut seen = HashSet::new();
+        if let Some((name, _)) = pages.iter().find(|(name, _)| !seen.insert(name)) {
+            return Err(format!("two roots would both write {name}").into());
+        }
     }
     write_pairs(&out.join("md"), &markdown)?;
     write_pairs(&out.join("man"), &manual)?;
@@ -184,7 +199,8 @@ fn workspace() -> Result<PathBuf> {
 }
 
 fn cargo(subcommand: &str, root: &Path, target_dir: &Path) -> Command {
-    let mut command = Command::new("cargo");
+    // The cargo that runs this program, when it was run through one.
+    let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
     command
         .arg(subcommand)
         .arg("--manifest-path")
@@ -208,13 +224,14 @@ fn run(command: &mut Command, what: &str) -> Result<()> {
     }
 }
 
+/// The pages, and only these: `dir` is the generator's own, and a page left
+/// from an earlier run would describe a command that is gone.
 fn write_pairs(dir: &Path, pages: &[(String, String)]) -> Result<()> {
+    if dir.exists() {
+        fs::remove_dir_all(dir)?;
+    }
     fs::create_dir_all(dir)?;
-    let mut seen = HashSet::new();
     for (name, body) in pages {
-        if !seen.insert(name) {
-            return Err(format!("two roots would both write {name}").into());
-        }
         fs::write(dir.join(name), body)?;
     }
     Ok(())

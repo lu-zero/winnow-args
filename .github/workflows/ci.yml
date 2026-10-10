@@ -58,6 +58,11 @@ jobs:
         with:
           toolchain: stable
       - run: cargo test --workspace --all-features
+      # The fragments the derive writes, read back. Only this test: the others
+      # reuse type names, and a fragment is filed under its type's name.
+      - run: cargo test -p winnow-args --all-features --test spec_fragments
+        env:
+          WINNOW_ARGS_SPEC: ${{ runner.temp }}/spec
 
   clippy:
     name: Clippy
@@ -91,5 +96,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@v1
         with:
           toolchain: stable
-      - run: cargo doc -p winnow-args -p winnow-args-derive --no-deps --all-features
+      - run: cargo doc -p winnow-args -p winnow-args-derive -p winnow-args-spec -p winnow-args-markdown -p winnow-args-man --no-deps --all-features
       - run: cargo doc -p winnow-args --no-deps --no-default-features

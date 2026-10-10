@@ -56,11 +56,13 @@ cargo run -p xtask-docs -- gen docs --root declare=DeclareCommand --root set=Set
 
 With no arguments it documents `brush_builtins`. Pages land in
 `target/docs/<name>/`, markdown under `md/` and man pages under `man/`.
-`--out` changes that directory. `--target` checks the crate for that triple
+`--out` changes that directory; its `md` and `man` subdirectories are emptied
+first, so a page never outlives its command. `--target` checks the crate for that triple
 first, so the pages match its `cfg`. The crate is not linked, so the target
 needs no cross toolchain, only `rustup target add`.
 
 A crate with several commands, as brush's builtins are, has no single
 command that nothing else names. `--root` names each type to document, and
 may repeat. `NAME=TYPE` also gives the word the pages use for a command
-that has no name of its own.
+that has no name of its own, and `CRATE::TYPE` picks the type of one crate
+when a dependency has one of the same name.
