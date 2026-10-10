@@ -7,6 +7,7 @@
 //! subcommands, then each flatten's resolved subcommands.
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -282,6 +283,45 @@ impl Catalog {
     pub fn stitch(&self, root: &str) -> Result<Command, Error> {
         let mut stack = Vec::new();
         self.command(root, &mut stack)
+    }
+
+    /// The command no other fragment names.
+    ///
+    /// Flatten, sequence, subcommand and keywords count as names. A
+    /// documentation build has one such command, the program.
+    pub fn root(&self) -> Result<String, Error> {
+        let mut referenced = HashSet::new();
+        for fragment in self.fragments.values() {
+            match fragment {
+                Fragment::Args(args) => {
+                    referenced.extend(args.flatten.iter().cloned());
+                    referenced.extend(args.sequence.iter().cloned());
+                    referenced.extend(args.subcommand.iter().cloned());
+                    referenced.extend(args.items.iter().filter_map(|item| item.keywords.clone()));
+                }
+                Fragment::Subcommands(variants) => {
+                    referenced.extend(variants.iter().filter_map(|variant| variant.ty.clone()));
+                }
+                Fragment::Occurrence(_) | Fragment::Choices(_) => {}
+            }
+        }
+        let mut roots: Vec<String> = self
+            .fragments
+            .iter()
+            .filter(|(ident, fragment)| {
+                matches!(fragment, Fragment::Args(_)) && !referenced.contains(*ident)
+            })
+            .map(|(ident, _)| ident.clone())
+            .collect();
+        roots.sort();
+        match roots.as_slice() {
+            [one] => Ok(one.clone()),
+            [] => Err(Error::new("no unreferenced command")),
+            many => Err(Error::new(format!(
+                "more than one unreferenced command: {}",
+                many.join(", ")
+            ))),
+        }
     }
 }
 
@@ -1102,6 +1142,67 @@ mod tests {
                 .any(|global| global.item.long.as_deref() == Some("verbose"))
         );
         assert!(pages[0].globals.is_empty());
+    }
+
+    #[test]
+    fn the_root_is_the_unreferenced_command() {
+        let catalog = Catalog::from_pairs([
+            (
+                "Parent",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Parent"
+                flatten = ["Child"]
+                subcommand = "Ops"
+                "#,
+            ),
+            (
+                "Child",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Child"
+                "#,
+            ),
+            (
+                "Ops",
+                r#"
+                version = 1
+                kind = "subcommands"
+                ident = "Ops"
+
+                [[variant]]
+                name = "run"
+                ty = "Child"
+                "#,
+            ),
+        ])
+        .unwrap();
+        assert_eq!(catalog.root().unwrap(), "Parent");
+
+        let two = Catalog::from_pairs([
+            (
+                "One",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "One"
+                "#,
+            ),
+            (
+                "Two",
+                r#"
+                version = 1
+                kind = "args"
+                ident = "Two"
+                "#,
+            ),
+        ])
+        .unwrap();
+        let error = two.root().unwrap_err();
+        assert!(error.to_string().contains("One"), "{error}");
+        assert!(error.to_string().contains("Two"), "{error}");
     }
 
     #[test]
