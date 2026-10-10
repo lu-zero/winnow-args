@@ -264,9 +264,24 @@ impl Catalog {
 
     /// The command no other fragment names.
     ///
-    /// Flatten, sequence, subcommand and keywords count as names. A
-    /// documentation build has one such command, the program.
+    /// A documentation build of a program has one such command, the program.
+    /// A crate with several is asked for its [`roots`](Self::roots).
     pub fn root(&self) -> Result<String, Error> {
+        let mut roots = self.roots();
+        match roots.len() {
+            1 => Ok(roots.remove(0)),
+            0 => Err(Error::new("no unreferenced command")),
+            _ => Err(Error::new(format!(
+                "more than one unreferenced command: {}",
+                roots.join(", ")
+            ))),
+        }
+    }
+
+    /// Every command no other fragment names, sorted.
+    ///
+    /// Flatten, sequence, subcommand and keywords count as names.
+    pub fn roots(&self) -> Vec<String> {
         let mut referenced = HashSet::new();
         for fragment in self.fragments.values() {
             match fragment {
@@ -291,14 +306,7 @@ impl Catalog {
             .map(|(ident, _)| ident.clone())
             .collect();
         roots.sort();
-        match roots.as_slice() {
-            [one] => Ok(one.clone()),
-            [] => Err(Error::new("no unreferenced command")),
-            many => Err(Error::new(format!(
-                "more than one unreferenced command: {}",
-                many.join(", ")
-            ))),
-        }
+        roots
     }
 }
 
@@ -1211,6 +1219,7 @@ mod tests {
             ),
         ])
         .unwrap();
+        assert_eq!(two.roots(), ["One", "Two"]);
         let error = two.root().unwrap_err();
         assert!(error.to_string().contains("One"), "{error}");
         assert!(error.to_string().contains("Two"), "{error}");
