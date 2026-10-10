@@ -20,10 +20,15 @@
 //! When the environment variable `WINNOW_ARGS_SPEC` holds the absolute path of
 //! a directory, each derive also writes `CRATE/Type.toml` under it: what help
 //! knows of the type, with a flatten or a subcommand as the other type's name.
-//! `winnow-args-spec` reads them back, for `winnow-args-man` and
+//! A binary or an example writes under `CRATE-bin`, apart from the library of
+//! its package. `winnow-args-spec` reads them back, for `winnow-args-man` and
 //! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
-//! crate again when the variable changes. Two types of one crate under one
-//! name are an error then, since the name is the file.
+//! crate again when the variable changes.
+//!
+//! Set it for the documentation build alone, not in a shell or an editor: two
+//! types of one target under one name are an error then, since the name is
+//! the file, and a test or a doctest would write its types beside the
+//! program's.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};

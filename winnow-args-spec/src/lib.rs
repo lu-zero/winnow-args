@@ -1,11 +1,13 @@
 //! Command trees stitched from the derive's TOML fragments.
 //!
-//! Each derived type is one file. A flatten or a subcommand is the other
-//! type's name, not a copy of its fields. [`Catalog::stitch`] follows those
-//! names. Order is the order of the lists in the files: a command's own
+//! Each derived type is one file, in the directory of its crate. A flatten or
+//! a subcommand is the other type's name, not a copy of its fields.
+//! [`Catalog::stitch`] follows those names: to the type of that name in the
+//! same crate, else to the only one of that name in the others. Order is the order of the lists in the files: a command's own
 //! items, then each flatten's resolved items, then its sequence; its own
 //! subcommands, then each flatten's resolved subcommands.
 
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
@@ -173,10 +175,11 @@ pub struct Page<'a> {
     pub globals: Vec<Global<'a>>,
 }
 
-/// Fragments loaded from a directory or from strings, indexed by type name.
-#[derive(Debug)]
+/// Fragments loaded from a directory or from strings, by crate and type name.
+#[derive(Debug, Default)]
 pub struct Catalog {
-    fragments: HashMap<String, Fragment>,
+    /// Fragments given without a crate are under `""`.
+    crates: BTreeMap<String, HashMap<String, Fragment>>,
 }
 
 #[derive(Debug)]
@@ -224,42 +227,59 @@ struct ItemDraft {
 }
 
 impl Catalog {
-    /// Every `*.toml` file under `dir`, including crate subdirectories.
+    /// Every `*.toml` file under `dir`. A subdirectory is a crate, as the
+    /// derive writes one, and a file directly in `dir` has none.
     pub fn load(dir: &Path) -> Result<Self, Error> {
         let mut files = Vec::new();
         collect(dir, &mut files)?;
         files.sort();
-        let mut pairs = Vec::new();
+        let mut catalog = Self::default();
         for path in files {
             let text = fs::read_to_string(&path)
                 .map_err(|error| Error::new(format!("reading {}: {error}", path.display())))?;
-            pairs.push((path.display().to_string(), text));
+            let mut inside = path.strip_prefix(dir).unwrap_or(&path).components();
+            let krate = match (inside.next(), inside.next()) {
+                (Some(first), Some(_)) => first.as_os_str().to_string_lossy().into_owned(),
+                _ => String::new(),
+            };
+            catalog.insert(&krate, &path.display().to_string(), &text)?;
         }
-        Self::from_pairs(pairs)
+        Ok(catalog)
     }
 
-    /// Fragments already in memory. `name` is only used in errors.
+    /// Fragments already in memory, of no crate. `name` is only used in errors.
     pub fn from_pairs<N, T>(pairs: impl IntoIterator<Item = (N, T)>) -> Result<Self, Error>
     where
         N: AsRef<str>,
         T: AsRef<str>,
     {
-        let mut fragments = HashMap::new();
+        let mut catalog = Self::default();
         for (name, text) in pairs {
-            let (ident, fragment) = parse_fragment(text.as_ref())
-                .map_err(|error| Error::new(format!("{}: {error}", name.as_ref())))?;
-            if fragments.contains_key(&ident) {
-                return Err(Error::new(format!("two fragments are named `{ident}`")));
-            }
-            fragments.insert(ident, fragment);
+            catalog.insert("", name.as_ref(), text.as_ref())?;
         }
-        Ok(Self { fragments })
+        Ok(catalog)
     }
 
-    /// The command named by the root type, with every link followed.
+    fn insert(&mut self, krate: &str, name: &str, text: &str) -> Result<(), Error> {
+        let (ident, fragment) =
+            parse_fragment(text).map_err(|error| Error::new(format!("{name}: {error}")))?;
+        let fragments = self.crates.entry(krate.to_owned()).or_default();
+        if fragments.contains_key(&ident) {
+            return Err(Error::new(format!(
+                "{name}: a second fragment named `{ident}`"
+            )));
+        }
+        fragments.insert(ident, fragment);
+        Ok(())
+    }
+
+    /// The command a type names, with every link followed.
+    ///
+    /// `root` is a type's name, or `crate::Type` when two crates have one of
+    /// that name.
     pub fn stitch(&self, root: &str) -> Result<Command, Error> {
         let mut stack = Vec::new();
-        self.command(root, &mut stack)
+        self.command("", root, &mut stack)
     }
 
     /// The command no other fragment names.
@@ -278,36 +298,63 @@ impl Catalog {
         }
     }
 
-    /// Every command no other fragment names, sorted.
+    /// Every command no other fragment names, sorted, each as
+    /// [`stitch`](Self::stitch) takes it.
     ///
     /// Flatten, sequence, subcommand and keywords count as names.
     pub fn roots(&self) -> Vec<String> {
         let mut referenced = HashSet::new();
-        for fragment in self.fragments.values() {
-            match fragment {
-                Fragment::Args(args) => {
-                    referenced.extend(args.flatten.iter().cloned());
-                    referenced.extend(args.sequence.iter().cloned());
-                    referenced.extend(args.subcommand.iter().cloned());
-                    referenced.extend(args.items.iter().filter_map(|item| item.keywords.clone()));
+        for (krate, fragments) in &self.crates {
+            for fragment in fragments.values() {
+                let links: Vec<&String> = match fragment {
+                    Fragment::Args(args) => args
+                        .flatten
+                        .iter()
+                        .chain(&args.sequence)
+                        .chain(&args.subcommand)
+                        .chain(args.items.iter().filter_map(|item| item.keywords.as_ref()))
+                        .collect(),
+                    Fragment::Subcommands(variants) => variants
+                        .iter()
+                        .filter_map(|variant| variant.ty.as_ref())
+                        .collect(),
+                    Fragment::Occurrence(_) | Fragment::Choices(_) => Vec::new(),
+                };
+                for name in links {
+                    if let Ok(Some((to, _))) = self.find(krate, name) {
+                        referenced.insert((to, ident_of(name)));
+                    }
                 }
-                Fragment::Subcommands(variants) => {
-                    referenced.extend(variants.iter().filter_map(|variant| variant.ty.clone()));
-                }
-                Fragment::Occurrence(_) | Fragment::Choices(_) => {}
             }
         }
-        let mut roots: Vec<String> = self
-            .fragments
-            .iter()
-            .filter(|(ident, fragment)| {
-                matches!(fragment, Fragment::Args(_)) && !referenced.contains(*ident)
-            })
-            .map(|(ident, _)| ident.clone())
-            .collect();
+        let mut roots = Vec::new();
+        for (krate, fragments) in &self.crates {
+            for (ident, fragment) in fragments {
+                if !matches!(fragment, Fragment::Args(_))
+                    || referenced.contains(&(krate.as_str(), ident.as_str()))
+                {
+                    continue;
+                }
+                let homes = self
+                    .crates
+                    .values()
+                    .filter(|fragments| fragments.contains_key(ident))
+                    .count();
+                roots.push(if homes == 1 {
+                    ident.clone()
+                } else {
+                    format!("{krate}::{ident}")
+                });
+            }
+        }
         roots.sort();
         roots
     }
+}
+
+/// `Type` of `crate::Type`, or the whole of a bare name.
+fn ident_of(name: &str) -> &str {
+    name.rsplit_once("::").map_or(name, |(_, ident)| ident)
 }
 
 impl Command {
@@ -511,9 +558,12 @@ impl Item {
     }
 }
 
+/// A one-line description takes the note after a space. One of several lines
+/// takes it on a line of its own, as `--help` does, so that a list or a code
+/// fence that ends the description stays closed.
 fn append_note(text: &mut String, note: &str) {
     if !text.is_empty() {
-        text.push(if text.ends_with('\n') { '\n' } else { ' ' });
+        text.push(if text.contains('\n') { '\n' } else { ' ' });
     }
     text.push_str(note);
 }
@@ -527,7 +577,8 @@ impl Page<'_> {
 
 /// The root page, then one page per visible subcommand, at every depth.
 ///
-/// Two paths that join to one file name are an error. `tool use add` and
+/// A page is a file named after its path, so an empty word or one with a
+/// path separator is an error, and so are two paths that join to one name. `tool use add` and
 /// `tool use-add` would be the same file, and the second page would replace
 /// the first.
 pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
@@ -535,6 +586,15 @@ pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
     walk(root, vec![bin.to_owned()], &[], &mut out);
     let mut seen = HashSet::new();
     for page in &out {
+        if let Some(word) = page
+            .path
+            .iter()
+            .find(|word| word.is_empty() || word.contains(['/', '\\']))
+        {
+            return Err(Error::new(format!(
+                "`{word}` cannot be part of a file name"
+            )));
+        }
         let stem = page.stem();
         if !seen.insert(stem.clone()) {
             return Err(Error::new(format!("two pages would be named {stem}")));
@@ -718,33 +778,71 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
 }
 
 impl Catalog {
-    fn fragment(&self, ident: &str) -> Result<&Fragment, Error> {
-        self.fragments
-            .get(ident)
-            .ok_or_else(|| Error::new(format!("no fragment named `{ident}`")))
+    /// The fragment `name` refers to from the crate `from`, and its crate:
+    /// that crate's own, else the only one of that name. `crate::Type` names
+    /// one outright.
+    fn find(&self, from: &str, name: &str) -> Result<Option<(&str, &Fragment)>, Error> {
+        let own = |krate: &str, ident: &str| {
+            let (krate, fragments) = self.crates.get_key_value(krate)?;
+            Some((krate.as_str(), fragments.get(ident)?))
+        };
+        if let Some((krate, ident)) = name.rsplit_once("::") {
+            return Ok(own(krate, ident));
+        }
+        if let Some(found) = own(from, name) {
+            return Ok(Some(found));
+        }
+        let mut found = self
+            .crates
+            .iter()
+            .filter_map(|(krate, fragments)| Some((krate.as_str(), fragments.get(name)?)));
+        match (found.next(), found.next()) {
+            (Some((first, _)), Some((second, _))) => Err(Error::new(format!(
+                "`{name}` is a type of `{first}` and of `{second}`: name one, as `{first}::{name}`"
+            ))),
+            (one, _) => Ok(one),
+        }
     }
 
-    fn command(&self, ident: &str, stack: &mut Vec<String>) -> Result<Command, Error> {
-        if stack.iter().any(|name| name == ident) {
+    fn fragment(&self, from: &str, name: &str) -> Result<(&str, &Fragment), Error> {
+        self.find(from, name)?
+            .ok_or_else(|| Error::new(format!("no fragment named `{name}`")))
+    }
+
+    fn command<'a>(
+        &'a self,
+        from: &str,
+        name: &'a str,
+        stack: &mut Vec<(&'a str, &'a str)>,
+    ) -> Result<Command, Error> {
+        let (krate, fragment) = self.fragment(from, name)?;
+        let ident = ident_of(name);
+        if stack.contains(&(krate, ident)) {
             return Err(Error::new(format!("`{ident}` refers to itself")));
         }
-        let Fragment::Args(args) = self.fragment(ident)? else {
+        let Fragment::Args(args) = fragment else {
             return Err(Error::new(format!("`{ident}` is not a command")));
         };
-        stack.push(ident.to_owned());
+        stack.push((krate, ident));
         let mut items = Vec::new();
         for draft in &args.items {
-            items.push(self.item(draft, stack)?);
+            items.push(self.item(krate, draft, stack)?);
         }
-        let mut subcommands = self.subs(args.subcommand.as_deref(), stack)?;
+        let mut subcommands = self.subs(krate, args.subcommand.as_deref(), stack)?;
         for name in &args.flatten {
-            let flattened = self.command(name, stack)?;
+            let flattened = self.command(krate, name, stack)?;
             items.extend(flattened.items);
             subcommands.extend(flattened.subcommands);
         }
         if let Some(sequence) = &args.sequence {
-            for draft in self.occurrence(sequence)? {
-                items.push(self.item(draft, stack)?);
+            let (krate, fragment) = self.fragment(krate, sequence)?;
+            let Fragment::Occurrence(drafts) = fragment else {
+                return Err(Error::new(format!(
+                    "`{sequence}` is not an occurrence enum"
+                )));
+            };
+            for draft in drafts {
+                items.push(self.item(krate, draft, stack)?);
             }
         }
         stack.pop();
@@ -765,17 +863,23 @@ impl Catalog {
         })
     }
 
-    fn subs(&self, ident: Option<&str>, stack: &mut Vec<String>) -> Result<Vec<Sub>, Error> {
-        let Some(ident) = ident else {
+    fn subs<'a>(
+        &'a self,
+        from: &str,
+        name: Option<&'a str>,
+        stack: &mut Vec<(&'a str, &'a str)>,
+    ) -> Result<Vec<Sub>, Error> {
+        let Some(name) = name else {
             return Ok(Vec::new());
         };
-        let Fragment::Subcommands(variants) = self.fragment(ident)? else {
-            return Err(Error::new(format!("`{ident}` is not a subcommand enum")));
+        let (krate, fragment) = self.fragment(from, name)?;
+        let Fragment::Subcommands(variants) = fragment else {
+            return Err(Error::new(format!("`{name}` is not a subcommand enum")));
         };
         let mut subs = Vec::new();
         for variant in variants {
             let mut command = match &variant.ty {
-                Some(ty) => self.command(ty, stack)?,
+                Some(ty) => self.command(krate, ty, stack)?,
                 None => Command {
                     name: variant.name.clone(),
                     about: variant.about.clone(),
@@ -804,35 +908,28 @@ impl Catalog {
         Ok(subs)
     }
 
-    fn occurrence(&self, ident: &str) -> Result<&[ItemDraft], Error> {
-        match self.fragment(ident)? {
-            Fragment::Occurrence(items) => Ok(items),
-            _ => Err(Error::new(format!("`{ident}` is not an occurrence enum"))),
-        }
-    }
-
-    fn item(&self, draft: &ItemDraft, stack: &mut Vec<String>) -> Result<Item, Error> {
+    fn item<'a>(
+        &'a self,
+        from: &str,
+        draft: &'a ItemDraft,
+        stack: &mut Vec<(&'a str, &'a str)>,
+    ) -> Result<Item, Error> {
         let mut item = draft.item.clone();
         if item.choices.is_empty() {
-            if let Some(ty) = &draft.choices_ty {
-                item.choices = self.choices(ty)?;
+            // A name with no value enum under it is an open value (`String`,
+            // a number), or a type that parses itself.
+            if let Some(Ok(Some((_, Fragment::Choices(choices))))) =
+                draft.choices_ty.as_deref().map(|ty| self.find(from, ty))
+            {
+                item.choices.clone_from(choices);
             }
         }
         item.vocabulary = draft
             .keywords
             .as_deref()
-            .map(|ty| self.command(ty, stack).map(Box::new))
+            .map(|ty| self.command(from, ty, stack).map(Box::new))
             .transpose()?;
         Ok(item)
-    }
-
-    fn choices(&self, ident: &str) -> Result<Vec<String>, Error> {
-        match self.fragments.get(ident) {
-            Some(Fragment::Choices(choices)) => Ok(choices.clone()),
-            Some(_) => Err(Error::new(format!("`{ident}` is not a value enum"))),
-            // An open value (`String`, a number) has no fragment.
-            None => Ok(Vec::new()),
-        }
     }
 }
 
@@ -1223,6 +1320,36 @@ mod tests {
         let error = two.root().unwrap_err();
         assert!(error.to_string().contains("One"), "{error}");
         assert!(error.to_string().contains("Two"), "{error}");
+    }
+
+    #[test]
+    fn a_name_is_its_own_crate_s_type_first() {
+        let args = |ident: &str, rest: &str| {
+            format!("version = 1\nkind = \"args\"\nident = \"{ident}\"\n{rest}")
+        };
+        let mut catalog = Catalog::default();
+        for (krate, text) in [
+            (
+                "app",
+                args("Cli", "name = \"app\"\nflatten = [\"Common\", \"Shared\"]"),
+            ),
+            ("app", args("Common", "[[item]]\nlong = \"mine\"")),
+            ("dep", args("Cli", "name = \"dep\"")),
+            ("dep", args("Common", "[[item]]\nlong = \"theirs\"")),
+            ("dep", args("Shared", "[[item]]\nlong = \"shared\"")),
+        ] {
+            catalog.insert(krate, krate, &text).unwrap();
+        }
+        assert_eq!(catalog.roots(), ["app::Cli", "dep::Cli", "dep::Common"]);
+        let error = catalog.stitch("Cli").unwrap_err();
+        assert!(error.to_string().contains("app::Cli"), "{error}");
+        let command = catalog.stitch("app::Cli").unwrap();
+        let longs: Vec<_> = command
+            .items
+            .iter()
+            .map(|item| item.long.as_deref().unwrap())
+            .collect();
+        assert_eq!(longs, ["mine", "shared"]);
     }
 
     #[test]

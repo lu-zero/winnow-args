@@ -268,11 +268,9 @@ fn quote_basic(text: &str) -> String {
     out
 }
 
-/// Fragments this compiler process has written, by type name.
-///
-/// One process compiles one crate, so a second body under a name is a second
-/// type of that name.
-static WRITTEN: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+/// Fragments this process has written, by directory and type name. A second
+/// body under one of them is a second type of that name in that target.
+static WRITTEN: Mutex<Option<HashMap<(String, String), String>>> = Mutex::new(None);
 
 fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     let Some(root) = dir() else {
@@ -288,11 +286,15 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     if ident.is_empty() || ident.contains(['/', '\\']) {
         return Err(error(format!("`{ident}` is not a file name")));
     }
+    // A library and a binary of one package have one crate name, and may each
+    // have a type of one name: the binary's directory says which it is.
+    let mut target = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| "_".to_owned());
+    if std::env::var_os("CARGO_BIN_NAME").is_some() {
+        target.push_str("-bin");
+    }
+    let key = (target.clone(), ident.to_owned());
     let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
-    match written
-        .get_or_insert_default()
-        .insert(ident.to_owned(), body.to_owned())
-    {
+    match written.get_or_insert_default().insert(key, body.to_owned()) {
         Some(earlier) if earlier == body => return Ok(()),
         Some(_) => {
             return Err(error(format!(
@@ -301,8 +303,7 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
         }
         None => {}
     }
-    let crate_name = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| "_".to_owned());
-    let dir = root.join(crate_name);
+    let dir = root.join(target);
     std::fs::create_dir_all(&dir)
         .map_err(|source| error(format!("creating {}: {source}", dir.display())))?;
     // Another target of this crate may be writing the same file. A rename
@@ -311,7 +312,10 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     let partial = dir.join(format!("{ident}.toml.{}", std::process::id()));
     std::fs::write(&partial, body)
         .and_then(|()| std::fs::rename(&partial, &file))
-        .map_err(|source| error(format!("writing {}: {source}", file.display())))
+        .map_err(|source| {
+            let _ = std::fs::remove_file(&partial);
+            error(format!("writing {}: {source}", file.display()))
+        })
 }
 
 #[cfg(test)]

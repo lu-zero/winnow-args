@@ -83,6 +83,9 @@ impl Manual {
                 doc.text([roman(body)]);
             }
             if let Some(note) = command.unknown_flags_note() {
+                if !body.is_empty() {
+                    doc.control("PP", std::iter::empty::<&str>());
+                }
                 doc.text([roman(note)]);
             }
         }

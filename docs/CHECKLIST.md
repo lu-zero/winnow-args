@@ -93,8 +93,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Man and markdown pages, one per command, from TOML fragments the derive
       writes when `WINNOW_ARGS_SPEC` is set: the program is checked, not run,
       so the pages describe any installed target
-- [ ] In those pages: choices of a hand-written `FromArg`, a program whose
-      top level is a `Subcommand` enum, two types of one crate under one name
+- [ ] In those pages: choices of a hand-written `FromArg` or through a type
+      alias, a program whose top level is a `Subcommand` enum, two types of
+      one target under one name
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate
