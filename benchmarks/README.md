@@ -60,30 +60,30 @@ and the brush and mold ports; they are described in the `justfile`.
 ## Results
 
 Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz). `release`
-profile, pinned to one core, `perf stat`, winnow 1.0.4, bpaf 0.9, clap 4. Cold
+profile, pinned to one core, `perf stat`, winnow 1.0.4, usage 7.0, bpaf 0.9, clap 4. Cold
 instructions, warm time, stripped size.
 
 `example -v --path /tmp/x a b c`:
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 2 939 | 0.5 | 196 ns | 377 KB |
-| winnow-args, `dispatch!` | 3 276 | 0.6 | 251 ns | 376 KB |
-| winnow-args, combinators | 4 574 | 0.8 | 396 ns | 385 KB |
-| usage | 5 683 | 1 | 503 ns | 394 KB |
-| clap | 136 514 | 24 | 15.3 µs | 763 KB |
-| bpaf 0.9 | 142 994 | 25 | 15.0 µs | 582 KB |
-| bpaf 0.10, pre-release (`844357f`) | 144 538 | 25 | 17.3 µs | 825 KB |
+| winnow-args, derive | 2 896 | 0.5 | 187 ns | 373 KB |
+| winnow-args, `dispatch!` | 3 279 | 0.6 | 252 ns | 369 KB |
+| winnow-args, combinators | 4 491 | 0.8 | 391 ns | 377 KB |
+| usage | 5 682 | 1 | 516 ns | 382 KB |
+| clap | 134 820 | 24 | 15.0 µs | 752 KB |
+| bpaf 0.9 | 141 614 | 25 | 14.8 µs | 574 KB |
+| bpaf 0.10, pre-release (`844357f`) | 143 770 | 25 | 17.2 µs | 812 KB |
 
 `mise use -g node@20`, 211 commands declared:
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 4 012 | 0.5 | 328 ns | 1.84 MB |
-| usage | 7 720 | 1 | 782 ns | 1.18 MB |
-| bpaf 0.10, pre-release (`844357f`) | 1 196 466 | 154 | 166 µs | 2.97 MB |
-| clap | 4 943 837 | 640 | 753 µs | 2.24 MB |
-| bpaf 0.9 | 21 966 400 | 2 845 | 2.65 ms | 1.95 MB |
+| winnow-args, derive | 3 997 | 0.5 | 327 ns | 1.74 MB |
+| usage | 7 391 | 1 | 767 ns | 1.16 MB |
+| bpaf 0.10, pre-release (`844357f`) | 1 187 954 | 161 | 164 µs | 2.95 MB |
+| clap | 4 883 364 | 661 | 757 µs | 2.23 MB |
+| bpaf 0.9 | 21 878 285 | 2 960 | 2.65 ms | 1.94 MB |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which is what grows with the number of commands.

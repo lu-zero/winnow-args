@@ -9,8 +9,9 @@ edition = "2021"
 publish = false
 
 [dependencies]
-usage-argv = { version = "6.11", features = ["spec"] }
-usage-derive = "6.11"
+# The derives name their runtime through the `usage-rs` facade.
+usage-rs = { version = "7.0", default-features = false, features = ["spec"] }
+usage-derive = "7.0"
 
 [lints.rust]
 missing_docs = "allow"

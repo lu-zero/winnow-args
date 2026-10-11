@@ -30,32 +30,34 @@ crate docs; this page is about the repository.
 | Long options with one dash, `-z` keywords, as GNU `ld` takes | ✓ | – | – |
 | Flags kept in command-line order | ✓ | ~ | ~ |
 | Flag constraints checked at compile time | ✓ | – | – |
-| Help prose left out of the binary by a feature | ✓ | – | – |
+| Help prose left out of the binary by a feature | ✓ | ~ | – |
 | A CLI built at runtime, external subcommands | – | ✓ | ✓ |
 | Conditional requirements (`required_if`) | – | ✓ | ✓ |
 | Man pages, markdown | ~ | ✓ | ~ |
-| "Did you mean" suggestions | – | – | ✓ |
+| "Did you mean" suggestions | ✓ | ✓ | ✓ |
 
 `✓` built in · `~` with some work, or in a companion crate · `–` not offered.
 [`docs/COMPARISON.md`](./docs/COMPARISON.md) has every row, and bpaf.
 
 ## Performance
 
-Two command lines: `example -v --path /tmp/x a b c`, and `mise use -g node@20`
-with mise's 211 commands declared. Instructions for one parse in a fresh
-process, and time per parse in a hot loop.
+Two command lines: `example -v --path /tmp/x a b c`, for
+[a small CLI](./benchmarks/src/lib.rs) written once per framework, and
+`mise use -g node@20` with [mise's 211 commands](./benchmarks/shadows/)
+declared. Instructions for one parse in a fresh process, and time per parse in
+a hot loop.
 
 Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
 profile, pinned to one core.
 
-![Instructions per parse for the two command lines, log scale](./docs/performance.svg)
+![Time per parse for the two command lines, log scale](./docs/performance.svg)
 
 | | example, instructions | time | mise, instructions | time |
 |---|---:|---:|---:|---:|
-| winnow-args | 2 939 | 196 ns | 4 012 | 328 ns |
-| usage | 5 683 | 503 ns | 7 720 | 782 ns |
-| clap | 136 514 | 15.3 µs | 4 943 837 | 753 µs |
-| bpaf 0.9 | 142 994 | 15.0 µs | 21 966 400 | 2.65 ms |
+| winnow-args | 2 896 | 187 ns | 3 997 | 327 ns |
+| usage 7 | 5 682 | 516 ns | 7 391 | 767 ns |
+| clap | 134 820 | 15.0 µs | 4 883 364 | 757 µs |
+| bpaf 0.9 | 141 614 | 14.8 µs | 21 878 285 | 2.65 ms |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which grows with the number of commands. Parse

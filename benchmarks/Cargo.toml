@@ -21,8 +21,9 @@ winnow-args.workspace = true
 bpaf.workspace = true
 clap = { version = "4", features = ["derive", "env"] }
 # The reference: usage's compiled, zero-allocation parser, as its mise shadow uses it.
-usage-argv = { version = "6.11", features = ["spec"] }
-usage-derive = "6.11"
+# The derives name their runtime through the `usage-rs` facade.
+usage-rs = { version = "7.0", default-features = false, features = ["spec"] }
+usage-derive = "7.0"
 # mise at full scale: usage's shadows of `mise.usage.kdl`, vendored unmodified in
 # shadows/, and ours (`shadow-mise-wa`, translated from usage's by
 # `cargo run -p xtask -- gen mise-shadow`).

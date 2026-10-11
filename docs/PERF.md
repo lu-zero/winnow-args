@@ -1340,3 +1340,53 @@ A struct that declares none of it generates the same code: the bench
 lines are unchanged from step 55, and so are the examples — ld 1 101
 and 6 052 warm instructions, brush builtins within a count of the step
 55 numbers, with the change and without, rebuilt each way.
+
+## 57. usage 7
+
+The bench's usage is 7.0, whose derives name their runtime through the
+`usage-rs` facade; the vendored mise shadow compiles against it unchanged.
+Measured again on the same core, `release`, cold instructions and warm time:
+
+| | example | | mise | |
+|---|---:|---:|---:|---:|
+| winnow-args | 2 852 | 190 ns | 3 998 | 333 ns |
+| usage 6.12 | 5 683 | 503 ns | 7 720 | 782 ns |
+| usage 7.0 | 5 629 | 530 ns | 7 500 | 771 ns |
+
+usage 7 is within a few percent of 6.12 either way, and the other
+frameworks' numbers moved by as little: `perf stat` wobbles by a few hundred
+instructions a run. The 6.12 row is the earlier run's, not measured again.
+
+## 58. A tip for what was meant, and a value's completion
+
+`Error::suggested` looks among the help data for the flag, subcommand or
+choice closest to the one at fault (Jaro at 0.7), from `parse_words` and only
+once the parse has failed. `help::Item` gains `hint` and `complete`, 16 bytes
+an item, which a completion callback reads.
+
+A parse that succeeds runs the same code: 2 895 and 3 922 cold instructions
+on the two lines, against 2 852 and 3 998 in step 57, inside what `perf stat`
+moves by between runs. Stripped, the example is 373 KB from 367 and mise
+1.74 MB from 1.72: the search and the two fields.
+
+A first version named `Self::HELP` in `parse_words`. That method is compiled
+in the program's crate, and a constant is built again in each crate that
+names it: mise's binary carried the help of its 211 commands twice, 2.21 MB.
+The derive now writes `help_data()` beside the type, never inlined, and the
+entry points ask it.
+
+## 59. Measured again
+
+After the tip, the hints and a type's own hint, every framework on the same
+core, cold instructions and warm time:
+
+| | example | | mise | |
+|---|---:|---:|---:|---:|
+| winnow-args | 2 896 | 187 ns | 3 997 | 327 ns |
+| usage 7.0 | 5 682 | 516 ns | 7 391 | 767 ns |
+| clap | 134 820 | 15.0 µs | 4 883 364 | 757 µs |
+| bpaf 0.9 | 141 614 | 14.8 µs | 21 878 285 | 2.65 ms |
+
+Each count is within a hundred of step 57's, in both directions: what was
+added runs after a failure or for a completion callback. These are the
+numbers the READMEs and the graph have.
