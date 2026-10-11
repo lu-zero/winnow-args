@@ -2968,7 +2968,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let display = LitStr::new(&f.display(), Span::call_site());
             let stop = (f.double_dash() == DoubleDash::Automatic || f.stop_flags)
                 .then(|| quote!(__input.stop_flags();));
-            match &f.kind {
+            // Flags may have stopped at the positional before this one. A
+            // `--` is then a word, and is still not this one's first value.
+            let empty = match &f.kind {
+                Kind::Many(_) => quote!(#ident.is_empty()),
+                _ => quote!(true),
+            };
+            let separator = (f.double_dash() == DoubleDash::Automatic).then(|| {
+                quote! {
+                    #i if !__word.after_separator && &**__word.value == b"--" && #empty => {
+                        __input.separate();
+                    }
+                }
+            });
+            let arm = match &f.kind {
                 Kind::Optional(ty) | Kind::Required(ty) => {
                     let value = f.word_value(ty, quote!(__word), &display);
                     quote! {
@@ -3013,7 +3026,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 Kind::Switch | Kind::Count(_) => {
                     unreachable!("rejected for positionals in `field`")
                 }
-            }
+            };
+            quote!(#separator #arm)
         });
         quote! {
             match __position {

@@ -124,3 +124,28 @@ fn automatic_and_required_share_a_struct() {
         (None, strings(&["a", "b"]), true)
     );
 }
+
+#[derive(Args, Debug)]
+struct Helper {
+    #[arg(positional, double_dash = "automatic")]
+    name: String,
+    #[arg(positional, double_dash = "automatic")]
+    args: Vec<String>,
+}
+
+#[test]
+fn a_separator_is_not_an_automatic_argument_s_first_value() {
+    // Flags stop at `name`, and the `--` before `args` has a value is still
+    // a separator; one after is a value.
+    let h: Helper = parse(&["dodoc", "--", "-foo", "--", "x"]).unwrap();
+    assert_eq!(h.name, "dodoc");
+    assert_eq!(h.args, strings(&["-foo", "--", "x"]));
+    let h: Helper = parse(&["dodoc", "-foo"]).unwrap();
+    assert_eq!(h.args, strings(&["-foo"]));
+    // Only the first is the separator.
+    let h: Helper = parse(&["dodoc", "--", "--", "x"]).unwrap();
+    assert_eq!(h.args, strings(&["--", "x"]));
+    // After a real separator, `--` is a word like any other.
+    let h: Helper = parse(&["--", "dodoc", "--"]).unwrap();
+    assert_eq!(h.args, strings(&["--"]));
+}

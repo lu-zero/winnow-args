@@ -29,6 +29,10 @@ released together. Versions follow [semver](https://semver.org).
   `effect` on a field, for the man and markdown pages, which also show the
   examples, the paragraphs under headings, the warnings and the default
   subcommand.
+- **Fixed**: after a `double_dash = "automatic"` positional stopped flags, a
+  `--` before the next automatic positional has a value is a separator and
+  not that value: `tool name -- -x` leaves `-x`. Only the first is: a
+  second `--` is a word.
 - **Changed**: `help::Command` has six more fields (`default_subcommand`,
   `default_subcommand_flags`, `default_subcommand_help`, `flatten_help`,
   `examples`, `headings`) and `help::Item` one (`warning`). Both now have a

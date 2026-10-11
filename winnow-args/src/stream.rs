@@ -104,6 +104,16 @@ impl<'i> Argv<'i> {
         }
     }
 
+    /// Take a `--` that [`Argv::stop_flags`] made a word for the separator
+    /// it is: the words after it are those after a `--`.
+    #[doc(hidden)]
+    #[inline]
+    pub fn separate(&mut self) {
+        if self.mode == Mode::Values {
+            self.mode = Mode::Stopped;
+        }
+    }
+
     /// Recognize flags again after `--` or [`Argv::stop_flags`]: a command's
     /// `restart_token` starts a fresh invocation.
     #[inline]
