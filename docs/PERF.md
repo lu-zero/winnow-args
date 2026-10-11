@@ -931,6 +931,11 @@ bold, backticks kept so the strip-equals-plain test still holds; each word of a
 span is painted on its own, and an unpaired backtick is left alone. In the
 usage line the trailing positional's `[--` is now a dim `[` and a flag `--`.
 
+`emphasis` and `strong` paint `*starred*` and `**starred**` spans the same
+way, italic and bold, in the command's own description too. Stars mark a span
+only around it, so `*.rs or *.toml`, `2*3*4` and a bullet's `* ` stay as they
+are; a star whose next one does not close it opens nothing.
+
 Correction to steps 29–30: clap 4's default styles use no color in help, only
 bold and underline; color appears only in errors (red, yellow, green), and only
 with clap's `color` feature. `Palette::CLAP` always reproduced that, but the

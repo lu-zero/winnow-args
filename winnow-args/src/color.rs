@@ -431,6 +431,10 @@ pub struct Palette {
     pub dim: Paint,
     /// A `` `quoted` `` span in a description.
     pub code: Paint,
+    /// An `*emphasized*` span in a description.
+    pub emphasis: Paint,
+    /// A `**strong**` span in a description.
+    pub strong: Paint,
 }
 
 impl Palette {
@@ -449,13 +453,16 @@ impl Palette {
         choice: Paint::NONE,
         dim: Paint::NONE,
         code: Paint::NONE,
+        emphasis: Paint::NONE,
+        strong: Paint::NONE,
     };
 
     /// The default in the 16 basic colors: greens for what is typed, cyans
     /// for structure and values, no yellow. Bold cyan headings, bold green
     /// flags and subcommands, cyan value names, the program plain; cyan
     /// environment variables, green defaults, bright green possible values,
-    /// dim labels and brackets, bold `` `code` ``;
+    /// dim labels and brackets, bold `` `code` ``, italic `*emphasis*`, bold
+    /// `**strong**`;
     /// bold red `error:`, red for what was typed wrong, green for what is
     /// missing.
     pub const DEFAULT: Palette = Palette {
@@ -472,6 +479,8 @@ impl Palette {
         choice: Paint::ansi(Ansi::BrightGreen),
         dim: Paint::NONE.dim(),
         code: Paint::NONE.bold(),
+        emphasis: Paint::NONE.italic(),
+        strong: Paint::NONE.bold(),
     };
 
     /// [`Palette::DEFAULT`] in tamer tints of the 256-color palette, readable
@@ -479,7 +488,8 @@ impl Palette {
     /// green 71 (`#5faf5f`) flags and subcommands, slate teal 109 (`#87afaf`)
     /// value names; teal 37 (`#00afaf`) environment variables, sea green 72
     /// (`#5faf87`) defaults, green 71 possible values, gray 245 labels and
-    /// brackets, bold `` `code` ``; bold red 167
+    /// brackets, bold `` `code` ``, italic `*emphasis*`, bold `**strong**`;
+    /// bold red 167
     /// (`#d75f5f`) `error:`, rose 174 (`#d78787`) for what was typed wrong,
     /// sage 108 (`#87af87`) for what is missing.
     pub const DEFAULT_256: Palette = Palette {
@@ -496,6 +506,8 @@ impl Palette {
         choice: Paint::fg(Color::Ansi256(71)),
         dim: Paint::fg(Color::Ansi256(245)),
         code: Paint::NONE.bold(),
+        emphasis: Paint::NONE.italic(),
+        strong: Paint::NONE.bold(),
     };
 
     /// No color in help: bold underlined headings and bold program, flags and
@@ -515,6 +527,8 @@ impl Palette {
         choice: Paint::NONE,
         dim: Paint::NONE,
         code: Paint::NONE,
+        emphasis: Paint::NONE,
+        strong: Paint::NONE,
     };
 
     /// The deepest color any role uses.
@@ -533,6 +547,8 @@ impl Palette {
             self.choice,
             self.dim,
             self.code,
+            self.emphasis,
+            self.strong,
         ];
         let mut deepest = Depth::Ansi16;
         let mut i = 0;

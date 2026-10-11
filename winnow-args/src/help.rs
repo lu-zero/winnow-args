@@ -406,6 +406,14 @@ impl Style {
         self.ink(self.palette.code)
     }
 
+    pub(crate) fn emphasis(self) -> Ink {
+        self.ink(self.palette.emphasis)
+    }
+
+    pub(crate) fn strong(self) -> Ink {
+        self.ink(self.palette.strong)
+    }
+
     pub(crate) fn placeholder(self) -> Ink {
         self.ink(self.palette.placeholder)
     }
@@ -500,7 +508,8 @@ pub fn render_styled(
         command.about
     };
     if !about.is_empty() {
-        let _ = writeln!(out, "{}\n", wrap_text(about, width));
+        let about = painted_marks(about, style);
+        let _ = writeln!(out, "{}\n", wrap_text(&about, width));
     }
     push_painted(&mut out, style.header(), "Usage:");
     let _ = writeln!(out, " {}\n", usage(command, path, style));
@@ -516,7 +525,7 @@ pub fn render_styled(
                     name.push(Ink::NONE, ", ");
                     name.push(style.command(), alias);
                 }
-                (name, painted_code(s.about, style))
+                (name, painted_marks(s.about, style))
             })
             .collect();
         section(&mut out, "Commands", &rows, false, width, style);
@@ -701,7 +710,7 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
     } else {
         item.help
     };
-    let mut text = painted_code(help, style);
+    let mut text = painted_marks(help, style);
     let mut add = |extra: String| {
         if !text.is_empty() {
             text.push(if long { '\n' } else { ' ' });
@@ -734,13 +743,42 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
     text
 }
 
-/// `text` with each `` `quoted` `` span painted as code, backticks kept (so
-/// the painted page is the plain one plus escapes). Each word of a span is
-/// painted on its own, so wrapping never breaks inside a painted run; an
-/// unpaired backtick is left alone.
-fn painted_code(text: &str, style: Style) -> String {
-    let ink = style.code();
-    if ink.paint == Paint::NONE || ink.depth == Depth::None || !text.contains('`') {
+/// A heading: painted as one, and a marked span of it as both a heading and
+/// what its marks say, in the heading's color. `*shown*` in a bold heading is
+/// bold and italic.
+fn heading(out: &mut String, title: &str, style: Style) {
+    let header = style.header();
+    let inks = [style.code(), style.emphasis(), style.strong()];
+    let mut at = 0;
+    if style.depth != Depth::None {
+        while let Some((open, end, ink)) = marked(title, at, inks) {
+            if at < open {
+                push_painted(out, header, &title[at..open]);
+            }
+            let both = Paint {
+                fg: header.paint.fg.or(ink.paint.fg),
+                bold: header.paint.bold || ink.paint.bold,
+                dim: header.paint.dim || ink.paint.dim,
+                italic: header.paint.italic || ink.paint.italic,
+                underline: header.paint.underline || ink.paint.underline,
+            };
+            push_painted(out, style.ink(both), &title[open..end]);
+            at = end;
+        }
+    }
+    push_painted(out, header, &title[at..]);
+}
+
+/// `text` with each `` `quoted` ``, `*emphasized*` and `**strong**` span
+/// painted, marks kept (so the painted page is the plain one plus escapes).
+/// Each word of a span is painted on its own, so wrapping never breaks inside
+/// a painted run; a mark with no pair on its line is left alone.
+fn painted_marks(text: &str, style: Style) -> String {
+    let inks = [style.code(), style.emphasis(), style.strong()];
+    if style.depth == Depth::None
+        || inks.iter().all(|ink| ink.paint == Paint::NONE)
+        || !text.contains(['`', '*'])
+    {
         return text.to_owned();
     }
     let mut out = String::with_capacity(text.len() + 16);
@@ -748,24 +786,100 @@ fn painted_code(text: &str, style: Style) -> String {
         if n > 0 {
             out.push('\n');
         }
-        let mut rest = line;
-        while let Some(open) = rest.find('`') {
-            let Some(len) = rest[open + 1..].find('`') else {
-                break;
-            };
-            let close = open + 1 + len;
-            out.push_str(&rest[..open]);
-            for (i, word) in rest[open..=close].split(' ').enumerate() {
+        let mut at = 0;
+        while let Some((open, end, ink)) = marked(line, at, inks) {
+            out.push_str(&line[at..open]);
+            for (i, word) in line[open..end].split(' ').enumerate() {
                 if i > 0 {
                     out.push(' ');
                 }
-                push_painted(&mut out, ink, word);
+                if !word.is_empty() {
+                    push_painted(&mut out, ink, word);
+                }
             }
-            rest = &rest[close + 1..];
+            at = end;
         }
-        out.push_str(rest);
+        out.push_str(&line[at..]);
     }
     out
+}
+
+/// The first marked span of `line` at or after `from`, marks included, and
+/// its ink among those of a quoted, an emphasized and a strong one.
+///
+/// Stars whose ink paints nothing mark no span, so a quoted span between
+/// them is still painted.
+///
+/// Stars mark a span only around it: the opening ones follow no letter or
+/// digit and touch the span's first character, the closing ones touch its
+/// last and precede no letter or digit. `2*3*4`, `*.rs or *.toml`, a
+/// bullet's `* ` and `\*` are not spans. Three stars or more are left alone.
+fn marked(
+    line: &str,
+    from: usize,
+    [code, emphasis, strong]: [Ink; 3],
+) -> Option<(usize, usize, Ink)> {
+    let bytes = line.as_bytes();
+    let mut at = from;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'`' => {
+                if let Some(len) = line[at + 1..].find('`') {
+                    return Some((at, at + len + 2, code));
+                }
+                at += 1;
+            }
+            b'*' => {
+                let stars = run(bytes, at);
+                let before = line[..at].chars().next_back();
+                let after = line[at + stars..].chars().next();
+                let ink = if stars == 2 { strong } else { emphasis };
+                if stars <= 2
+                    && ink.paint != Paint::NONE
+                    && before.is_none_or(|c| !c.is_alphanumeric() && c != '\\')
+                    && after.is_some_and(|c| !c.is_whitespace())
+                    && let Some(end) = closing(line, at + stars, stars)
+                {
+                    return Some((at, end, ink));
+                }
+                at += stars;
+            }
+            _ => at += 1,
+        }
+    }
+    None
+}
+
+/// How many stars are in a row at `at`.
+fn run(bytes: &[u8], at: usize) -> usize {
+    bytes[at..].iter().take_while(|b| **b == b'*').count()
+}
+
+/// The end of the span that `stars` stars opened before `from`: past the
+/// next run of as many, if it closes one. If it does not, nothing was opened:
+/// in `*.rs is *never* read` the span is `*never*`. A quoted span on the way
+/// is skipped, stars and all.
+fn closing(line: &str, from: usize, stars: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let mut at = from;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'`' => at += line[at + 1..].find('`').map_or(1, |len| len + 2),
+            b'*' => {
+                let found = run(bytes, at);
+                let before = line[..at].chars().next_back();
+                let after = line[at + found..].chars().next();
+                if found == stars {
+                    let closes = before.is_some_and(|c| !c.is_whitespace() && c != '\\')
+                        && after.is_none_or(|c| !c.is_alphanumeric());
+                    return closes.then_some(at + found);
+                }
+                at += found;
+            }
+            _ => at += 1,
+        }
+    }
+    None
 }
 
 /// A titled two-column list; long help puts each description under its item.
@@ -784,7 +898,7 @@ fn section(
     if rows.is_empty() {
         return;
     }
-    push_painted(out, style.header(), &format!("{title}:"));
+    heading(out, &format!("{title}:"), style);
     out.push('\n');
     let longest = rows.iter().map(|(left, _)| left.width).max().unwrap_or(0);
     let available = width.saturating_sub(4);

@@ -3,7 +3,7 @@
 //! The text is prose, so these need the `help-text` feature (see
 //! `no_help_text.rs` for help without it).
 
-use winnow_args::color::{Color, Depth, Paint, Palette, Theme};
+use winnow_args::color::{Ansi, Color, Depth, Paint, Palette, Theme};
 use winnow_args::help::Style;
 use winnow_args::{Args, Error, ErrorKind, Subcommand, ValueEnum, report, with_env};
 
@@ -517,6 +517,75 @@ fn depth_follows_the_terminal_and_the_environment() {
             Depth::detect(false)
         }),
         Depth::TrueColor
+    );
+}
+
+#[test]
+fn starred_spans_in_descriptions_are_emphasis() {
+    /// Copies **every file**, *slowly*.
+    #[derive(Args, Debug)]
+    struct Starred {
+        /// A glob as *.rs or *.toml, 2*3*4, a*b*, **never** *a `*` b* \*not* ***no*** *open
+        #[arg(positional)]
+        globs: Vec<String>,
+        /// * a bullet, ** two, and (*this*), **that**.
+        #[arg(short)]
+        x: bool,
+        #[arg(short, help_heading = "*Rarely* needed")]
+        y: bool,
+    }
+    let e = parse::<Starred>(&["-h"]).unwrap_err();
+    let text = with_env(&[], || e.render_help_styled("s", Style::COLORED).unwrap());
+    let about = format!(
+        "Copies {} {}, {}.",
+        sgr("1", "**every"),
+        sgr("1", "file**"),
+        sgr("3", "*slowly*")
+    );
+    assert!(text.starts_with(&about), "{text:?}");
+    let globs = format!(
+        "A glob as *.rs or *.toml, 2*3*4, a*b*, {} {} {} {} \\*not* ***no*** *open",
+        sgr("1", "**never**"),
+        sgr("3", "*a"),
+        sgr("3", "`*`"),
+        sgr("3", "b*")
+    );
+    assert!(text.contains(&globs), "{text:?}");
+    let bullet = format!(
+        "* a bullet, ** two, and ({}), {}.",
+        sgr("3", "*this*"),
+        sgr("1", "**that**")
+    );
+    assert!(text.contains(&bullet), "{text:?}");
+    // In a heading a span is the heading's paint and its own.
+    let heading = format!("{}{}", sgr("1;3;36", "*Rarely*"), sgr("1;36", " needed:"));
+    assert!(text.contains(&heading), "{text:?}");
+    // The painted page is the plain one plus escapes.
+    let plain = with_env(&[], || e.render_help("s").unwrap());
+    assert_eq!(strip(&text), plain);
+    // A palette paints each on its own, or not at all.
+    let own = Palette {
+        emphasis: Paint::ansi(Ansi::Cyan),
+        strong: Paint::NONE,
+        ..Palette::DEFAULT
+    };
+    let style = Style::at(own, Depth::Ansi16);
+    let text = with_env(&[], || e.render_help_styled("s", style).unwrap());
+    assert!(text.contains(&sgr("36", "*slowly*")), "{text:?}");
+    assert!(text.contains("**every file**"), "{text:?}");
+    let text = with_env(&[], || e.render_help_styled("s", Style::CLAP).unwrap());
+    assert!(text.contains("**every file**, *slowly*"), "{text:?}");
+    // Stars that paint nothing mark nothing: the quoted span is still code.
+    let code = Palette {
+        emphasis: Paint::NONE,
+        strong: Paint::NONE,
+        ..Palette::DEFAULT
+    };
+    let style = Style::at(code, Depth::Ansi16);
+    let text = with_env(&[], || e.render_help_styled("s", style).unwrap());
+    assert!(
+        text.contains(&format!("*a {} b*", sgr("1", "`*`"))),
+        "{text:?}"
     );
 }
 

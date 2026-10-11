@@ -5,6 +5,13 @@ are released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `*emphasized*` and `**strong**` spans of a description are
+  painted in help, italic and bold by default, as `` `quoted` `` ones are. The
+  command's own description is painted too, and a span of a heading is
+  painted as the heading and as what its marks say.
+- **Changed**: `Palette` has two more fields, `emphasis` and `strong`. A
+  palette written out in full names them; one that ends in
+  `..Palette::DEFAULT` is unaffected.
 - **Added**: man and markdown pages for a derived command. With
   `WINNOW_ARGS_SPEC` set to an absolute directory, each derive also writes a
   TOML description of its type; `winnow-args-spec` stitches them into a
