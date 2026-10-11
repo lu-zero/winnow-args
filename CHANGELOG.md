@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.2.0 (2026-10-11)
 
 - **Added**: an unknown flag or subcommand, or a value that is not one of
   its choices, is reported with what was probably meant: `tip: a similar flag

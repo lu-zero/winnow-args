@@ -36,7 +36,7 @@ jobs:
         with:
           toolchain: "1.88"
       # The compile-fail cases pin the current compiler's messages.
-      - run: cargo test -p winnow-args --all-features -- --skip compile_fail
+      - run: cargo test -p winnow-args -p winnow-args-spec -p winnow-args-man -p winnow-args-markdown --all-features -- --skip compile_fail
 
   wasm32:
     name: 32-bit target

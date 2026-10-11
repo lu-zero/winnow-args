@@ -74,7 +74,7 @@ from crates.io with a semver requirement (`winnow` is `"1.0.4"`, which means
 `^1.0.4`), the bench's too. No git or path dependency and no `[patch]` to a
 local checkout: what is built, tested and measured is what a user gets.
 
-The derive is pinned with `=` (`version = "=0.1.1"`). Generated code builds
+The derive is pinned with `=` (`version = "=0.2.0"`). Generated code builds
 help and token types by struct literal, so the two crates are released
 together; [`docs/DESIGN.md`](./docs/DESIGN.md) says why. Leave that pin as `=`.
 
@@ -83,7 +83,7 @@ from git, and only `BPAF010=1 just perf` builds it, so its going out of sync
 breaks nothing.
 
 `rust-version` in the workspace manifest is the MSRV (1.88, where a derive
-can tell a type's source file). CI builds with the current stable compiler, and tests the two
+can tell a type's source file). CI builds with the current stable compiler, and tests the
 published crates with the MSRV; the benchmarks need a newer one (usage asks
 for 1.91). A dependency is not held back for an older compiler, and
 `rust-version` moves in the commit that starts using a newer feature.
