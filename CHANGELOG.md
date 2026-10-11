@@ -23,6 +23,8 @@ are released together. Versions follow [semver](https://semver.org).
   whose choices it cannot find.
 - **Changed**: the MSRV is 1.88, where a derive can tell which source file a
   type is in.
+- **Changed**: the examples are in `examples/` at the top of the repository,
+  with a guide and two documentation generators, an xtask and a justfile.
 
 ## 0.1.2 (2026-10-07)
 

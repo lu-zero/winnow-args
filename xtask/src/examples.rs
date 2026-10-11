@@ -1,4 +1,4 @@
-//! `winnow-args/examples/{brush_builtins,ld}.rs`: what the two ports declare,
+//! `examples/{brush_builtins,ld}.rs`: what the two ports declare,
 //! in programs that only print what they parse.
 
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ const BUILTINS: &[&str] = &[
 ];
 
 pub(crate) fn generate(brush: &Path, mold: &Path) -> Result<()> {
-    let examples = root().join("winnow-args/examples");
+    let examples = root().join("examples");
     let (builtins, ld) = (examples.join("brush_builtins.rs"), examples.join("ld.rs"));
     fs::write(&builtins, brush_builtins(brush)?)?;
     fs::write(&ld, self::ld(mold)?)?;

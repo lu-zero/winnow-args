@@ -1,0 +1,12 @@
+# Documentation in brush's shape: `cargo run -p xtask-docs -- gen docs`.
+[package]
+name = "xtask-docs"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+winnow-args = { workspace = true, features = ["help-text"] }
+winnow-args-man.workspace = true
+winnow-args-markdown.workspace = true
+winnow-args-spec.workspace = true

@@ -1,0 +1,13 @@
+# Documentation for this program. Run it from this directory, or pass
+# `-f examples/just-docs/justfile` from the workspace root.
+
+set positional-arguments
+
+# `just` alone lists the recipes.
+[private]
+default:
+    @just --list
+
+[doc("Markdown and man pages for this program")]
+docs *args:
+    cargo run -q --manifest-path "{{justfile_directory()}}/../../Cargo.toml" -p xtask-docs -- gen docs --package just-docs {{args}}
