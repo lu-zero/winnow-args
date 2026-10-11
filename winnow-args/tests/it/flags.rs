@@ -263,3 +263,53 @@ fn composes_as_a_winnow_parser() {
         .unwrap();
     assert_eq!(jobs, 4);
 }
+
+/// `from_str`: a type that is `FromStr` and not `FromArg`, with no wrapper.
+mod from_str {
+    use std::net::Ipv4Addr;
+    use std::num::NonZeroU8;
+
+    use winnow_args::{Args, ErrorKind, with_env};
+
+    #[derive(Args, Debug, PartialEq)]
+    struct Cli {
+        #[arg(long, from_str)]
+        bind: Option<Ipv4Addr>,
+        #[arg(long, from_str, default = "3")]
+        jobs: NonZeroU8,
+        #[arg(long, from_str, env = "PEERS", delimiter = ',')]
+        peer: Vec<Ipv4Addr>,
+        #[arg(positional, from_str)]
+        host: Ipv4Addr,
+    }
+
+    #[test]
+    fn a_value_is_parsed_with_its_from_str() {
+        let cli = Cli::parse_from([
+            "--bind",
+            "10.0.0.1",
+            "--peer=10.0.0.2,10.0.0.3",
+            "127.0.0.1",
+        ]);
+        assert_eq!(
+            cli.unwrap(),
+            Cli {
+                bind: Some(Ipv4Addr::new(10, 0, 0, 1)),
+                jobs: NonZeroU8::new(3).unwrap(),
+                peer: vec![Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(10, 0, 0, 3)],
+                host: Ipv4Addr::LOCALHOST,
+            }
+        );
+        let cli = with_env(&[("PEERS", "10.0.0.9")], || Cli::parse_from(["1.2.3.4"]));
+        assert_eq!(cli.unwrap().peer, [Ipv4Addr::new(10, 0, 0, 9)]);
+    }
+
+    #[test]
+    fn its_error_is_the_message() {
+        let error = Cli::parse_from(["--jobs", "0", "127.0.0.1"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+        assert!(error.to_string().contains("--jobs"), "{error}");
+        let error = Cli::parse_from(["localhost"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    }
+}

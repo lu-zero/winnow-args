@@ -29,6 +29,9 @@ released together. Versions follow [semver](https://semver.org).
   `effect` on a field, for the man and markdown pages, which also show the
   examples, the paragraphs under headings, the warnings and the default
   subcommand.
+- **Added**: `from_str` on a field: its value is parsed with the type's
+  `FromStr`, for a type of another crate that is not `FromArg`, with no
+  `Parsed<T>` in the field.
 - **Fixed**: after a `double_dash = "automatic"` positional stopped flags, a
   `--` before the next automatic positional has a value is a separator and
   not that value: `tool name -- -x` leaves `-x`. Only the first is: a

@@ -190,6 +190,10 @@ mod spec;
 ///
 /// A value is any `T: FromArg`; the field's type says how many, as the table above has it.
 ///
+/// - `from_str`: the value's type is not `FromArg` but `FromStr`, and is parsed with that: a type of
+///   another crate (`camino::Utf8PathBuf`, a `url::Url`) with no wrapper in the field. Its error is the
+///   message. The type says nothing of its choices or of what a shell completes: state `choices` or `hint`.
+///
 /// - `count`: an integer counting occurrences.
 /// - `value_name = "…"`: the placeholder in help.
 /// - `delimiter = ','`: split each value of a `Vec` field.
@@ -1492,7 +1496,11 @@ fn spec_filed(
 
 /// The type of a field's value.
 fn value_type(field: &Field) -> Option<&Type> {
-    if !field.takes_value() || field.keywords || matches!(field.role, Role::Subcommand) {
+    if !field.takes_value()
+        || field.keywords
+        || field.from_str
+        || matches!(field.role, Role::Subcommand)
+    {
         return None;
     }
     match &field.kind {
@@ -2149,6 +2157,8 @@ struct Field {
     complete: Option<syn::Path>,
     /// What to know before using it, shown by `--help`.
     warning: String,
+    /// The value is parsed with its type's `FromStr`.
+    from_str: bool,
     /// What giving it does, for the documentation: `read`, `write` or
     /// `destructive`.
     effect: Option<String>,
@@ -2225,7 +2235,10 @@ impl Field {
         let hint = match (&self.hint, &self.kind, &self.role) {
             (Some(hint), _, _) => quote!(::winnow_args::complete::Hint::#hint),
             (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), role)
-                if !matches!(role, Role::Subcommand) && !self.keywords && !self.tristate =>
+                if !matches!(role, Role::Subcommand)
+                    && !self.keywords
+                    && !self.tristate
+                    && !self.from_str =>
             {
                 quote!(<#ty as ::winnow_args::FromArg>::HINT)
             }
@@ -2248,7 +2261,7 @@ impl Field {
         let choices = match (&self.choices, &self.kind, &self.role) {
             (Some(choices), _, _) => quote!(&[#(#choices),*]),
             (None, _, Role::Subcommand) | (None, Kind::Switch | Kind::Count(_), _) => quote!(&[]),
-            (None, _, _) if self.keywords || self.tristate => quote!(&[]),
+            (None, _, _) if self.keywords || self.tristate || self.from_str => quote!(&[]),
             (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), _) => {
                 quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
             }
@@ -2344,11 +2357,24 @@ impl Field {
         }
     }
 
+    /// The type a value is converted to, and what makes it the field's: with
+    /// `from_str`, `Parsed<T>` and its `.0`.
+    fn parsed(&self, ty: &Type) -> (TokenStream2, TokenStream2) {
+        if self.from_str {
+            (quote!(::winnow_args::value::Parsed<#ty>), quote!(.0))
+        } else {
+            (quote!(#ty), quote!())
+        }
+    }
+
     /// A flag's value converted to `ty`, checked against `choices` first.
     fn flag_value(&self, ty: &Type, value: TokenStream2) -> TokenStream2 {
         let check = self.check(value.clone(), |cause| {
             quote!(__wa::Error::invalid_value(__arg.offset(), __arg.spelling(), #value, #cause))
         });
+        if self.from_str {
+            return quote!({ #check __arg.convert::<::winnow_args::value::Parsed<#ty>>(#value)?.0 });
+        }
         quote!({ #check __arg.convert::<#ty>(#value)? })
     }
 
@@ -2360,11 +2386,12 @@ impl Field {
             value.clone(),
             |cause| quote!(__wa::Error::invalid_value(__input.offset(), #source, #value, #cause)),
         );
+        let (ty, unwrap) = self.parsed(ty);
         quote!({
             #check
             <#ty as __wa::FromArg>::from_arg(#value).map_err(|cause| {
                 __wa::Error::invalid_value(__input.offset(), #source, #value, cause)
-            })?
+            })? #unwrap
         })
     }
 
@@ -2514,7 +2541,8 @@ impl Field {
             quote!(#word.value),
             |cause| quote!(__wa::Error::invalid_value(#word.offset, #display, #word.value, #cause)),
         );
-        quote!({ #check #word.convert::<#ty>(#display)? })
+        let (ty, unwrap) = self.parsed(ty);
+        quote!({ #check #word.convert::<#ty>(#display)? #unwrap })
     }
 
     /// How errors name the field: its long flag, else its short one, else its value name.
@@ -4700,9 +4728,10 @@ impl Rules {
             let other_slot = slot(&other.ident);
             let is = |ty: &Type, equals: &str| {
                 let literal = LitByteStr::new(equals.as_bytes(), Span::call_site());
+                let (ty, unwrap) = other.parsed(ty);
                 quote! {
                     |__v| <#ty as ::winnow_args::FromArg>::from_arg(__wa::BStr::new(#literal))
-                        .is_ok_and(|__literal| __literal == *__v)
+                        .is_ok_and(|__literal| __literal #unwrap == *__v)
                 }
             };
             let condition = match (equals, &other.kind) {
@@ -4894,6 +4923,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let mut warning = String::new();
+    let mut from_str = false;
     let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
@@ -4960,6 +4990,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("from_str") {
+                from_str = true;
             } else if meta.path.is_ident("warning") {
                 warning = meta.value()?.parse::<LitStr>()?.value();
             } else if meta.path.is_ident("effect") {
@@ -5070,7 +5102,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
-                     `value_terminator`, `default_fn`, `default_note`, `default_if`, \
+                     `value_terminator`, `default_fn`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
                      `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
                 ));
@@ -5297,6 +5329,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hint,
         complete,
         warning,
+        from_str,
         effect,
         negative_numbers,
         hyphen_values,
