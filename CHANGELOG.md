@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.2.1 (2026-10-11)
 
 - **Added**: `default_subcommand_flags` on a struct with a
   `default_subcommand`. A flag the struct does not take selects the default
