@@ -148,7 +148,8 @@ mod spec;
 /// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
 /// - `flatten`: another flags-only `Args` struct, parsed as if declared here (nested too). A flag spelled in
 ///   both is a compile error. The flattened struct has no positionals, subcommand, `sequence`, `unknown`,
-///   `keywords`, `global` flags or generics, nor `unknown_flags = "value"`; the parent no generics.
+///   `keywords` or generics, nor `unknown_flags = "value"`; the parent no generics. A `global` flag of
+///   the flattened struct is global from the struct that flattens it.
 /// - `sequence`: a `Vec` of an `Occurrence` enum: its flags and words, kept in order, its flags in help.
 ///   One per struct; a spelling it shares with the struct is a compile error.
 /// - `sequence, unknown`: the same, with unknown flags offered to the enum's `unknown` variant.
@@ -2895,8 +2896,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             &Field::is_global,
             quote!(return ::core::result::Result::Ok(true);),
         );
-        // The subcommand sees this struct's globals first, then its ancestors'.
-        let (inherit, handler) = if fields.iter().any(Field::is_global) {
+        // The subcommand sees this struct's globals first, those of the structs
+        // it flattens, then its ancestors'.
+        let flat_globals = flattens.iter().map(|(ident, ty)| {
+            let slot = format_ident!("__flat_{}", ident);
+            quote! {
+                if <#ty as __wa::Flatten>::bind_global(&mut #slot, __arg, __input)? {
+                    return ::core::result::Result::Ok(true);
+                }
+            }
+        });
+        let flat_shorts = flattens
+            .iter()
+            .map(|(_, ty)| quote!(.or_else(|| <#ty as __wa::Flatten>::global_short(__c))));
+        let (inherit, handler) = if fields.iter().any(Field::is_global) || !flattens.is_empty() {
             let shorts = fields.iter().filter(|f| f.is_global()).flat_map(|f| {
                 let takes_value = f.takes_value();
                 f.shorts().into_iter().map(move |c| {
@@ -2905,7 +2918,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 })
             });
             let setup = quote! {
-                let mut __inherit = __wa::inherit(&[#(#shorts),*], __globals, |__arg, __input, __parent| {
+                let mut __inherit = __wa::inherit(
+                    &[#(#shorts),*],
+                    |__c| ::core::option::Option::<bool>::None #(#flat_shorts)*,
+                    __globals,
+                    |__arg, __input, __parent| {
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {
                             #(#global_longs)*
@@ -2921,6 +2938,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         },
                         _ => {}
                     }
+                    #(#flat_globals)*
                     __parent.bind(__arg, __input)
                 });
             };
@@ -2952,13 +2970,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         });
         // A flag this struct does not take selects it too, and is read again as its own.
-        let flag_fallback = fallback
-            .as_ref()
-            .filter(|_| default_subcommand_flags)
-            .map(|fallback| match track_filled {
+        let flag_fallback = fallback.as_ref().filter(|_| default_subcommand_flags).map(
+            |fallback| match track_filled {
                 true => quote!(if __filled { #unexpected; } #fallback),
                 false => fallback.clone(),
-            });
+            },
+        );
         let route = quote! {
             if #not_filled !__word.after_separator {
                 if <#ty as __wa::Subcommand>::has(&**__word.value) {
@@ -3507,7 +3524,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .collect();
     let flatten_build: Vec<TokenStream2> = flatten_build.collect();
     // Flags only: no positionals, subcommand, `sequence`, `unknown`,
-    // keywords, `global` flags or generics.
+    // keywords or generics.
     let flattenable = positionals.is_empty()
         && trailing.is_none()
         && subcommand.is_none()
@@ -3515,7 +3532,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         && unknown.is_none()
         && !unknown_flags_value
         && input.generics.params.is_empty()
-        && !fields.iter().any(|f| f.keywords || f.is_global());
+        && !fields.iter().any(|f| f.keywords);
     let flatten_impl = flattenable.then(|| {
         let vis = &input.vis;
         let slots_name = format_ident!("__{}WinnowArgsSlots", name);
@@ -3549,6 +3566,23 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .iter()
             .map(|(n, _)| quote!(#n: ::core::default::Default::default(),));
         let (bind_long, bind_short, bind_plus) = arms(&|_| true, quote!(true));
+        // The same for the `global` ones alone: what a subcommand of the
+        // struct that flattens these is offered.
+        let (global_long, global_short, global_plus) = arms(&Field::is_global, quote!(true));
+        let global_nested: TokenStream2 = nested
+            .iter()
+            .map(|(n, ty)| {
+                quote!(if <#ty as __wa::Flatten>::bind_global(&mut #n, &__arg, __input)? { true } else)
+            })
+            .collect();
+        let global_letters = fields.iter().filter(|f| f.is_global()).filter_map(|f| {
+            let letters = f.short_pattern()?;
+            let takes_value = f.takes_value();
+            Some(quote!(#letters => ::core::option::Option::Some(#takes_value),))
+        });
+        let nested_global_letters = nested
+            .iter()
+            .map(|(_, ty)| quote!(.or_else(|| <#ty as __wa::Flatten>::global_short(__c))));
         let bind_nested: TokenStream2 = nested
             .iter()
             .map(|(n, ty)| {
@@ -3639,6 +3673,42 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #(#flatten_shorts)*
                         _ => ::core::option::Option::None,
                     }
+                }
+
+                fn bind_global<'__i>(
+                    __slots: &mut #slots_name,
+                    __arg: &::winnow_args::Arg<'__i>,
+                    __input: &mut ::winnow_args::Argv<'__i>,
+                ) -> ::core::result::Result<bool, ::winnow_args::Error> {
+                    use ::winnow_args::__private as __wa;
+                    let __arg = *__arg;
+                    let #slots_name { #(#mutable)* } = ::core::mem::take(__slots);
+                    let __bound = match __arg {
+                        __wa::Arg::Long(__flag) => match __flag.name {
+                            #(#global_long)*
+                            _ => #global_nested { false }
+                        },
+                        __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
+                            #(#global_plus)*
+                            _ => #global_nested { false }
+                        },
+                        __wa::Arg::Short(__flag) => match __flag.letter {
+                            #(#global_short)*
+                            _ => #global_nested { false }
+                        },
+                        _ => false,
+                    };
+                    *__slots = #slots_name { #(#names)* };
+                    ::core::result::Result::Ok(__bound)
+                }
+
+                fn global_short(__c: char) -> ::core::option::Option<bool> {
+                    use ::winnow_args::__private as __wa;
+                    let __own = match __c {
+                        #(#global_letters)*
+                        _ => ::core::option::Option::None,
+                    };
+                    __own #(#nested_global_letters)*
                 }
 
                 fn is_prefix(__c: u8) -> bool {

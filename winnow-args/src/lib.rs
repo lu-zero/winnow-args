@@ -633,12 +633,14 @@ where
     FromFn(bind)
 }
 
-/// [`Globals`] that are `shorts` (letter, takes a value) and `bind`, then
-/// `parent`'s: what the derive hands a subcommand of a struct with global flags.
-/// Unlike [`globals`], `short` sees those letters.
+/// [`Globals`] that are `shorts` (letter, takes a value), those `flattened`
+/// answers for, and `bind`, then `parent`'s: what the derive hands a
+/// subcommand of a struct with global flags, its own or of a struct it
+/// flattens. Unlike [`globals`], `short` sees those letters.
 #[doc(hidden)]
 pub fn inherit<'a, F>(
     shorts: &'static [(char, bool)],
+    flattened: fn(char) -> Option<bool>,
     parent: &'a mut dyn Globals,
     bind: F,
 ) -> impl Globals + 'a
@@ -647,6 +649,7 @@ where
 {
     struct Inherit<'a, F> {
         shorts: &'static [(char, bool)],
+        flattened: fn(char) -> Option<bool>,
         parent: &'a mut dyn Globals,
         bind: F,
     }
@@ -662,12 +665,13 @@ where
         fn short(&self, letter: char) -> Option<bool> {
             match self.shorts.iter().find(|(c, _)| *c == letter) {
                 Some(&(_, takes_value)) => Some(takes_value),
-                None => self.parent.short(letter),
+                None => (self.flattened)(letter).or_else(|| self.parent.short(letter)),
             }
         }
     }
     Inherit {
         shorts,
+        flattened,
         parent,
         bind,
     }
@@ -715,7 +719,7 @@ pub mod __private {
     #[diagnostic::on_unimplemented(
         message = "`{Self}` cannot be flattened",
         note = "a flattened struct derives `Args` and has only flags: no positionals, \
-                subcommand, `sequence`, `unknown`, `keywords`, `global` flags, \
+                subcommand, `sequence`, `unknown`, `keywords`, \
                 `unknown_flags = \"value\"` or generics"
     )]
     pub trait Flatten: Sized {
@@ -731,6 +735,18 @@ pub mod __private {
 
         /// Whether `-letter` is one of these flags, and whether it takes a value.
         fn short(letter: char) -> Option<bool>;
+
+        /// Bind `arg` if it is one of these flags that is `global`: what a
+        /// subcommand of the struct that flattens them is offered.
+        fn bind_global<'i>(
+            slots: &mut Self::Slots,
+            arg: &Arg<'i>,
+            input: &mut Argv<'i>,
+        ) -> Result<bool, Error>;
+
+        /// Whether `-letter` is one of these flags that is `global`, and
+        /// whether it takes a value.
+        fn global_short(letter: char) -> Option<bool>;
 
         /// Whether `name` is a long name that may take one dash (`long_only`).
         fn is_long(name: &[u8]) -> bool;
