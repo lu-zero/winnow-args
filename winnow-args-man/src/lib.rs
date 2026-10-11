@@ -1,8 +1,4 @@
-//! man pages for a stitched command.
-//!
-//! Pages are [roff](https://docs.rs/roff) source. One page per command, with
-//! the same sections as the Markdown renderer.
-
+#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
 use roff::{Inline, Roff};

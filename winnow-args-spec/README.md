@@ -1,67 +1,105 @@
 # winnow-args-spec
 
-Reads the TOML fragments a `winnow-args` derive writes and stitches them into
-one command tree. Flattened commands and subcommands stay links in the files;
-[`Catalog::stitch`](https://docs.rs/winnow-args-spec) follows those links and
-keeps declaration order.
+Reads the description a `winnow-args` derive writes of each type, and joins
+them into the command tree of a program. `winnow-args-man` and
+`winnow-args-markdown` render that tree; this crate is for a renderer of
+your own.
 
-Set `WINNOW_ARGS_SPEC` to the absolute path of a directory Cargo does not
-watch, such as one under `target/`, while checking the program. Cargo compiles
-the crates that derive again when the value changes, so a new directory holds
-exactly what the program has now. Each crate is written under its own
-subdirectory, a binary's as `CRATE-bin`, and a fragment is filed under its
-type's source file and name. Markdown and man pages are rendered by
-`winnow-args-markdown` and `winnow-args-man`.
+```rust,no_run
+use std::path::Path;
+use winnow_args_spec::{Catalog, pages};
 
-A fragment says which modules its type is in: those of its source file
-(`cli/add.rs` and `cli/add/mod.rs` are `cli::add`), then the `mod name { }`
-blocks written around it in that file. A name in a fragment is the type's path
-as the source writes it, and it leads to a type whose modules have the path's
-among them, one after the other: `add::Opts`, `cli::add::Opts`, and
-`cli::Opts` where `cli` brings it out with a `pub use`. The type that is in
-the path's modules comes before one below them: `cli::Opts` is the `Opts` of
-`cli` where `cli::add` has one too. `self` and `super` are written as the
-modules they stand for. A path that starts
-with a crate's name leads into that crate, and `std::net::IpAddr` leads to no
-`IpAddr` of the program. A path from a crate's root (`crate::`, or a
-crate's name) is wherever that crate brings the type out. The type is looked
-for in the same crate, then in the others, and where several are left a bare
-name is the type of the same file; a path is not guessed, and the stitching
-says which types it may be. A root is named the same way.
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Written by `WINNOW_ARGS_SPEC=/abs/target/spec cargo check`.
+    let catalog = Catalog::load(Path::new("target/spec"))?;
+    let command = catalog.stitch(&catalog.root()?)?;
+    // The root, then each visible subcommand at every depth.
+    for page in pages(&command, "tool")? {
+        println!("{}: {}", page.stem(), page.command.usage(&page.path));
+    }
+    Ok(())
+}
+```
 
-A bare name is first read as its file has it. The derive reads the `use`
-lines of the module its type is in: `use std::net::IpAddr;` makes a field's `IpAddr` the path
-`std::net::IpAddr`, in the fragment and in the check. A name the file neither
-declares nor brings in by name (a glob import, the prelude) is marked as such.
+## Writing the fragments
 
-The derive holds each field to the same rule when the documentation is
-built: a path that does not lead to its type, through an alias or a module
-that goes by another name, fails to compile there. So a path that leads to a
-type in the fragments is that type's path.
+Check the program with `WINNOW_ARGS_SPEC` set to the absolute path of a
+directory:
 
-A `use` can bring a dependency's type under a bare name, which the derive
-cannot see. So where the crate and a dependency both have a type of the name,
-the crate's own is meant only in its own file, by its module, or as
-`crate::Type`; any other spelling is refused with the two it may be.
+```sh
+WINNOW_ARGS_SPEC=$PWD/target/spec cargo check
+```
 
-When that does not tell two types apart (two of one name in one file, a
-bare name several types answer to), the stitching says which types the name
-may be. `#[arg(spec = "AddOpts")]` on a type files it under a name of its own,
-and the same attribute on each field or variant that holds the type finds it
-there. It is also what a field states for a type it names through an alias.
+Each derive then writes one TOML file, a fragment, for its type:
 
-A page's rows are those of `--help`. What help does not say is a sentence of
-the page: under `long_only`, that a long option may also be spelled with one
-dash.
+```text
+target/spec/
+  tool-bin/src/main.rs/Cli.toml       the binary `tool`
+  tool/src/cli/add.rs/Opts.toml       its library
+  dep/src/lib.rs/Mode.toml            a dependency that derives too
+```
 
-The derive names a value's type, and finds its choices under that name. A type
-named through an alias, or one that implements `FromArg` by hand, has choices
-the name does not lead to: the documentation build stops there, and `spec`
-(the name the choices are filed under) or `choices` on the field states them. `winnow_args::complete::Shell` is known. A value written as a
-bare name that nothing in its file accounts for, when a `ValueEnum` of another
-file has that name, is refused: it may be that enum, or a type with no
-choices, and the stitching asks for a `use` by name, the path, or a `spec`.
-The `use` lines and the declarations are read where the type is, in the same
-`mod name { }` blocks of its file; a `use` inside a function is read as its
-module's. A type that implements `Args` by hand writes no
-fragment; one written by hand beside the others stands for it.
+Nothing is linked or run, so `--target` works for a target that is only
+installed. Cargo compiles the deriving crates again when the variable
+changes, so a new directory holds exactly what the program has now. Use a
+directory Cargo does not watch, such as one under `target/`.
+
+## From fragments to a tree
+
+A fragment does not copy the fields of a type it flattens or takes as a
+subcommand. It records the type's path as the source writes it, `add::Opts`,
+and [`Catalog::stitch`] follows it. A command's own flags come first, then
+those of each flatten, in the order of the source; subcommands likewise.
+
+A path leads to a type this way:
+
+1. A bare name is first read through the `use` lines of its module:
+   with `use std::net::IpAddr;`, a field's `IpAddr` is `std::net::IpAddr`.
+   `self` and `super` are replaced by the modules they stand for.
+2. The modules written before the name must be among the type's own, in
+   order. `add::Opts` and `cli::add::Opts` both lead to the `Opts` of
+   `src/cli/add.rs`. So does `cli::Opts`, unless `cli` has an `Opts` itself.
+3. A path that starts with a crate's name leads into that crate; one that
+   starts with `std` leads to no type of the program.
+4. The crate of the field is searched before the others.
+5. A bare name that several types still answer to is the one of the same
+   file.
+
+When that leaves more than one type, nothing is guessed: the error lists
+the types the name may be.
+
+## Saying which type is meant
+
+`#[arg(spec = "AddOpts")]` on a type files its fragment under that name. The
+same attribute on a field or a variant that holds the type looks for it
+there. It is needed for:
+
+- two types of one name in one file;
+- a type named through an alias, or through a dependency renamed in
+  `Cargo.toml`;
+- a `super::` that reaches the crate's root, or `crate::Opts` where the
+  crate has several `Opts`.
+
+The derive checks the same rules when the variable is set. A field whose
+path does not lead to its type, or that leaves out the `spec` its type has,
+fails to compile at the field, so a page never describes another type.
+
+## A value's choices
+
+The choices of a `ValueEnum` are filed under its name and found from the
+field's type. They are not found for a type named through an alias, or for
+one that implements `FromArg` by hand: the build with the variable set stops
+at that field until it states `spec = "Name"` or `choices(...)`.
+
+`winnow_args::complete::Shell` is known without a fragment.
+
+## Limits
+
+- A `use` inside a function is read as if it were its module's.
+- A type that implements `Args` by hand writes no fragment. One written by
+  hand in the same directory stands for it.
+- A bare name that no `use` accounts for (a glob import) is refused when a
+  `ValueEnum` of another file has that name. Import it by name, write its
+  path, or state `spec`.
+
+[`Catalog::stitch`]: https://docs.rs/winnow-args-spec/latest/winnow_args_spec/struct.Catalog.html#method.stitch

@@ -69,42 +69,41 @@ gets a `Result`. The same command line written by hand, with
 The [crate docs](https://docs.rs/winnow-args) list the entry points, and each
 derive's page lists every attribute it takes.
 
-## What it covers
+## Features
 
-- **The conventions clap and usage share**: short and long flags, bundles,
-  aliases, counts, repeated and delimited values, optional values,
-  positionals and the ways `--` treats them, subcommands with global flags,
-  conflicts, requirements and groups, environment variables and defaults,
-  `flatten`. A small extension: `--no-x` pairs, which clap has only in part.
-  Unknown flags are errors unless `unknown_flags = "value"`.
-- **Help and completion**: help with colour and wrapping; completion
-  scripts for bash, zsh, fish, elvish and PowerShell that ask the program
-  itself.
-- **A shell's builtins**: `+x` options, unknown flags kept as words, options
-  that stop at the first operand.
-- **A linker's command line**: GNU ld's dash rules (`long_only`), `-z`
-  keywords, options whose order matters kept as one sequence (`Occurrence`),
-  `@file` response files, C-syntax numbers.
-- **Without the derive**: the lexer (`token`) and bpaf-style combinators
-  (`combinator`) the derive is built on.
+| | winnow-args | usage | clap |
+|---|:-:|:-:|:-:|
+| Flags, values, positionals, subcommands, global flags, `flatten` | ✓ | ✓ | ✓ |
+| Conflicts, requirements, groups | ✓ | ✓ | ✓ |
+| Help from doc comments | ✓ | ✓ | ✓ |
+| Completion scripts | ✓ | ✓ | ~ |
+| Parser generated at compile time, words borrowed | ✓ | ✓ | – |
+| Combinators, without a macro | ✓ | – | ~ |
+| `+x` options, as a shell builtin takes | ✓ | – | – |
+| Long options with one dash, `-z` keywords, as GNU `ld` takes | ✓ | – | – |
+| Flags kept in command-line order | ✓ | ~ | ~ |
+| Flag constraints checked at compile time | ✓ | – | – |
+| Help prose left out of the binary by a feature | ✓ | ~ | – |
+| A CLI built at runtime, external subcommands | – | ✓ | ✓ |
+| Conditional requirements (`required_if`) | – | ✓ | ✓ |
+| Man pages, markdown | ~ | ✓ | ~ |
+| "Did you mean" suggestions | ✓ | ✓ | ✓ |
+
+`✓` built in · `~` with some work, or in a companion crate · `–` not offered.
+[`docs/COMPARISON.md`](https://github.com/lu-zero/winnow-args/blob/HEAD/docs/COMPARISON.md) has every row, and bpaf.
+
+Man and Markdown pages are made by
+[`winnow-args-man`](https://crates.io/crates/winnow-args-man) and
+[`winnow-args-markdown`](https://crates.io/crates/winnow-args-markdown).
 
 ## Performance
 
 The parser is generated at compile time, so a parse costs the same however
 many commands the program declares; clap and bpaf build theirs at each start.
-Cold instructions and warm time for one parse:
 
-| | `example -v --path /tmp/x a b c` | | `mise use -g node@20`, 211 commands | |
-|---|---:|---:|---:|---:|
-| derive | 2 939 | 196 ns | 4 012 | 328 ns |
-| combinators | 4 574 | 396 ns | | |
-| usage | 5 683 | 503 ns | 7 720 | 782 ns |
-| clap | 136 514 | 15.3 µs | 4 943 837 | 753 µs |
-| bpaf 0.9 | 142 994 | 15.0 µs | 21 966 400 | 2.65 ms |
+![Time per parse for two command lines, log scale: winnow-args against usage, clap and bpaf](https://raw.githubusercontent.com/lu-zero/winnow-args/HEAD/docs/performance.svg)
 
-Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
-profile, pinned to one core. The full tables and the method are in the
-repository's
+The measurements and the method are in the repository's
 [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
 
 ## Cargo features

@@ -34,6 +34,12 @@ just gen mise-shadow                  # benchmarks/shadows/mise-wa
   `error`. Off it: `help`, `color`, `complete`, `response`, `env`.
 - `winnow-args-derive` — the derives. What only generated code calls is under
   `winnow_args::__private`.
+- `winnow-args-spec` — reads the TOML fragments the derives write under
+  `WINNOW_ARGS_SPEC` and stitches a command from them. `winnow-args-man` and
+  `winnow-args-markdown` render its pages. The derive writes the format and
+  `winnow-args-spec` reads it, so the five crates are released together.
+- `examples` — the example programs of `winnow-args`, and two documentation
+  generators (`xtask-docs`, `just-docs`), unpublished.
 - `benchmarks` (unpublished, the `bench` package) — the same CLI, and mise's,
   in winnow-args, usage, bpaf and clap; see its [README](./benchmarks/README.md).
 - `xtask` (unpublished) — the generators. They edit text, so what they carry

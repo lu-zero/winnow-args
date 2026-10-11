@@ -1,7 +1,8 @@
 # Changelog
 
-What changed in each release of `winnow-args` and `winnow-args-derive`, which
-are released together. Versions follow [semver](https://semver.org).
+What changed in each release of `winnow-args`, `winnow-args-derive`,
+`winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
+released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 

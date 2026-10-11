@@ -5,6 +5,11 @@
 //! an `ErrMode`: `alt` asks [`ParserError::is_backtrack`], so one flag is all
 //! the modality a command line needs, and the common case — a branch of an
 //! `alt` that did not match — builds a 24-byte value without allocating.
+//!
+//! An error that reaches the user is printed by [`Error::render`]: the
+//! message, then a tip when a flag, a subcommand or a choice close to what
+//! was typed is accepted there ([`Error::similar`]). Only a failed parse
+//! looks for one.
 
 use std::fmt;
 

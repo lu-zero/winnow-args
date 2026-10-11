@@ -1,16 +1,4 @@
-//! Command trees stitched from the derive's TOML fragments.
-//!
-//! Each derived type is one file, in the directory of its crate and of its
-//! source file. A flatten or a subcommand is the other type as the source
-//! writes it, `add::Opts`, not a copy of its fields. [`Catalog::stitch`]
-//! follows those names: to the type of that name in the same crate, else to
-//! the only one of that name in the others. Where several types have the
-//! name, the modules written before it say which file's is meant, and a bare
-//! name is the type of the same file.
-//!
-//! Order is the order of the lists in the files: a command's own items, then
-//! each flatten's resolved items, then its sequence; its own subcommands,
-//! then each flatten's resolved subcommands.
+#![doc = include_str!("../README.md")]
 
 use std::collections::BTreeMap;
 use std::collections::HashSet;

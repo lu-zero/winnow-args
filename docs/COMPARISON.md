@@ -1,7 +1,7 @@
 # winnow-args, usage, bpaf and clap
 
 What each derive (or, for bpaf, its combinators too) offers, read from the
-projects' documentation: usage 6.11, bpaf 0.9, clap 4. `✓` built in · `~`
+projects' documentation: usage 7.0, bpaf 0.9, clap 4. `✓` built in · `~`
 possible with some work, or in a companion crate · `–` not offered. How fast
 each is: [`benchmarks/`](../benchmarks/README.md). The rename from clap's and
 usage's derives is in the crate docs, under "From clap and usage".
@@ -13,7 +13,7 @@ usage's derives is in the crate docs, under "From clap and usage".
 | Derive | ✓ | ✓ | ✓ | ✓ |
 | Parser generated at compile time | ✓ | ✓ | – | – |
 | Combinators, without a macro | ✓ | – | ✓ | ~ builder |
-| A CLI built at runtime | – | ✓ `usage-lib` | ✓ | ✓ builder |
+| A CLI built at runtime | – | ✓ `usage-lib`, `usage-dynamic` | ✓ | ✓ builder |
 | Words borrowed, not copied | ✓ | ✓ | – | – |
 | Non-UTF-8 values | ✓ Unix | ✓ | ✓ | ✓ |
 
@@ -75,10 +75,10 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | | winnow-args | usage | bpaf | clap |
 |---|:-:|:-:|:-:|:-:|
 | Help from doc comments, wrapped, coloured | ✓ | ✓ | ✓ | ✓ |
-| Help prose left out of the binary by a feature | ✓ | – | – | – |
-| "Did you mean" suggestions | – | – | ✓ | ✓ |
+| Help prose left out of the binary by a feature | ✓ | ~ help as a whole | – | – |
+| "Did you mean" suggestions | ✓ | ✓ | ✓ | ✓ |
 | Completion scripts | ✓ | ✓ | ✓ | ~ `clap_complete` |
-| Completion of values by hint or function | – | ✓ | ✓ | ~ |
+| Completion of values by hint or function | ✓ | ✓ | ✓ | ~ |
 | Man pages, markdown | ~ `winnow-args-man`, `-markdown` | ✓ | ✓ | ~ `clap_mangen` |
 | Deprecated flags with warnings | – | ✓ | – | – |
 

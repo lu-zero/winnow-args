@@ -67,11 +67,20 @@
 //!   the lexer under both.
 //! - [`FromArg`]: what a value can be, and the types in [`value`] for a
 //!   `FromStr` type, a C-syntax number and `key=value`.
-//! - [`Error`] and [`report`]: what a failed parse holds, and how it is printed.
-//! - [`help`] and [`color`]: the help text and its theme.
-//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and PowerShell.
+//! - [`Error`] and [`report`]: what a failed parse holds, and how it is printed,
+//!   with a tip when something close to what was typed is accepted.
+//! - [`help`] and [`color`]: the help text and its theme. A description's
+//!   `` `quoted` ``, `*emphasized*` and `**strong**` spans are painted, each
+//!   by a paint of its own in [`color::Palette`].
+//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and
+//!   PowerShell, for flags, subcommands and values.
 //! - [`response`]: `@file` words.
 //! - [`with_env`]: a test's own environment variables.
+//!
+//! Man and markdown pages are made by `winnow-args-man` and
+//! `winnow-args-markdown`, from what the derives write when the environment
+//! variable `WINNOW_ARGS_SPEC` names a directory; the derive crate's
+//! documentation says how.
 //!
 //! # Entry points
 //!
@@ -89,19 +98,9 @@
 //!
 //! The parser is generated at compile time, so a parse costs the same however
 //! many commands the program declares; clap and bpaf build theirs at each
-//! start. Cold instructions and warm time for one parse:
-//!
-//! | | `example -v --path /tmp/x a b c` | | `mise use -g node@20`, 211 commands | |
-//! |---|---:|---:|---:|---:|
-//! | derive | 2 939 | 196 ns | 4 012 | 328 ns |
-//! | combinators | 4 574 | 396 ns | | |
-//! | usage | 5 683 | 503 ns | 7 720 | 782 ns |
-//! | clap | 136 514 | 15.3 µs | 4 943 837 | 753 µs |
-//! | bpaf 0.9 | 142 994 | 15.0 µs | 21 966 400 | 2.65 ms |
-//!
-//! Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
-//! profile, pinned to one core. The full tables and the method are in the
-//! repository's
+//! start. A parse is a few thousand instructions and a few hundred
+//! nanoseconds. The measurements, against clap, bpaf and usage, and the
+//! method are in the repository's
 //! [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
 //!
 //! # Cargo features

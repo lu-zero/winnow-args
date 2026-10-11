@@ -26,7 +26,8 @@
 //! type of the program nothing a shell knows. A field says otherwise with
 //! `#[arg(hint = "dir")]`, `"command"`, `"file"` or `"none"`. A value only
 //! the program knows is answered by a function,
-//! `#[arg(complete = branches)]`, given what is typed of it.
+//! `#[arg(complete = branches)]`, given what is typed of it; each candidate
+//! is one plain word, as the scripts quote nothing for the shell.
 //!
 //! In a program, the callback is answered first and the script is printed on
 //! request, here by a flag of its own:

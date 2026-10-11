@@ -62,7 +62,8 @@ mod spec;
 /// Derive `Args` for a struct with named fields: the generated loop parses the whole command line.
 ///
 /// Every attribute is `#[arg(...)]` (or `#[winnow_args(...)]`); a field with none is `--field-name`.
-/// Doc comments are the help text.
+/// Doc comments are the help text. On a terminal a `` `quoted` ``, `*emphasized*` or `**strong**` span
+/// of one is painted, marks kept.
 ///
 /// ```ignore
 /// use winnow_args::Args;

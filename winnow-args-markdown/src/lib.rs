@@ -1,8 +1,4 @@
-//! Markdown pages for a stitched command.
-//!
-//! One page per command. A subcommand is a link to its own page, and a
-//! flattened command's items are already in the tree.
-
+#![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
 use winnow_args_spec::{Command, Item, Page, Sub, pages};
