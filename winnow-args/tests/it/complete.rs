@@ -1,8 +1,9 @@
 //! Shell completion answered from the help data.
 
 use std::ffi::OsString;
+use std::path::PathBuf;
 
-use winnow_args::complete::{Shell, complete};
+use winnow_args::complete::{Candidate, Hint, Shell, complete};
 use winnow_args::{Args, Subcommand, ValueEnum};
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -23,7 +24,7 @@ struct Tool {
     color: Option<When>,
     /// Where to write.
     #[arg(short, long, value_name = "FILE")]
-    output: Option<String>,
+    output: Option<PathBuf>,
     /// Hidden.
     #[arg(long, hide)]
     secret: bool,
@@ -84,7 +85,7 @@ fn a_flags_value() {
     assert_eq!(values(&["--color", "a"]), ["auto", "always"]);
     assert_eq!(values(&["--color=n"]), ["--color=never"]);
     let files = complete(Tool::HELP, &["-o", ""]);
-    assert!(files.files && files.candidates.is_empty());
+    assert!(files.hint == Hint::Files && files.candidates.is_empty());
     // Attached, the value is already there.
     assert_eq!(values(&["-ofile", "b"]), ["build"]);
 }
@@ -174,7 +175,7 @@ fn scripts_name_the_program() {
 #[allow(dead_code, reason = "only the help data is completed")]
 struct More {
     #[arg(long, alias = "out", value_name = "FILE")]
-    output: Option<String>,
+    output: Option<PathBuf>,
     #[arg(long, require_equals)]
     color: Option<When>,
     #[arg(long, global)]
@@ -193,7 +194,7 @@ fn more(words: &[&str]) -> winnow_args::complete::Completions {
 #[test]
 fn the_walk_reads_the_line_as_the_parser_does() {
     // An alias takes its value from the next word, like the name it stands for.
-    assert!(more(&["--out", ""]).files);
+    assert_eq!(more(&["--out", ""]).hint, Hint::Files);
     // `require_equals`: the next word is not the value.
     let next = more(&["--color", ""]);
     assert!(
@@ -218,19 +219,19 @@ fn the_walk_reads_the_line_as_the_parser_does() {
 
     // A second short is listed, and one that takes a value holds the next word.
     assert!(forms(&["-"]).contains(&"-L".to_owned()));
-    assert!(walk(&["-L", ""]).files);
+    assert_eq!(walk(&["-L", ""]).hint, Hint::Files);
     // `+e` is a switch, so the next word is still a flag.
     assert_eq!(forms(&["+"]), ["+e"]);
     assert!(forms(&["+e", "--"]).contains(&"--verbose".to_owned()));
     // `values = 3`: three words, and after the first they are values even when flag-like.
-    assert!(walk(&["--platform", "a", "-11", ""]).files);
+    assert_eq!(walk(&["--platform", "a", "-11", ""]).hint, Hint::Files);
     assert!(forms(&["--platform", "a", "b", "c", "-"]).contains(&"-v".to_owned()));
     // `values = 1..` stops at a flag. A following flag is not an optional value.
-    assert!(walk(&["--include", "a", "b", ""]).files);
+    assert_eq!(walk(&["--include", "a", "b", ""]).hint, Hint::Files);
     assert!(forms(&["--include", "a", "--"]).contains(&"--verbose".to_owned()));
-    assert!(!walk(&["--include", "a", "--"]).files);
+    assert_eq!(walk(&["--include", "a", "--"]).hint, Hint::Nothing);
     assert!(forms(&["--color", "--v"]).contains(&"--verbose".to_owned()));
-    assert!(walk(&["--color", ""]).files);
+    assert_eq!(walk(&["--color", ""]).hint, Hint::Files);
 }
 
 /// Second shorts, `+` options, fixed and open value runs, an optional value.
@@ -239,16 +240,16 @@ fn the_walk_reads_the_line_as_the_parser_does() {
 #[allow(dead_code, reason = "only the help data is completed")]
 struct Forms {
     #[arg(short = 'l', short = 'L', value_name = "FILE")]
-    list: Option<String>,
+    list: Option<PathBuf>,
     #[arg(short = 'v', long)]
     verbose: bool,
     #[arg(short = 'e', plus = 'e')]
     errexit: Option<bool>,
     #[arg(long, values = 3, value_name = "V")]
-    platform: Vec<String>,
+    platform: Vec<PathBuf>,
     #[arg(long, values = 1.., value_name = "PATH")]
-    include: Vec<String>,
-    #[arg(long, default_missing = "always")]
+    include: Vec<PathBuf>,
+    #[arg(long, default_missing = "always", hint = "file")]
     color: Option<String>,
 }
 
@@ -293,4 +294,140 @@ fn a_shell_is_a_flag_value() {
     assert_eq!(shell(&["--completions", "zsh"]).unwrap(), Some(Shell::Zsh));
     let e = shell(&["--completions", "tcsh"]).unwrap_err();
     assert_eq!(e.kind(), winnow_args::ErrorKind::InvalidChoice);
+}
+
+/// The branches a checkout may name, whatever is typed of one.
+fn branches(_typed: &str) -> Vec<Candidate> {
+    ["main", "maint", "next"]
+        .into_iter()
+        .map(|value| Candidate {
+            value: value.to_owned(),
+            help: "a branch",
+        })
+        .collect()
+}
+
+#[derive(Args, Debug)]
+#[arg(name = "hinted")]
+struct Hinted {
+    /// Where to work.
+    #[arg(short = 'C', long, hint = "dir")]
+    dir: Option<String>,
+    /// What to run after.
+    #[arg(long, hint = "command")]
+    then: Option<String>,
+    /// How many at once.
+    #[arg(short, long, hint = "none")]
+    jobs: Option<u32>,
+    /// The branch to start from.
+    #[arg(long, complete = branches)]
+    from: Option<String>,
+    /// Unhinted: each type says what it is.
+    #[arg(long)]
+    config: Option<PathBuf>,
+    #[arg(long)]
+    name: Option<String>,
+    #[arg(long)]
+    retries: Vec<u8>,
+    #[arg(long)]
+    bind: Option<std::net::SocketAddr>,
+    #[arg(long)]
+    limit: Option<winnow_args::value::CInt<u64>>,
+    /// A number is no directory, unless the field says so.
+    #[arg(long, hint = "dir")]
+    depth: Option<u32>,
+    /// A path is no file, when the field says so.
+    #[arg(long, hint = "none")]
+    opaque: Option<PathBuf>,
+    /// A type of the program says what it is.
+    #[arg(long)]
+    tree: Vec<Tree>,
+    #[arg(positional, complete = branches)]
+    branch: Option<String>,
+    #[arg(positional, hint = "command")]
+    run: Option<String>,
+}
+
+#[derive(Debug)]
+struct Tree;
+
+impl winnow_args::FromArg for Tree {
+    const HINT: Hint = Hint::Dirs;
+
+    fn from_arg(_: &winnow_args::BStr) -> Result<Self, winnow_args::error::BoxError> {
+        Ok(Tree)
+    }
+}
+
+#[test]
+fn a_value_is_what_its_hint_or_its_function_says() {
+    let at = |words: &[&str]| complete(Hinted::HELP, words);
+    assert_eq!(at(&["-C", ""]).hint, Hint::Dirs);
+    assert_eq!(at(&["--dir=sr"]).hint, Hint::Dirs);
+    assert_eq!(at(&["--then", ""]).hint, Hint::Commands);
+    // Nothing a shell knows, and no candidate either.
+    assert_eq!(at(&["-j", ""]), Default::default());
+    // With no hint stated, the type's: a path or a word is a file, and a
+    // number or an address nothing a shell knows.
+    assert_eq!(at(&["--config", ""]).hint, Hint::Files);
+    assert_eq!(at(&["--name", ""]).hint, Hint::Files);
+    assert_eq!(at(&["--retries", ""]).hint, Hint::Nothing);
+    assert_eq!(at(&["--bind", ""]).hint, Hint::Nothing);
+    assert_eq!(at(&["--limit", ""]).hint, Hint::Nothing);
+    assert_eq!(at(&["--depth", ""]).hint, Hint::Dirs);
+    assert_eq!(at(&["--opaque", ""]).hint, Hint::Nothing);
+    assert_eq!(at(&["--tree", ""]).hint, Hint::Dirs);
+    // A positional too.
+    assert_eq!(at(&["main", ""]).hint, Hint::Commands);
+    let values = |words: &[&str]| -> Vec<String> {
+        at(words).candidates.into_iter().map(|c| c.value).collect()
+    };
+    // The function answers; what does not start as typed is left out.
+    assert_eq!(values(&["--from", ""]), ["main", "maint", "next"]);
+    assert_eq!(values(&["--from", "ma"]), ["main", "maint"]);
+    assert_eq!(values(&["--from=n"]), ["--from=next"]);
+    assert_eq!(values(&["mai"]), ["main", "maint"]);
+    assert_eq!(at(&["--from", ""]).hint, Hint::Nothing);
+    let args = |words: &[&str]| -> Vec<OsString> { words.iter().map(OsString::from).collect() };
+    let asked = |shell: &str, line: &str| {
+        Hinted::completion_request(&args(&[
+            "__complete_word__",
+            "--shell",
+            shell,
+            "--line",
+            line,
+        ]))
+    };
+    assert_eq!(asked("bash", "hinted -C ").as_deref(), Some("\u{1}dirs\n"));
+    assert_eq!(
+        asked("zsh", "hinted --then ").as_deref(),
+        Some("\u{1}commands\t\n")
+    );
+    // A value attached to its flag: the shell is told what comes before it,
+    // but for bash, which breaks the word at the `=` itself.
+    assert_eq!(at(&["--dir=sr"]).before, "--dir=");
+    assert_eq!(at(&["-C", "sr"]).before, "");
+    for shell in ["zsh", "fish", "elvish", "powershell"] {
+        assert_eq!(
+            asked(shell, "hinted --dir=sr").as_deref(),
+            Some("\u{1}dirs\t--dir=\n"),
+            "{shell}"
+        );
+    }
+    assert_eq!(
+        asked("bash", "hinted --dir=sr").as_deref(),
+        Some("\u{1}dirs\n")
+    );
+    assert_eq!(asked("fish", "hinted -j ").as_deref(), Some(""));
+    assert_eq!(
+        asked("fish", "hinted --from n").as_deref(),
+        Some("next\ta branch\n")
+    );
+    // Every script reads each line it may be answered with.
+    for &shell in Shell::ALL {
+        let script = Hinted::completion_script(shell);
+        for line in ["files", "dirs", "commands"] {
+            assert!(script.contains(line), "{shell}: {line}");
+        }
+    }
 }

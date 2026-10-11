@@ -89,6 +89,11 @@ pub struct Item {
     pub values: usize,
     /// It may take more than `values` (`values = 1..`): shown as `<V>...`.
     pub more_values: bool,
+    /// What its value is, for the shell that completes it.
+    pub hint: crate::complete::Hint,
+    /// What its value can be, given what is typed of it: asked when a shell
+    /// completes it, in place of its choices and its hint.
+    pub complete: Option<fn(&str) -> Vec<crate::complete::Candidate>>,
 }
 
 impl Item {
@@ -117,6 +122,8 @@ impl Item {
         optional_value: false,
         values: 1,
         more_values: false,
+        hint: crate::complete::Hint::Nothing,
+        complete: None,
     };
 }
 

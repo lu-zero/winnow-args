@@ -62,6 +62,13 @@ pub trait FromArg: Sized {
     #[doc(hidden)]
     const SPEC: &'static str = "";
 
+    /// What the value is, for the shell that completes it, when a field
+    /// states no `hint`. Nothing a shell knows by default: a number, an
+    /// address, a type of the program. A `PathBuf`, a `String` and an
+    /// `OsString` are a file: a word is one more often than not, and a shell
+    /// that offers files stops no other word from being typed.
+    const HINT: crate::complete::Hint = crate::complete::Hint::Nothing;
+
     /// Convert one value.
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }
@@ -88,6 +95,8 @@ pub fn to_str(value: &BStr) -> Result<&str, std::str::Utf8Error> {
 }
 
 impl FromArg for String {
+    const HINT: crate::complete::Hint = crate::complete::Hint::Files;
+
     fn from_arg(value: &BStr) -> Result<Self, BoxError> {
         Ok(to_str(value)?.to_owned())
     }
@@ -100,6 +109,8 @@ impl FromArg for Vec<u8> {
 }
 
 impl FromArg for OsString {
+    const HINT: crate::complete::Hint = crate::complete::Hint::Files;
+
     #[cfg(unix)]
     fn from_arg(value: &BStr) -> Result<Self, BoxError> {
         use std::os::unix::ffi::OsStrExt as _;
@@ -113,6 +124,8 @@ impl FromArg for OsString {
 }
 
 impl FromArg for PathBuf {
+    const HINT: crate::complete::Hint = crate::complete::Hint::Files;
+
     fn from_arg(value: &BStr) -> Result<Self, BoxError> {
         OsString::from_arg(value).map(PathBuf::from)
     }

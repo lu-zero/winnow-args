@@ -13,6 +13,8 @@ use winnow::error::{FromExternalError, ModalError, ParserError};
 use crate::help::Style;
 use crate::stream::Argv;
 
+mod suggest;
+
 /// Boxed cause of an [`ErrorKind::InvalidValue`].
 pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
 
@@ -71,6 +73,10 @@ struct Detail {
     token: String,
     value: Option<String>,
     cause: Option<BoxError>,
+    /// Subcommand names from the root down to where it failed.
+    path: Vec<&'static str>,
+    /// What was probably meant, and what it is: "flag".
+    similar: Option<(&'static str, String)>,
 }
 
 /// A parse failure.
@@ -190,12 +196,50 @@ impl Error {
         Self::request(ErrorKind::VersionRequested, command, false, false)
     }
 
-    /// Record that this came from within subcommand `name`, for the usage line.
+    /// Record that this came from within subcommand `name`, for the usage line
+    /// and for what [`Error::suggested`] looks among.
+    #[cold]
+    #[inline(never)]
     pub fn within(mut self, name: &'static str) -> Self {
-        if let Some(request) = self.detail.as_deref_mut().and_then(|d| d.request.as_mut()) {
-            request.path.insert(0, name);
+        if let Some(detail) = self.detail.as_deref_mut() {
+            match detail.request.as_mut() {
+                Some(request) => request.path.insert(0, name),
+                None => detail.path.insert(0, name),
+            }
         }
         self
+    }
+
+    /// Look among what `root` and the subcommand it failed in take for what
+    /// an unknown flag or word was probably meant to be: [`Error::similar`]
+    /// then has it. [`Args::parse_words`](crate::Args::parse_words) and what
+    /// is built on it do this; a parse through
+    /// [`Args::parse_argv`](crate::Args::parse_argv) does not.
+    #[cold]
+    #[inline(never)]
+    pub fn suggested(mut self, root: &'static crate::help::Command) -> Self {
+        let Some(detail) = self.detail.as_deref_mut() else {
+            return self;
+        };
+        let found = match self.kind {
+            ErrorKind::UnknownFlag => {
+                suggest::flag(root, &detail.path, &detail.token).map(|flag| ("flag", flag))
+            }
+            ErrorKind::UnexpectedArg => suggest::subcommand(root, &detail.path, &detail.token)
+                .map(|name| ("subcommand", name.to_owned())),
+            _ => None,
+        };
+        if let Some(found) = found {
+            detail.similar = Some(found);
+        }
+        self
+    }
+
+    /// What the flag, subcommand or value at fault was probably meant to be,
+    /// when something close to it is accepted there.
+    pub fn similar(&self) -> Option<&str> {
+        let (_, similar) = self.detail.as_deref()?.similar.as_ref()?;
+        Some(similar)
     }
 
     /// The help to show for a [`ErrorKind::HelpRequested`], `program` leading
@@ -237,15 +281,20 @@ impl Error {
         cause: impl Into<BoxError>,
     ) -> Self {
         let cause = cause.into();
-        let kind = if cause.is::<crate::value::ChoiceError>() {
-            ErrorKind::InvalidChoice
-        } else {
-            ErrorKind::InvalidValue
+        let choices = cause.downcast_ref::<crate::value::ChoiceError>();
+        let kind = match choices {
+            Some(_) => ErrorKind::InvalidChoice,
+            None => ErrorKind::InvalidValue,
         };
+        let value = String::from_utf8_lossy(value).into_owned();
+        let similar = choices
+            .and_then(|error| suggest::nearest(&value, error.choices.iter().copied()))
+            .map(|choice| ("value", choice.to_owned()));
         let mut error = Self::with_token(kind, offset, flag.into());
         let detail = error.detail_mut();
-        detail.value = Some(String::from_utf8_lossy(value).into_owned());
+        detail.value = Some(value);
         detail.cause = Some(cause);
+        detail.similar = similar;
         error
     }
 
@@ -337,13 +386,27 @@ impl Error {
         }
     }
 
+    /// `tip: a similar flag exists: …` for an error that has [`Error::similar`],
+    /// painted as what is missing is.
+    pub fn tip(&self, style: Style) -> Option<String> {
+        let (what, similar) = self.detail.as_deref()?.similar.as_ref()?;
+        Some(format!(
+            "{} a similar {what} exists: `{}`",
+            Style::paint(style.valid(), "tip:"),
+            Style::paint(style.valid(), similar),
+        ))
+    }
+
     /// The whole report for an error that is not help or version:
-    /// `error: …` and a pointer to `--help`.
+    /// `error: …`, a tip when something close was accepted, and a pointer to
+    /// `--help`.
     pub fn render(&self, style: Style) -> String {
+        let tip = self.tip(style).map(|tip| format!("\n\n  {tip}"));
         format!(
-            "{} {}\n\nFor more information, try '{}'.",
+            "{} {}{}\n\nFor more information, try '{}'.",
             Style::paint(style.error(), "error:"),
             self.message(style),
+            tip.unwrap_or_default(),
             Style::paint(style.flag(), "--help"),
         )
     }

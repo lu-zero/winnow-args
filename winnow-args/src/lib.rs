@@ -320,6 +320,14 @@ pub trait Args: Sized {
     /// are offered to `globals`, its ancestors' global flags.
     fn parse_argv_with(input: &mut Argv<'_>, globals: &mut dyn Globals) -> Result<Self, Error>;
 
+    /// [`Args::HELP`], from where the type is. A constant is built again in
+    /// each crate that names it, and help is large: the derive writes this
+    /// beside the type, so a program in another crate has the one copy.
+    #[doc(hidden)]
+    fn help_data() -> &'static help::Command {
+        Self::HELP
+    }
+
     /// This command's help, rendered only when asked for.
     const HELP: &'static help::Command = &help::Command {
         name: "",
@@ -339,7 +347,7 @@ pub trait Args: Sized {
     /// from this command's help data; `None` when `args` (the command line
     /// after the program's name) is not one. See [`complete`].
     fn completion_request(args: &[std::ffi::OsString]) -> Option<String> {
-        complete::answer(Self::HELP, args)
+        complete::answer(Self::help_data(), args)
     }
 
     /// The completion script for `shell`, calling back the program named in
@@ -355,8 +363,11 @@ pub trait Args: Sized {
     /// Parse `words`, the arguments after the program name, already borrowed
     /// as [`BStr`]s: what [`response::expand`] and [`words`] give. Nothing is
     /// copied.
+    ///
+    /// An unknown flag or subcommand that is close to one of the program's
+    /// has it as [`Error::similar`].
     fn parse_words(words: &[&BStr]) -> Result<Self, Error> {
-        Self::parse_argv(&mut Argv::new(words))
+        Self::parse_argv(&mut Argv::new(words)).map_err(|error| error.suggested(Self::help_data()))
     }
 
     /// Parse `argv`, the whole command line, program name first. The name is

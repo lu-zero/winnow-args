@@ -87,9 +87,18 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `help-text` feature: help keeps its structure without the prose
 - [x] Error kinds after usage's codes, with the offending word's offset;
       `report` maps them to output and exit status
+- [x] A tip with the flag, subcommand or choice that was probably meant
+      (Jaro at 0.7, as clap), found only once a parse has failed
 - [x] Completion scripts for bash, zsh, fish, elvish, PowerShell, answered by
-      the program from its help data; the answers are tested, the bash and zsh
-      scripts tried by hand
+      the program from its help data; the answers are tested, the scripts
+      tried by hand in each shell
+- [x] A value's completion by `hint` (file, dir, command, none), which its
+      type gives when the field does not (`FromArg::HINT`: a file for a
+      `PathBuf`, a `String` or an `OsString`, nothing for any other), or by a
+      function of the program
+      (`complete`), for a value attached to its flag too (`--dir=sr`); tried
+      in bash, zsh, fish, elvish and PowerShell. PowerShell offers files where
+      nothing is known, as it does for any command that answers nothing
 - [x] Man and markdown pages, one per command, from TOML fragments the derive
       writes when `WINNOW_ARGS_SPEC` is set: the program is checked, not run,
       so the pages describe any installed target
@@ -194,15 +203,14 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] `long_version`, `usage = "…"`, `before_help`, `display_order`,
       `verbatim_doc_comment`, `note` / `warning`, examples, a logo, `help <topic>`
 - [ ] `hide_default_value`, `hide_env`
-- [ ] Rendered diagnostics with the command line and a caret; "did you mean"
+- [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
 - [ ] Help width counts characters, not terminal columns
 
 ### Completion
 
-- [ ] The fish, elvish and PowerShell scripts run in their shells
-- [ ] Value hints (`FilePath`, `DirPath`, extensions), a completion function per
-      value, descriptions on value candidates
+- [ ] A hint that keeps to some extensions; a candidate of `complete` with a
+      space in it, quoted for each shell
 
 ### Program surface
 

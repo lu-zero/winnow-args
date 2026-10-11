@@ -5,6 +5,23 @@ are released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: an unknown flag or subcommand, or a value that is not one of
+  its choices, is reported with what was probably meant: `tip: a similar flag
+  exists: --force`. `Error::similar` has it, `Error::tip` the line, and
+  `Error::suggested` looks for it for a parse that does not go through
+  `parse_words`. Only an error pays for it.
+- **Added**: completion of a value that is no file. `hint = "dir"`,
+  `"command"` or `"none"` on a field says what the shell is asked for, and
+  `complete = function` has the program answer, given what is typed. With no
+  hint, the type says (`FromArg::HINT`): a `PathBuf`, a `String` or an
+  `OsString` is a file. A value attached to its flag, `--dir=sr`, is
+  completed too.
+- **Changed**: a number, or a type that is not a path or a word, is no
+  longer completed as a file. 0.1 offered files for every value with no
+  choices; a type of the program that holds a path now needs
+  `hint = "file"`, and a `String` that is no file can say `hint = "none"`.
+- **Changed**: `help::Item` has two more fields, `hint` and `complete`, and
+  `complete::Completions` has `hint` and `before` where it had `files`.
 - **Added**: `*emphasized*` and `**strong**` spans of a description are
   painted in help, italic and bold by default, as `` `quoted` `` ones are. The
   command's own description is painted too, and a span of a heading is

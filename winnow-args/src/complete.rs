@@ -18,8 +18,15 @@
 //! - after `-` or `--`, the visible flags of the command reached so far, with
 //!   their descriptions;
 //! - a flag's value (`--color <TAB>`, `--color=<TAB>`), from its choices, or
-//!   files when it has none;
-//! - elsewhere, subcommand names and a positional's choices, or files.
+//!   what its [`Hint`] says the shell knows: files for a path or a word;
+//! - elsewhere, subcommand names and a positional's choices, or its hint's.
+//!
+//! A value's type gives the hint ([`FromArg::HINT`](crate::FromArg::HINT)):
+//! a `PathBuf`, a `String` or an `OsString` is a file, and a number or a
+//! type of the program nothing a shell knows. A field says otherwise with
+//! `#[arg(hint = "dir")]`, `"command"`, `"file"` or `"none"`. A value only
+//! the program knows is answered by a function,
+//! `#[arg(complete = branches)]`, given what is typed of it.
 //!
 //! In a program, the callback is answered first and the script is printed on
 //! request, here by a flag of its own:
@@ -58,8 +65,37 @@ use crate::help::{Command, Item};
 /// The word a completion script calls the program with.
 pub const REQUEST: &str = "__complete_word__";
 
-/// A line in an answer that asks the shell to complete file names itself.
-const FILES: &str = "\u{1}files";
+/// What a value is, when it is not one of a fixed set: what the shell is
+/// asked to complete itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum Hint {
+    /// Nothing a shell can know: a number, a name, free text. What a value
+    /// is taken for when its field does not say and its type is no path or
+    /// word. PowerShell
+    /// offers files all the same, as it does wherever it is answered nothing.
+    #[default]
+    Nothing,
+    /// A file name, directories among them: what a `PathBuf`, a `String`
+    /// and an `OsString` are.
+    Files,
+    /// A directory.
+    Dirs,
+    /// A command on the `PATH`.
+    Commands,
+}
+
+impl Hint {
+    /// The line in an answer that asks the shell for it.
+    const fn line(self) -> Option<&'static str> {
+        match self {
+            Hint::Files => Some("\u{1}files"),
+            Hint::Dirs => Some("\u{1}dirs"),
+            Hint::Commands => Some("\u{1}commands"),
+            Hint::Nothing => None,
+        }
+    }
+}
 
 /// The shells a script can be written for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -142,8 +178,11 @@ pub struct Candidate {
 pub struct Completions {
     /// The candidates, in help order.
     pub candidates: Vec<Candidate>,
-    /// Whether a file name fits here too: the shell completes those itself.
-    pub files: bool,
+    /// What fits here too, which the shell completes itself.
+    pub hint: Hint,
+    /// The part of the word that comes before what the shell completes:
+    /// `--name=` for a value attached to its flag, empty for a whole word.
+    pub before: String,
 }
 
 /// What can be typed as the last of `words`, the command line after the
@@ -424,10 +463,22 @@ impl Walk {
     }
 }
 
-/// A value for `item`: one of its choices, else a file name.
+/// A value for `item`: what its function answers, else one of its choices,
+/// else what its hint says the shell knows.
 fn values(item: &'static Item, prefix: &str, typed: &str, out: &mut Completions) {
+    if let Some(complete) = item.complete {
+        let fitting = complete(typed)
+            .into_iter()
+            .filter(|c| c.value.starts_with(typed));
+        out.candidates.extend(fitting.map(|c| Candidate {
+            value: format!("{prefix}{}", c.value),
+            help: c.help,
+        }));
+        return;
+    }
     if item.choices.is_empty() {
-        out.files = true;
+        out.hint = item.hint;
+        prefix.clone_into(&mut out.before);
         return;
     }
     for choice in item.choices {
@@ -501,7 +552,8 @@ pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
 
 /// The answer as `shell`'s script reads it: one candidate a line, a
 /// description after a colon (zsh) or a tab (the others), and a line asking for
-/// file names when they fit.
+/// what the shell completes itself when that fits: its mark, a tab, and the
+/// part of the word before what the shell is to complete.
 pub fn render(completions: &Completions, shell: Shell) -> String {
     let mut out = String::new();
     for c in &completions.candidates {
@@ -522,16 +574,22 @@ pub fn render(completions: &Completions, shell: Shell) -> String {
         }
         out.push('\n');
     }
-    ask_for_files(completions, &mut out);
+    ask_the_shell(completions, shell, &mut out);
     out
 }
 
-/// The line that asks the shell for file names, when they fit.
-fn ask_for_files(completions: &Completions, out: &mut String) {
-    if completions.files {
-        out.push_str(FILES);
-        out.push('\n');
+/// The line that asks the shell for what it completes itself, when that fits.
+/// bash breaks a word at `=`, and so needs no word of what comes before.
+fn ask_the_shell(completions: &Completions, shell: Shell, out: &mut String) {
+    let Some(line) = completions.hint.line() else {
+        return;
+    };
+    out.push_str(line);
+    if shell != Shell::Bash {
+        out.push('\t');
+        out.push_str(&completions.before);
     }
+    out.push('\n');
 }
 
 /// bash replaces only the part of the word after its last `=` or `:`: the
@@ -547,7 +605,7 @@ fn render_bash(completions: &Completions, typed: &str, replaced: &str) -> String
         out.push_str(c.value.get(cut..).unwrap_or(&c.value));
         out.push('\n');
     }
-    ask_for_files(completions, &mut out);
+    ask_the_shell(completions, Shell::Bash, &mut out);
     out
 }
 
@@ -606,22 +664,23 @@ pub fn script(bin: &str, shell: Shell) -> String {
         Shell::Bash => format!(
             r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
 _{function}_complete() {{
-    local line files= cur="${{COMP_WORDS[COMP_CWORD]}}"
+    local line ask= cur="${{COMP_WORDS[COMP_CWORD]}}"
     # Right after `--name=`, the current word is the `=` itself.
     [[ $cur == = ]] && cur=
     COMPREPLY=()
     while IFS= read -r line; do
-        if [[ $line == $'\001files' ]]; then
-            files=1
-        elif [[ -n $line ]]; then
-            COMPREPLY+=("$line")
-        fi
+        case $line in
+            $'\001files') ask=f ;;
+            $'\001dirs') ask=d ;;
+            $'\001commands') ask=c ;;
+            ?*) COMPREPLY+=("$line") ;;
+        esac
     done < <(command {bin} {REQUEST} --shell bash --line "${{COMP_LINE:0:COMP_POINT}}" \
         --bash-word "${{COMP_WORDS[COMP_CWORD]}}" 2>/dev/null)
-    if [[ -n $files ]]; then
-        compopt -o filenames 2>/dev/null
+    if [[ -n $ask ]]; then
+        [[ $ask == c ]] || compopt -o filenames 2>/dev/null
         local IFS=$'\n'
-        COMPREPLY+=($(compgen -f -- "$cur"))
+        COMPREPLY+=($(compgen -$ask -- "$cur"))
     fi
 }}
 complete -F _{function}_complete {bin}
@@ -632,16 +691,25 @@ complete -F _{function}_complete {bin}
 # Completion for {bin}, answered by `{bin} {REQUEST}`.
 _{function}() {{
     local -a candidates
-    local line files=
+    local line ask= before=
     while IFS= read -r line; do
-        if [[ $line == $'\001files' ]]; then
-            files=1
-        elif [[ -n $line ]]; then
-            candidates+=("$line")
-        fi
+        case $line in
+            $'\001files\t'*) ask=_files ;;
+            $'\001dirs\t'*) ask='_path_files -/' ;;
+            $'\001commands\t'*) ask=_command_names ;;
+            ?*) candidates+=("$line"); continue ;;
+        esac
+        before=${{line#*$'\t'}}
     done < <(command {bin} {REQUEST} --shell zsh --line "${{BUFFER[1,CURSOR]}}" 2>/dev/null)
     (( ${{#candidates}} )) && _describe -t values '{bin}' candidates
-    [[ -n $files ]] && _files
+    if [[ -n $ask ]]; then
+        # `--name=`, when the value is attached: not a part of what is asked for.
+        if [[ -n $before && $PREFIX == "$before"* ]]; then
+            IPREFIX+=$before
+            PREFIX=${{PREFIX#"$before"}}
+        fi
+        ${{=ask}}
+    fi
     return 0
 }}
 if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
@@ -654,11 +722,23 @@ fi
         Shell::Fish => format!(
             r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
 function __{function}_complete
+    set -l token (commandline -ct)
     for line in (command {bin} {REQUEST} --shell fish --line (commandline -cp) 2>/dev/null)
-        if test "$line" = \u0001files
-            __fish_complete_path (commandline -ct)
-        else if test -n "$line"
-            echo $line
+        if not string match -q \u0001'*' -- $line
+            test -n "$line"; and printf '%s\n' $line
+            continue
+        end
+        # The mark, then `--name=` when the value is attached to its flag.
+        set -l asked (string split -m 1 \t -- $line)
+        set -l before $asked[2]
+        set -l typed (string sub -s (math (string length -- "$before") + 1) -- $token)
+        switch $asked[1]
+            case \u0001files
+                printf '%s\n' $before(__fish_complete_path "$typed")
+            case \u0001dirs
+                printf '%s\n' $before(__fish_complete_directories "$typed")
+            case \u0001commands
+                printf '%s\n' $before(complete -C "$typed")
         end
     end
 end
@@ -671,8 +751,23 @@ use str
 
 set edit:completion:arg-completer[{bin}] = {{|@words|
     for answer [(e:{bin} {REQUEST} --shell elvish --words $@words 2>/dev/null | from-lines)] {{
-        if (eq $answer "\x01files") {{
-            edit:complete-filename $words[-1]
+        if (str:has-prefix $answer "\x01") {{
+            # The mark, then `--name=` when the value is attached to its flag.
+            var asked before = (str:split &max=2 "\t" $answer)
+            var typed = (str:trim-prefix $words[-1] $before)
+            var found = []
+            if (has-value ["\x01files" "\x01dirs"] $asked) {{
+                set found = [(edit:complete-filename $typed)]
+            }} elif (eq $asked "\x01commands") {{
+                set found = [(edit:complete-sudo sudo $typed)]
+            }}
+            for one $found {{
+                if (eq (kind-of $one) string) {{
+                    put $before$one
+                }} elif (or (not-eq $asked "\x01dirs") (str:has-suffix $one[stem] /)) {{
+                    edit:complex-candidate $before$one[stem] &code-suffix=$one[code-suffix] &display=$one[display]
+                }}
+            }}
         }} elif (not-eq $answer '') {{
             var parts = [(str:split "\t" $answer)]
             var display = $parts[0]
@@ -701,11 +796,26 @@ Register-ArgumentCompleter -Native -CommandName '{bin}' -ScriptBlock {{
 
     foreach ($answer in $answers) {{
         if ([string]::IsNullOrEmpty($answer)) {{ continue }}
-        if ($answer -eq ([char]1 + 'files')) {{
-            [System.Management.Automation.CompletionCompleters]::CompleteFilename($wordToComplete)
+        $parts = $answer -split "`t", 2
+        if ($answer[0] -eq [char]1) {{
+            # The mark, then `--name=` when the value is attached to its flag.
+            $before = $parts[1]
+            $typed = $wordToComplete
+            if ($before -and $typed.StartsWith($before)) {{ $typed = $typed.Substring($before.Length) }}
+            $found = switch ($parts[0].Substring(1)) {{
+                'files' {{ [System.Management.Automation.CompletionCompleters]::CompleteFilename($typed) }}
+                'dirs' {{
+                    [System.Management.Automation.CompletionCompleters]::CompleteFilename($typed) |
+                        Where-Object ResultType -eq 'ProviderContainer'
+                }}
+                'commands' {{ [System.Management.Automation.CompletionCompleters]::CompleteCommand($typed) }}
+            }}
+            foreach ($one in $found) {{
+                [System.Management.Automation.CompletionResult]::new(
+                    $before + $one.CompletionText, $one.ListItemText, $one.ResultType, $one.ToolTip)
+            }}
             continue
         }}
-        $parts = $answer -split "`t", 2
         $help = if ($parts.Count -gt 1 -and $parts[1]) {{ $parts[1] }} else {{ $parts[0] }}
         [System.Management.Automation.CompletionResult]::new(
             $parts[0], $parts[0], 'ParameterValue', $help)
@@ -738,7 +848,7 @@ mod tests {
                 value: "--color=always".into(),
                 help: "",
             }],
-            files: false,
+            ..Completions::default()
         };
         assert_eq!(render_bash(&c, "--color=al", "al"), "always\n");
         assert_eq!(render_bash(&c, "--color=", "="), "always\n");

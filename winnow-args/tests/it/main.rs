@@ -43,6 +43,7 @@ mod require_equals;
 mod response;
 mod sequence;
 mod subcommand;
+mod suggest;
 mod unknown_flags;
 mod value_ranges;
 

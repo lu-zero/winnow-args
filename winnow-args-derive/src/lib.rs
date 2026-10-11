@@ -214,6 +214,12 @@ mod spec;
 ///
 /// - `help = "…"`, `long_help = "…"`: replace the doc comment's first paragraph and whole text.
 /// - `help_heading = "…"`: list it under that heading instead of "Options".
+/// - `hint = "dir"`: what the value is, for the shell that completes it: `"file"`, `"dir"`, `"command"`,
+///   or `"none"` for one no shell can know. Unstated, the type says (`FromArg::HINT`): a file for a
+///   `PathBuf`, a `String` or an `OsString`, nothing for any other.
+/// - `complete = path::to::function`: a `fn(&str) -> Vec<winnow_args::complete::Candidate>` that answers
+///   what the value can be, given what is typed of it, when a shell completes it. It answers alone, so
+///   not beside `hint`, and each candidate is one plain word: the scripts quote nothing for the shell.
 /// - `hide`: leave it out of help and completion.
 #[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
@@ -474,6 +480,13 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
+
+            // Compiled here and never inlined, so a program in another crate has
+            // no copy of the help.
+            #[inline(never)]
+            fn help_data() -> &'static ::winnow_args::help::Command {
+                <Self as ::winnow_args::Args>::HELP
+            }
 
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: "",
@@ -811,7 +824,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     None,
                     &[],
                     Some(&name),
-                    quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
+                    Some(ty),
                     false,
                     false,
                 ));
@@ -861,13 +874,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
         }
-        let choices = match takes {
-            Some(ty) => {
-                let ty = spanned.or(optional).unwrap_or(ty);
-                quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
-            }
-            None => quote!(&[]),
-        };
+        let value = takes.map(|ty| spanned.or(optional).unwrap_or(ty));
         help_items.push(occurrence_item(
             variant,
             short,
@@ -875,7 +882,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             takes
                 .is_some()
                 .then(|| value_name.as_deref().unwrap_or("VALUE")),
-            choices,
+            value,
             require_equals,
             default_missing.is_some(),
         ));
@@ -1079,12 +1086,20 @@ fn occurrence_item(
     short: Option<char>,
     longs: &[String],
     value_name: Option<&str>,
-    choices: TokenStream2,
+    value: Option<&Type>,
     require_equals: bool,
     optional_value: bool,
 ) -> TokenStream2 {
     let (doc, long_doc) = docs(&variant.attrs);
     let (help, long_help) = (text(&doc), text(&long_doc));
+    // What the value's type says of it, when the variant holds one.
+    let (choices, hint) = match value {
+        Some(ty) => (
+            quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
+            quote!(<#ty as ::winnow_args::FromArg>::HINT),
+        ),
+        None => (quote!(&[]), quote!(::winnow_args::complete::Hint::Nothing)),
+    };
     let positional = short.is_none() && longs.is_empty();
     let short = opt_char(short);
     let long = opt_str(longs.first().map(String::as_str));
@@ -1114,6 +1129,8 @@ fn occurrence_item(
         optional_value: #optional_value,
         values: 1,
         more_values: false,
+        hint: #hint,
+        complete: ::core::option::Option::None,
     })
 }
 
@@ -1853,6 +1870,11 @@ struct Field {
     hide: bool,
     /// A flag's value placeholder.
     value_name: Option<String>,
+    /// What the value is, for a shell that completes it: a variant of `Hint`.
+    /// Unstated, it is what the value's type says.
+    hint: Option<syn::Ident>,
+    /// The function a shell's completion of the value asks.
+    complete: Option<syn::Path>,
     /// A negative number is a value: a flag's detached value, or a positional's word.
     negative_numbers: bool,
     /// A flag's detached value may be any word, flag-like or `--`.
@@ -1922,6 +1944,19 @@ impl Field {
             || require_equals && matches!(self.kind, Kind::Optional(_));
         let values = self.values;
         let more_values = self.values_max.is_some();
+        let hint = match (&self.hint, &self.kind, &self.role) {
+            (Some(hint), _, _) => quote!(::winnow_args::complete::Hint::#hint),
+            (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), role)
+                if !matches!(role, Role::Subcommand) && !self.keywords && !self.tristate =>
+            {
+                quote!(<#ty as ::winnow_args::FromArg>::HINT)
+            }
+            (None, _, _) => quote!(::winnow_args::complete::Hint::Nothing),
+        };
+        let complete = match &self.complete {
+            Some(function) => quote!(::core::option::Option::Some(#function)),
+            None => quote!(::core::option::Option::None),
+        };
         let required = matches!(self.kind, Kind::Required(_))
             && self.default.is_none()
             && self.default_fn.is_none()
@@ -1965,6 +2000,8 @@ impl Field {
                 optional_value: #optional_value,
                 values: #values,
                 more_values: #more_values,
+                hint: #hint,
+                complete: #complete,
             }
         }
     }
@@ -3594,6 +3631,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
 
+            // Compiled here and never inlined, so a program in another crate has
+            // no copy of the help.
+            #[inline(never)]
+            fn help_data() -> &'static ::winnow_args::help::Command {
+                <Self as ::winnow_args::Args>::HELP
+            }
+
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: #program_name,
                 about: #about,
@@ -4253,9 +4297,27 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
+    let (mut hint, mut complete) = (None, None);
     for attr in f.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("short") {
+            if meta.path.is_ident("hint") {
+                let name = meta.value()?.parse::<LitStr>()?;
+                let variant = match name.value().as_str() {
+                    "file" => "Files",
+                    "dir" => "Dirs",
+                    "command" => "Commands",
+                    "none" => "Nothing",
+                    _ => {
+                        return Err(syn::Error::new(
+                            name.span(),
+                            "a hint is \"file\", \"dir\", \"command\" or \"none\"",
+                        ));
+                    }
+                };
+                hint = Some(syn::Ident::new(variant, name.span()));
+            } else if meta.path.is_ident("complete") {
+                complete = Some(meta.value()?.parse::<syn::Path>()?);
+            } else if meta.path.is_ident("short") {
                 let c = if meta.input.peek(syn::Token![=]) {
                     meta.value()?.parse::<LitChar>()?.value()
                 } else {
@@ -4405,7 +4467,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_note`, `default_if`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
-                     `group`, `help`, `long_help`, `help_heading`, `hide`",
+                     `group`, `help`, `long_help`, `help_heading`, `hide`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -4593,6 +4655,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         _ => {}
     }
+    if (hint.is_some() || complete.is_some())
+        && (matches!(kind, Kind::Switch | Kind::Count(_))
+            || !matches!(role, Role::Flag { .. } | Role::Positional { .. }))
+    {
+        return error("`hint` and `complete` are for a field that takes a value".into());
+    }
+    if hint.is_some() && complete.is_some() {
+        return error("`complete` answers alone: `hint` beside it would never be asked".into());
+    }
     let spec = spec_name(&f.attrs)?;
     if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`spec` names the type of a field's value, and this field has none".into());
@@ -4618,6 +4689,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         heading,
         hide,
         value_name: if tristate { None } else { flag_value_name },
+        hint,
+        complete,
         negative_numbers,
         hyphen_values,
         require_equals,

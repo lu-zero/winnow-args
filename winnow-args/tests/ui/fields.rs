@@ -44,6 +44,34 @@ struct PlusWithoutPlusOptions {
 }
 
 #[derive(Args)]
+struct HintOnASwitch {
+    #[arg(long, hint = "dir")]
+    verbose: bool,
+}
+
+#[derive(Args)]
+struct HintOfNoKind {
+    #[arg(long, hint = "folder")]
+    path: String,
+}
+
+#[derive(Args)]
 struct Tuple(bool);
+
+fn names(_typed: &str) -> Vec<winnow_args::complete::Candidate> {
+    Vec::new()
+}
+
+#[derive(Args)]
+struct HintBesideAFunction {
+    #[arg(long, hint = "dir", complete = names)]
+    path: String,
+}
+
+#[derive(Args)]
+struct FunctionOnACount {
+    #[arg(short, count, complete = names)]
+    verbose: u8,
+}
 
 fn main() {}
