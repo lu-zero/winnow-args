@@ -331,19 +331,7 @@ pub trait Args: Sized {
     }
 
     /// This command's help, rendered only when asked for.
-    const HELP: &'static help::Command = &help::Command {
-        name: "",
-        about: "",
-        long_about: "",
-        after_help: "",
-        after_long_help: "",
-        items: &[],
-        subcommands: &[],
-        subcommand_required: false,
-        help_flag: false,
-        help_short: false,
-        version: None,
-    };
+    const HELP: &'static help::Command = &help::Command::EMPTY;
 
     /// Answer a completion script's callback (`PROG __complete_word__ …`)
     /// from this command's help data; `None` when `args` (the command line
@@ -701,7 +689,7 @@ macro_rules! __text {
 pub mod __private {
     pub use crate::env;
     pub use crate::error::Error;
-    pub use crate::help::concat_items;
+    pub use crate::help::{concat_headings, concat_items};
     pub use crate::stream::Argv;
     pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
     pub use crate::value::{ChoiceError, FromArg, documented_choices, filed_as, stated_choices};

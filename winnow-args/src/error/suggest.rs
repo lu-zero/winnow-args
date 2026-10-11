@@ -18,6 +18,37 @@ fn reached(root: &'static Command, path: &[&str]) -> (&'static Command, Vec<&'st
     (command, globals)
 }
 
+/// The global flags `command`, reached from `root` by the names of `path`,
+/// takes from the commands above it: those shown, less any it declares
+/// itself under the same name.
+pub(super) fn inherited(
+    root: &'static Command,
+    path: &[&str],
+    command: &Command,
+) -> Vec<&'static Item> {
+    // A flag is the one of its long name, or of its letter when it has none.
+    let same = |a: &Item, b: &Item| match (a.long, b.long) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => a.short.is_some() && a.short == b.short,
+        _ => false,
+    };
+    let own = |item: &Item| {
+        let mut flags = command.items.iter().filter(|own| !own.positional);
+        flags.any(|own| same(own, item))
+    };
+    let (_, globals) = reached(root, path);
+    let mut shown: Vec<&'static Item> = Vec::new();
+    // The nearest command's declaration is the one read: two commands on
+    // the way may flatten the same flags.
+    for item in globals.into_iter().rev() {
+        if !item.hide && !own(item) && !shown.iter().any(|seen| same(seen, item)) {
+            shown.push(item);
+        }
+    }
+    shown.reverse();
+    shown
+}
+
 /// The long flag closest to `typed`, `--name` or `--name=value`, among those
 /// the command at `path` shows.
 pub(super) fn flag(root: &'static Command, path: &[&str], typed: &str) -> Option<String> {

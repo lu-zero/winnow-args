@@ -61,15 +61,104 @@ pub struct Command {
     pub unknown_flags_value: bool,
     /// Text of `-V`/`--version`, when those flags are supplied.
     pub package_version: Option<String>,
+    /// The subcommand a line that names none runs.
+    pub default_subcommand: Option<String>,
+    /// Command lines to try.
+    pub examples: Vec<Example>,
+    /// What is said under a heading, before its entries: the command's own,
+    /// then those of what it flattens.
+    pub headings: Vec<Heading>,
+    /// What running it does to what it works on.
+    pub effect: Option<Effect>,
+    /// The forms its output takes.
+    pub outputs: Vec<Output>,
+    /// What each exit status means.
+    pub exit_codes: Vec<ExitCode>,
+}
+
+/// A command line to try.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Example {
+    /// The line, as typed.
+    pub code: String,
+    /// What it is an example of. Empty for none.
+    pub header: String,
+    /// What it does. Empty for none.
+    pub help: String,
+}
+
+/// What a section of a page says before its entries.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Heading {
+    /// The heading, as an item's `heading` spells it.
+    pub title: String,
+    /// The paragraph under it.
+    pub help: String,
+}
+
+/// What a command, or a flag, does to what it works on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effect {
+    /// It only reads.
+    Read,
+    /// It changes state.
+    Write,
+    /// It may delete, or overwrite what cannot be brought back.
+    Destructive,
+}
+
+impl Effect {
+    /// The effect a fragment spells `name`.
+    fn named(name: &str) -> Result<Self, Error> {
+        match name {
+            "read" => Ok(Effect::Read),
+            "write" => Ok(Effect::Write),
+            "destructive" => Ok(Effect::Destructive),
+            other => Err(Error::new(format!("unknown effect `{other}`"))),
+        }
+    }
+
+    /// The effect as a page says it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Effect::Read => "read-only",
+            Effect::Write => "modifies state",
+            Effect::Destructive => "destructive (may delete or irreversibly overwrite)",
+        }
+    }
+}
+
+/// A form a command's output takes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Output {
+    /// Its name, as the flag that selects it spells it.
+    pub name: String,
+    /// The one written when none is asked for.
+    pub default: bool,
+    /// How documents are delimited: `json`, `jsonl`. Empty for plain text.
+    pub framing: String,
+    /// What it is. Empty for none.
+    pub help: String,
+}
+
+/// An exit status and what it means.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExitCode {
+    /// The status.
+    pub code: u8,
+    /// What it means.
+    pub help: String,
 }
 
 /// A subcommand entry on its parent's page.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Sub {
     /// The word that selects it.
     pub name: String,
     /// Other words, shown beside the name.
     pub aliases: Vec<String>,
+    /// Words that select it too, and are not shown.
+    pub hidden_aliases: Vec<String>,
     /// The one-line description on the parent page.
     pub about: String,
     /// Left out of the rendered pages.
@@ -133,6 +222,10 @@ pub struct Item {
     pub prefix: bool,
     /// Flags stop once this positional has a value.
     pub stop_flags: bool,
+    /// What to know before using it. Empty for none.
+    pub warning: String,
+    /// What giving it does to what the command works on.
+    pub effect: Option<Effect>,
     /// The flags of a `-z` keyword vocabulary.
     pub vocabulary: Option<Box<Command>>,
 }
@@ -220,6 +313,12 @@ struct ArgsFrag {
     long_only: bool,
     unknown_flags_value: bool,
     package_version: Option<String>,
+    default_subcommand: Option<String>,
+    examples: Vec<Example>,
+    headings: Vec<Heading>,
+    effect: Option<Effect>,
+    outputs: Vec<Output>,
+    exit_codes: Vec<ExitCode>,
 }
 
 #[derive(Debug)]
@@ -233,6 +332,7 @@ struct SubsFrag {
 struct VariantFrag {
     name: String,
     aliases: Vec<String>,
+    hidden_aliases: Vec<String>,
     about: String,
     long_about: String,
     hide: bool,
@@ -562,6 +662,20 @@ impl Command {
         }
     }
 
+    /// What is said under the heading `title`.
+    pub fn heading_help(&self, title: &str) -> Option<&str> {
+        let heading = self.headings.iter().find(|h| h.title == title)?;
+        Some(heading.help.as_str()).filter(|help| !help.is_empty())
+    }
+
+    /// Whether a line that names no subcommand runs `sub`.
+    pub fn is_default(&self, sub: &Sub) -> bool {
+        self.default_subcommand.as_deref().is_some_and(|name| {
+            let aliases = sub.aliases.iter().chain(&sub.hidden_aliases);
+            name == sub.name || aliases.into_iter().any(|alias| alias == name)
+        })
+    }
+
     /// The supplied help and version flags, as `(synopsis, description)`.
     pub fn builtins(&self) -> Vec<(&'static str, &'static str)> {
         let mut rows = Vec::new();
@@ -652,6 +766,12 @@ impl Item {
         }
         if self.two_dashes {
             append_note(&mut text, "Spelled with two dashes only.");
+        }
+        if let Some(effect) = self.effect {
+            append_note(&mut text, &format!("Effect: {}.", effect.label()));
+        }
+        if !self.warning.is_empty() {
+            append_note(&mut text, &format!("Warning: {}", self.warning));
         }
         text
     }
@@ -849,7 +969,61 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
         long_only: flag(table, "long_only")?,
         unknown_flags_value: flag(table, "unknown_flags_value")?,
         package_version: opt_present(table, "package_version")?,
+        default_subcommand: opt_present(table, "default_subcommand")?,
+        examples: rows(table, "example", |row| {
+            Ok(Example {
+                code: req_str(row, "code")?,
+                header: opt_str(row, "header")?,
+                help: opt_str(row, "help")?,
+            })
+        })?,
+        headings: rows(table, "heading", |row| {
+            Ok(Heading {
+                title: req_str(row, "title")?,
+                help: opt_str(row, "help")?,
+            })
+        })?,
+        effect: effect(table)?,
+        outputs: rows(table, "output", |row| {
+            Ok(Output {
+                name: req_str(row, "name")?,
+                default: flag(row, "default")?,
+                framing: opt_str(row, "framing")?,
+                help: opt_str(row, "help")?,
+            })
+        })?,
+        exit_codes: rows(table, "exit_code", |row| {
+            let code = int(row, "code")?.ok_or_else(|| Error::new("missing `code`"))?;
+            let code = u8::try_from(code)
+                .map_err(|_| Error::new(format!("exit code {code} is not in 0..=255")))?;
+            Ok(ExitCode {
+                code,
+                help: opt_str(row, "help")?,
+            })
+        })?,
     })
+}
+
+/// Each table of the array `key`, read by `read`.
+fn rows<T>(
+    table: &Table,
+    key: &str,
+    read: impl Fn(&Table) -> Result<T, Error>,
+) -> Result<Vec<T>, Error> {
+    let mut out = Vec::new();
+    for value in array(table, key)? {
+        let row = value
+            .as_table()
+            .ok_or_else(|| Error::new(format!("`{key}` entries are tables")))?;
+        out.push(read(row)?);
+    }
+    Ok(out)
+}
+
+fn effect(table: &Table) -> Result<Option<Effect>, Error> {
+    opt_present(table, "effect")?
+        .map(|name| Effect::named(&name))
+        .transpose()
 }
 
 fn parse_variants(table: &Table) -> Result<Vec<VariantFrag>, Error> {
@@ -861,6 +1035,7 @@ fn parse_variants(table: &Table) -> Result<Vec<VariantFrag>, Error> {
         variants.push(VariantFrag {
             name: req_str(row, "name")?,
             aliases: strings(row, "aliases")?,
+            hidden_aliases: strings(row, "hidden_aliases")?,
             about: opt_str(row, "about")?,
             long_about: opt_str(row, "long_about")?,
             hide: flag(row, "hide")?,
@@ -904,6 +1079,8 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 two_dashes: flag(row, "two_dashes")?,
                 prefix: flag(row, "prefix")?,
                 stop_flags: flag(row, "stop_flags")?,
+                warning: opt_str(row, "warning")?,
+                effect: effect(row)?,
                 vocabulary: None,
             },
             choices_ty: opt_present(row, "choices_ty")?,
@@ -1039,10 +1216,18 @@ impl Catalog {
             items.push(self.item(at, draft, stack)?);
         }
         let mut subcommands = self.subs(at, args.subcommand.as_deref(), stack)?;
+        // What this command says of a heading is read before what a
+        // flattened one does.
+        let mut headings = args.headings.clone();
+        let mut outputs = args.outputs.clone();
+        let mut exit_codes = args.exit_codes.clone();
         for name in &args.flatten {
             let flattened = self.command(at, name, stack)?;
             items.extend(flattened.items);
             subcommands.extend(flattened.subcommands);
+            headings.extend(flattened.headings);
+            outputs.extend(flattened.outputs);
+            exit_codes.extend(flattened.exit_codes);
         }
         if let Some(sequence) = &args.sequence {
             let (krate, entry) = self.fragment(at, sequence, OCCURRENCE, "an occurrence enum")?;
@@ -1074,6 +1259,12 @@ impl Catalog {
             long_only: args.long_only,
             unknown_flags_value: args.unknown_flags_value,
             package_version: args.package_version.clone(),
+            default_subcommand: args.default_subcommand.clone(),
+            examples: args.examples.clone(),
+            headings,
+            effect: args.effect,
+            outputs,
+            exit_codes,
         })
     }
 
@@ -1127,6 +1318,7 @@ impl Catalog {
             subs.push(Sub {
                 name: variant.name.clone(),
                 aliases: variant.aliases.clone(),
+                hidden_aliases: variant.hidden_aliases.clone(),
                 about,
                 hide: variant.hide,
                 command,

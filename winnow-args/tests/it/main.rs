@@ -21,6 +21,8 @@ mod globals;
 #[cfg(feature = "help-text")]
 mod help;
 #[cfg(feature = "help-text")]
+mod help_pages;
+#[cfg(feature = "help-text")]
 mod help_text;
 mod hyphen;
 mod ignored;

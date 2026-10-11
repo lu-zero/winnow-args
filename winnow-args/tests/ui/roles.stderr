@@ -57,3 +57,27 @@ error: `default_subcommand_flags` hands an unknown flag to the default subcomman
    |
 85 | struct FlagsKeptAndHandedOver {
    |        ^^^^^^^^^^^^^^^^^^^^^^
+
+error: `default_subcommand_help` needs `default_subcommand`
+  --> tests/ui/roles.rs:94:8
+   |
+94 | struct HelpOfNoDefault {
+   |        ^^^^^^^^^^^^^^^
+
+error: `flatten_help` needs an `#[arg(subcommand)]` field
+   --> tests/ui/roles.rs:101:8
+    |
+101 | struct NothingToFlatten {
+    |        ^^^^^^^^^^^^^^^^
+
+error: expected `help`
+   --> tests/ui/roles.rs:107:24
+    |
+107 | #[arg(heading("Roots", about = "Which tree is read."))]
+    |                        ^^^^^
+
+error: expected `header` or `help`
+   --> tests/ui/roles.rs:114:27
+    |
+114 | #[arg(example("tool run", title = "Run it"))]
+    |                           ^^^^^

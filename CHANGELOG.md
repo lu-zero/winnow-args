@@ -4,6 +4,37 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: a subcommand's help lists the global flags it inherits, under
+  `Global options:`. A parse through `parse_words` and what is built on it
+  knows them; a page rendered with `help::render` from one command alone
+  does not.
+- **Added**: help marks the default subcommand `(default)`, and
+  `default_subcommand_help` has its page follow the command's own.
+  Completion offers what the default subcommand takes where it is not
+  named: its first word, and its flags under `default_subcommand_flags`.
+- **Added**: `example = "…"` and `example("…", header = "…", help = "…")` on
+  a struct: an Examples section after the lists.
+- **Added**: `next_help_heading = "…"` on a struct, the heading of its fields
+  that name none, and `heading("Title", help = "…")`, a paragraph `--help`
+  shows under a heading.
+- **Added**: `flatten_help` on a struct with subcommands: each one's usage
+  line, description and arguments stand where their list would.
+- **Added**: `warning = "…"` on a field, shown by `--help`.
+- **Added**: `effect`, `output(…)` and `exit_code(…)` on a struct, and
+  `effect` on a field, for the man and markdown pages, which also show the
+  examples, the paragraphs under headings, the warnings and the default
+  subcommand.
+- **Changed**: `help::Command` has six more fields (`default_subcommand`,
+  `default_subcommand_flags`, `default_subcommand_help`, `flatten_help`,
+  `examples`, `headings`) and `help::Item` one (`warning`). Both now have a
+  public `EMPTY`: a value written by hand ends in `..Command::EMPTY` or
+  `..Item::EMPTY`, and later fields do not break it. What a derive writes is
+  unaffected.
+- **Changed**: `winnow_args_spec::Command` and `Item` have more fields; both
+  have a `Default`.
+
 ## 0.2.1 (2026-10-11)
 
 - **Added**: `default_subcommand_flags` on a struct with a

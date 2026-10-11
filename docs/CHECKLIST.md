@@ -198,8 +198,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] `args_override_self = false`, `subcommand_negates_reqs`,
       `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`,
       `dont_delimit_trailing_values`
-- [ ] `default_subcommand_on_empty`, `default_subcommand_help`; completion of
-      the default subcommand's flags before it is named
+- [x] `default_subcommand_help`; completion of the default subcommand's flags
+      before it is named
+- [ ] `default_subcommand_on_empty`
 - [ ] External subcommands (`cargo foo`), multicall (`argv[0]` selects),
       executable views
 - [ ] Sigil arguments (`+node@22`), clauses (repeated groups split by `:::`)
@@ -209,9 +210,12 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Help and errors
 
-- [ ] A subcommand's help lists the global flags it inherits
+- [x] A subcommand's help lists the global flags it inherits
+- [x] Examples, a paragraph under a heading, `next_help_heading`,
+      `flatten_help`, `warning`
+- [x] `effect`, output formats and exit codes in the man and markdown pages
 - [ ] `long_version`, `usage = "…"`, `before_help`, `display_order`,
-      `verbatim_doc_comment`, `note` / `warning`, examples, a logo, `help <topic>`
+      `verbatim_doc_comment`, `note`, a logo, `help <topic>`
 - [ ] `hide_default_value`, `hide_env`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)

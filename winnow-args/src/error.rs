@@ -69,6 +69,9 @@ struct Request {
     bare: bool,
     /// Subcommand names from the root down to `command`.
     path: Vec<&'static str>,
+    /// The command the names start from, once [`Error::suggested`] says:
+    /// its page lists the global flags of the commands above it.
+    root: Option<&'static crate::help::Command>,
 }
 
 #[derive(Debug, Default)]
@@ -180,6 +183,7 @@ impl Error {
                     long,
                     bare,
                     path: Vec::new(),
+                    root: None,
                 }),
                 ..Detail::default()
             })),
@@ -217,7 +221,9 @@ impl Error {
 
     /// Look among what `root` and the subcommand it failed in take for what
     /// an unknown flag or word was probably meant to be: [`Error::similar`]
-    /// then has it. [`Args::parse_words`](crate::Args::parse_words) and what
+    /// then has it. A request for a subcommand's help learns the global
+    /// flags of the commands above it, which its page then lists.
+    /// [`Args::parse_words`](crate::Args::parse_words) and what
     /// is built on it do this; a parse through
     /// [`Args::parse_argv`](crate::Args::parse_argv) does not.
     #[cold]
@@ -226,6 +232,10 @@ impl Error {
         let Some(detail) = self.detail.as_deref_mut() else {
             return self;
         };
+        if let Some(request) = detail.request.as_mut() {
+            request.root = Some(root);
+            return self;
+        }
         let found = match self.kind {
             ErrorKind::UnknownFlag => {
                 suggest::flag(root, &detail.path, &detail.token).map(|flag| ("flag", flag))
@@ -425,12 +435,17 @@ impl Error {
         let mut path = vec![program];
         path.extend(&request.path);
         let width = crate::help::width();
-        Some(crate::help::render_styled(
+        let inherited = request
+            .root
+            .map(|root| suggest::inherited(root, &request.path, request.command))
+            .unwrap_or_default();
+        Some(crate::help::render_page(
             request.command,
             &path,
             request.long,
             width,
             style,
+            &inherited,
         ))
     }
 }

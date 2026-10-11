@@ -50,12 +50,31 @@ pub(crate) struct ArgsDoc {
     pub help_short: bool,
     pub long_only: bool,
     pub unknown_flags_value: bool,
+    pub default_subcommand: Option<String>,
+    /// Each a line, its header and what it does.
+    pub examples: Vec<[String; 3]>,
+    /// Each a title and the paragraph under it.
+    pub headings: Vec<(String, String)>,
+    pub effect: Option<String>,
+    pub outputs: Vec<OutputDoc>,
+    /// Each a status and what it means.
+    pub exit_codes: Vec<(u8, String)>,
+}
+
+/// A form a command's output takes.
+pub(crate) struct OutputDoc {
+    pub name: String,
+    pub default: bool,
+    pub framing: String,
+    pub help: String,
 }
 
 #[derive(Default)]
 pub(crate) struct VariantDoc {
     pub name: String,
     pub aliases: Vec<String>,
+    /// The spellings help does not show.
+    pub hidden_aliases: Vec<String>,
     pub about: String,
     /// The whole description of a variant with no type of its own.
     pub long_about: String,
@@ -94,6 +113,8 @@ pub(crate) struct ItemDoc {
     pub prefix: bool,
     pub stop_flags: bool,
     pub keywords: Option<String>,
+    pub warning: String,
+    pub effect: Option<String>,
 }
 
 pub(crate) fn write_args(span: Span, doc: &ArgsDoc) -> syn::Result<()> {
@@ -116,6 +137,7 @@ pub(crate) fn write_subcommands(
         out.push_str("[[variant]]\n");
         field(&mut out, "name", &variant.name);
         strings(&mut out, "aliases", &variant.aliases);
+        strings(&mut out, "hidden_aliases", &variant.hidden_aliases);
         field(&mut out, "about", &variant.about);
         field(&mut out, "long_about", &variant.long_about);
         flag(&mut out, "hide", variant.hide);
@@ -158,9 +180,34 @@ fn args_toml(doc: &ArgsDoc) -> String {
     flag(&mut out, "help_short", doc.help_short);
     flag(&mut out, "long_only", doc.long_only);
     flag(&mut out, "unknown_flags_value", doc.unknown_flags_value);
+    opt(&mut out, "default_subcommand", &doc.default_subcommand);
+    opt(&mut out, "effect", &doc.effect);
     for item in &doc.items {
         out.push('\n');
         out.push_str(&item_toml(item));
+    }
+    for [code, header, help] in &doc.examples {
+        out.push_str("\n[[example]]\n");
+        pair(&mut out, "code", code);
+        field(&mut out, "header", header);
+        field(&mut out, "help", help);
+    }
+    for (title, help) in &doc.headings {
+        out.push_str("\n[[heading]]\n");
+        pair(&mut out, "title", title);
+        field(&mut out, "help", help);
+    }
+    for output in &doc.outputs {
+        out.push_str("\n[[output]]\n");
+        pair(&mut out, "name", &output.name);
+        flag(&mut out, "default", output.default);
+        field(&mut out, "framing", &output.framing);
+        field(&mut out, "help", &output.help);
+    }
+    for (code, help) in &doc.exit_codes {
+        out.push_str("\n[[exit_code]]\n");
+        out.push_str(&format!("code = {code}\n"));
+        field(&mut out, "help", help);
     }
     out
 }
@@ -199,6 +246,8 @@ fn item_toml(item: &ItemDoc) -> String {
     flag(&mut out, "prefix", item.prefix);
     flag(&mut out, "stop_flags", item.stop_flags);
     opt(&mut out, "keywords", &item.keywords);
+    field(&mut out, "warning", &item.warning);
+    opt(&mut out, "effect", &item.effect);
     out
 }
 

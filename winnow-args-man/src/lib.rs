@@ -94,7 +94,11 @@ impl Manual {
         doc.text([roman(command.usage(&page.path))]);
 
         let body = command.prose();
-        let notes = command.notes();
+        let effect = command
+            .effect
+            .map(|effect| format!("Effect: {}.", effect.label()));
+        let notes = command.notes().into_iter().chain(effect.as_deref());
+        let notes: Vec<&str> = notes.collect();
         if !body.is_empty() || !notes.is_empty() {
             doc.control("SH", ["DESCRIPTION"]);
             if !body.is_empty() {
@@ -117,7 +121,16 @@ impl Manual {
                     tag.push(roman(", "));
                     tag.push(bold(alias));
                 }
-                term(&mut doc, tag, &sub.about);
+                if command.is_default(sub) {
+                    let default = if sub.about.is_empty() {
+                        "(default)"
+                    } else {
+                        " (default)"
+                    };
+                    term(&mut doc, tag, &format!("{}{default}", sub.about));
+                } else {
+                    term(&mut doc, tag, &sub.about);
+                }
             }
         }
 
@@ -140,6 +153,9 @@ impl Manual {
         }
         for (title, items) in grouped.headings {
             doc.control("SH", [arg(title).as_str()]);
+            if let Some(help) = command.heading_help(title) {
+                doc.text([roman(help)]);
+            }
             for item in items {
                 item_tp(&mut doc, item);
             }
@@ -148,6 +164,48 @@ impl Manual {
             doc.control("SH", ["GLOBAL OPTIONS"]);
             for item in &page.globals {
                 item_tp(&mut doc, item);
+            }
+        }
+        if !command.outputs.is_empty() {
+            doc.control("SH", ["OUTPUT FORMATS"]);
+            for output in &command.outputs {
+                let mut what = output.help.clone();
+                for more in [
+                    output.default.then(|| "The default.".to_owned()),
+                    Some(&output.framing)
+                        .filter(|framing| !framing.is_empty())
+                        .map(|framing| format!("Framing: {framing}.")),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    if !what.is_empty() {
+                        what.push(' ');
+                    }
+                    what.push_str(&more);
+                }
+                term(&mut doc, vec![bold(&output.name)], &what);
+            }
+        }
+        if !command.exit_codes.is_empty() {
+            doc.control("SH", ["EXIT STATUS"]);
+            for exit in &command.exit_codes {
+                term(&mut doc, vec![bold(exit.code.to_string())], &exit.help);
+            }
+        }
+        if !command.examples.is_empty() {
+            doc.control("SH", ["EXAMPLES"]);
+            for example in &command.examples {
+                doc.control("PP", std::iter::empty::<&str>());
+                if !example.header.is_empty() {
+                    doc.text([roman(format!("{}:", example.header))]);
+                    doc.control("br", std::iter::empty::<&str>());
+                }
+                if !example.help.is_empty() {
+                    doc.text([roman(&example.help)]);
+                    doc.control("br", std::iter::empty::<&str>());
+                }
+                doc.text([bold(format!("$ {}", example.code))]);
             }
         }
         let after = command.after();
@@ -323,5 +381,87 @@ mod tests {
             page.contains(".TP\n\\fB\\-\\-file\\fR\nA path.\n.PP\nSee also.\n"),
             "{page}"
         );
+    }
+
+    /// A command that says all a page says beyond its lists.
+    fn telling() -> Command {
+        use winnow_args_spec::{Effect, Example, ExitCode, Heading, Output, Sub};
+        let wipe = Item {
+            long: Some("wipe".to_owned()),
+            help: "Start over.".to_owned(),
+            heading: Some("Roots".to_owned()),
+            warning: "Not for use.".to_owned(),
+            effect: Some(Effect::Destructive),
+            ..Item::default()
+        };
+        let sub = |name: &str, about: &str| Sub {
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            about: about.to_owned(),
+            command: Command {
+                name: name.to_owned(),
+                about: about.to_owned(),
+                ..Command::default()
+            },
+            ..Sub::default()
+        };
+        Command {
+            name: "em".to_owned(),
+            about: "A package manager.".to_owned(),
+            items: vec![wipe],
+            subcommands: vec![sub("emerge", "Merge."), sub("query", "Ask.")],
+            default_subcommand: Some("emerge".to_owned()),
+            effect: Some(Effect::Write),
+            examples: vec![
+                Example {
+                    code: "em -ua @world".to_owned(),
+                    header: "Update".to_owned(),
+                    help: "Rebuilds what changed.".to_owned(),
+                },
+                Example {
+                    code: "em query".to_owned(),
+                    ..Example::default()
+                },
+            ],
+            headings: vec![Heading {
+                title: "Roots".to_owned(),
+                help: "Which tree is read.".to_owned(),
+            }],
+            outputs: vec![
+                Output {
+                    name: "pretty".to_owned(),
+                    default: true,
+                    help: "For people.".to_owned(),
+                    ..Output::default()
+                },
+                Output {
+                    name: "json".to_owned(),
+                    framing: "json".to_owned(),
+                    ..Output::default()
+                },
+            ],
+            exit_codes: vec![ExitCode {
+                code: 64,
+                help: "No such root.".to_owned(),
+            }],
+            ..Command::default()
+        }
+    }
+
+    #[test]
+    fn a_page_says_what_is_beyond_its_lists() {
+        let pages = Manual::default().render_pages(&telling(), "em").unwrap();
+        let root = &pages[0].1;
+        for expected in [
+            ".SH DESCRIPTION\nA package manager.\n.PP\nEffect: modifies state.\n",
+            "\\fBemerge\\fR\nMerge. (default)\n",
+            ".SH Roots\nWhich tree is read.\n.TP\n",
+            "Warning: Not for use.",
+            ".SH \"OUTPUT FORMATS\"\n.TP\n\\fBpretty\\fR\nFor people. The default.\n.TP\n\\fBjson\\fR\nFraming: json.\n",
+            ".SH \"EXIT STATUS\"\n.TP\n\\fB64\\fR\nNo such root.\n",
+            ".SH EXAMPLES\n.PP\nUpdate:\n.br\nRebuilds what changed.\n.br\n\\fB$ em \\-ua @world\\fR\n.PP\n\\fB$ em query\\fR\n",
+        ] {
+            assert!(root.contains(expected), "{expected:?} in\n{root}");
+        }
     }
 }

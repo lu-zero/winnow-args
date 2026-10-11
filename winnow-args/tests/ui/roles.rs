@@ -89,4 +89,32 @@ struct FlagsKeptAndHandedOver {
     command: Option<Command>,
 }
 
+#[derive(Args)]
+#[arg(default_subcommand_help)]
+struct HelpOfNoDefault {
+    #[arg(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Args)]
+#[arg(flatten_help)]
+struct NothingToFlatten {
+    #[arg(long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+#[arg(heading("Roots", about = "Which tree is read."))]
+struct HeadingMisspelled {
+    #[arg(long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+#[arg(example("tool run", title = "Run it"))]
+struct ExampleMisspelled {
+    #[arg(long)]
+    verbose: bool,
+}
+
 fn main() {}

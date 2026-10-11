@@ -119,6 +119,24 @@ mod spec;
 /// - `disable_help_flag`, `disable_help_short` (`--help` only), `disable_version_flag`,
 ///   `disable_help_subcommand`: do not supply that item.
 /// - `arg_required_else_help`: no arguments at all is a request for help.
+/// - `example = "tool build --release"`: a command line to try, in an Examples section after the lists;
+///   repeatable. `example("…", header = "…", help = "…")` says what it is an example of on the line
+///   above, and what it does on the `--help` page.
+/// - `next_help_heading = "…"`: the heading of this struct's fields that name none with `help_heading`.
+///   On a struct that is flattened, its flags are one section of the page that takes them.
+/// - `heading("Title", help = "…")`: a paragraph `--help` shows under that heading, before its entries.
+///   A flattened struct's is read unless the struct that flattens it says its own for the title.
+/// - `flatten_help`: each subcommand's usage line, description and arguments stand where the list of
+///   subcommands would; needs a `subcommand` field.
+/// - `default_subcommand_help`: the default subcommand's page follows this one; needs
+///   `default_subcommand`, which the list marks `(default)` either way.
+///
+/// For the generated documentation only, read by `winnow-args-spec`:
+///
+/// - `effect = "read"`, `"write"` or `"destructive"`: what running it does to what it works on.
+/// - `output("json", default, framing = "json", help = "…")`: a form its output takes; repeatable.
+///   A flattened struct's are the command's too.
+/// - `exit_code(2, "invalid atom")`: what an exit status means; repeatable, and flattened likewise.
 ///
 /// Grammar:
 ///
@@ -220,6 +238,9 @@ mod spec;
 ///
 /// - `help = "…"`, `long_help = "…"`: replace the doc comment's first paragraph and whole text.
 /// - `help_heading = "…"`: list it under that heading instead of "Options".
+/// - `warning = "…"`: what to know before using it, shown by `--help` as `Warning: …`.
+/// - `effect = "destructive"`: what giving it does (`"read"`, `"write"`, `"destructive"`), for the
+///   generated documentation.
 /// - `hint = "dir"`: what the value is, for the shell that completes it: `"file"`, `"dir"`, `"command"`,
 ///   or `"none"` for one no shell can know. Unstated, the type says (`FromArg::HINT`): a file for a
 ///   `PathBuf`, a `String` or an `OsString`, nothing for any other.
@@ -368,17 +389,11 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 let long_about = text(long_about.as_deref().unwrap_or_default());
                 let about = text(&info.about);
                 quote!(&::winnow_args::help::Command {
-                    name: "",
                     about: #about,
                     long_about: #long_about,
-                    after_help: "",
-                    after_long_help: "",
-                    items: &[],
-                    subcommands: &[],
-                    subcommand_required: false,
                     help_flag: true,
                     help_short: true,
-                    version: ::core::option::Option::None,
+                    ..::winnow_args::help::Command::EMPTY
                 })
             }
         };
@@ -401,6 +416,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             spec_variants.push(spec::VariantDoc {
                 name: info.names[0].clone(),
                 aliases: shown.to_vec(),
+                hidden_aliases: info.names[info.shown + 1..].to_vec(),
                 about: info.about.clone(),
                 long_about: unit_long_about.unwrap_or_default(),
                 hide: info.hide,
@@ -517,17 +533,13 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
 
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
-                name: "",
                 about: #about,
                 long_about: #long_about,
-                after_help: "",
-                after_long_help: "",
-                items: &[],
                 subcommands: &[#(#subs),*],
                 subcommand_required: true,
                 help_flag: true,
                 help_short: true,
-                version: ::core::option::Option::None,
+                ..::winnow_args::help::Command::EMPTY
             };
 
             fn parse_argv_with(
@@ -1224,6 +1236,7 @@ fn occurrence_item(
         more_values: false,
         hint: #hint,
         complete: ::core::option::Option::None,
+        warning: "",
     })
 }
 
@@ -1485,6 +1498,8 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         prefix: field.prefix,
         stop_flags: field.stop_flags,
         keywords,
+        warning: field.warning.clone(),
+        effect: field.effect.clone(),
     })
 }
 
@@ -1996,6 +2011,11 @@ struct Field {
     hint: Option<syn::Ident>,
     /// The function a shell's completion of the value asks.
     complete: Option<syn::Path>,
+    /// What to know before using it, shown by `--help`.
+    warning: String,
+    /// What giving it does, for the documentation: `read`, `write` or
+    /// `destructive`.
+    effect: Option<String>,
     /// A negative number is a value: a flag's detached value, or a positional's word.
     negative_numbers: bool,
     /// A flag's detached value may be any word, flag-like or `--`.
@@ -2058,6 +2078,7 @@ impl Field {
         };
         let (help, long_help) = (text(&self.help), text(&self.long_help));
         let heading = opt_str(self.heading.as_deref());
+        let warning = text(&self.warning);
         let hide = self.hide;
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
@@ -2123,6 +2144,7 @@ impl Field {
                 more_values: #more_values,
                 hint: #hint,
                 complete: #complete,
+                warning: #warning,
             }
         }
     }
@@ -2451,12 +2473,44 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     for f in &named.named {
         role_alone(f)?;
     }
-    let fields = named
+    let StructOptions {
+        groups,
+        restart_token,
+        default_subcommand,
+        default_subcommand_flags,
+        default_subcommand_help,
+        flatten_help,
+        next_help_heading,
+        headings,
+        examples,
+        effect,
+        outputs,
+        exit_codes,
+        arg_required_else_help,
+        name: program_name,
+        version,
+        about,
+        long_about,
+        after_help,
+        after_long_help,
+        disable_help_flag,
+        disable_help_short,
+        disable_version_flag,
+        disable_help_subcommand,
+        unknown_flags_value,
+        long_only,
+        plus_options,
+    } = struct_options(input)?;
+    let mut fields = named
         .named
         .iter()
         .filter(|f| !is_skipped(f) && !is_sequence(f) && !is_unknown(f) && !is_flatten(f))
         .map(field)
         .collect::<syn::Result<Vec<_>>>()?;
+    for field in fields.iter_mut().filter(|field| field.heading.is_none()) {
+        field.heading.clone_from(&next_help_heading);
+    }
+    let fields = fields;
     let skipped: Vec<&Ident> = named
         .named
         .iter()
@@ -2537,26 +2591,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "a `double_dash = \"preserve\"` positional keeps the `--` this one waits for",
         ));
     }
-    let StructOptions {
-        groups,
-        restart_token,
-        default_subcommand,
-        default_subcommand_flags,
-        arg_required_else_help,
-        name: program_name,
-        version,
-        about,
-        long_about,
-        after_help,
-        after_long_help,
-        disable_help_flag,
-        disable_help_short,
-        disable_version_flag,
-        disable_help_subcommand,
-        unknown_flags_value,
-        long_only,
-        plus_options,
-    } = struct_options(input)?;
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
     let long_about = long_about.unwrap_or(doc_long_about);
@@ -3247,6 +3281,18 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`default_subcommand_flags` needs `default_subcommand`",
         ));
     }
+    if default_subcommand_help && default_subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`default_subcommand_help` needs `default_subcommand`",
+        ));
+    }
+    if flatten_help && subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`flatten_help` needs an `#[arg(subcommand)]` field",
+        ));
+    }
     if default_subcommand_flags && (unknown_flags_value || unknown.is_some() || sequence_unknown) {
         return Err(syn::Error::new(
             input.ident.span(),
@@ -3783,6 +3829,33 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             &__ALL
         })
     };
+    let help_default = opt_str(default_subcommand.as_deref());
+    let help_examples = examples.iter().map(|[code, header, help]| {
+        let (header, help) = (text(header), text(help));
+        quote!(::winnow_args::help::Example { code: #code, header: #header, help: #help })
+    });
+    let help_examples: Vec<TokenStream2> = help_examples.collect();
+    // Ours first: what this struct says of a heading is what is read.
+    let own_headings = headings.iter().map(|(title, help)| {
+        let help = text(help);
+        quote!(::winnow_args::help::Heading { title: #title, help: #help })
+    });
+    let own_headings = quote!(&[#(#own_headings),*]);
+    let help_headings = if flattens.is_empty() {
+        own_headings
+    } else {
+        let more = flattens
+            .iter()
+            .map(|(_, ty)| quote!(<#ty as ::winnow_args::Args>::HELP.headings));
+        let more: Vec<TokenStream2> = more.collect();
+        quote!({
+            const __OWN: &[::winnow_args::help::Heading] = #own_headings;
+            const __N: usize = __OWN.len() #(+ #more.len())*;
+            const __ALL: [::winnow_args::help::Heading; __N] =
+                ::winnow_args::__private::concat_headings::<__N>(&[__OWN, #(#more),*]);
+            &__ALL
+        })
+    };
     let mut spec_checks = Vec::new();
     let filed = filed(input)?;
     let identity = spec::identity(input.ident.span(), &filed);
@@ -3848,6 +3921,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 help_short: help_short_flag,
                 long_only,
                 unknown_flags_value,
+                default_subcommand,
+                examples,
+                headings,
+                effect,
+                outputs,
+                exit_codes,
             },
         )?;
     }
@@ -3876,6 +3955,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 help_flag: #help_flag,
                 help_short: #help_short_flag,
                 version: #help_version,
+                default_subcommand: #help_default,
+                default_subcommand_flags: #default_subcommand_flags,
+                default_subcommand_help: #default_subcommand_help,
+                flatten_help: #flatten_help,
+                examples: &[#(#help_examples),*],
+                headings: #help_headings,
             };
 
             fn parse_argv_with(
@@ -3955,6 +4040,22 @@ struct StructOptions {
     default_subcommand: Option<String>,
     /// A flag this struct does not take selects it too.
     default_subcommand_flags: bool,
+    /// Its page follows this struct's.
+    default_subcommand_help: bool,
+    /// Each subcommand's usage, description and arguments replace the list.
+    flatten_help: bool,
+    /// The heading of the fields that name none.
+    next_help_heading: Option<String>,
+    /// What is said under a heading: its title and the paragraph.
+    headings: Vec<(String, String)>,
+    /// Command lines to try: the line, its header and what it does.
+    examples: Vec<[String; 3]>,
+    /// What running it does, for the documentation.
+    effect: Option<String>,
+    /// The forms its output takes, for the documentation.
+    outputs: Vec<spec::OutputDoc>,
+    /// What each exit status means, for the documentation.
+    exit_codes: Vec<(u8, String)>,
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
     /// The program name for the usage line; `argv[0]` when empty.
@@ -3996,6 +4097,81 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("default_subcommand_flags") {
                 options.default_subcommand_flags = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("default_subcommand_help") {
+                options.default_subcommand_help = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("flatten_help") {
+                options.flatten_help = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("next_help_heading") {
+                options.next_help_heading = Some(meta.value()?.parse::<LitStr>()?.value());
+                return Ok(());
+            }
+            if meta.path.is_ident("heading") {
+                let (title, [help]) = titled(&meta, ["help"])?;
+                options.headings.push((title, help));
+                return Ok(());
+            }
+            if meta.path.is_ident("effect") {
+                options.effect = Some(effect_name(&meta)?);
+                return Ok(());
+            }
+            if meta.path.is_ident("output") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let mut output = spec::OutputDoc {
+                    name: content.parse::<LitStr>()?.value(),
+                    default: false,
+                    framing: String::new(),
+                    help: String::new(),
+                };
+                while !content.is_empty() {
+                    content.parse::<syn::Token![,]>()?;
+                    if content.is_empty() {
+                        break;
+                    }
+                    let key = content.parse::<Ident>()?;
+                    if key == "default" {
+                        output.default = true;
+                        continue;
+                    }
+                    let slot = match key.to_string().as_str() {
+                        "framing" => &mut output.framing,
+                        "help" => &mut output.help,
+                        _ => {
+                            return Err(syn::Error::new(
+                                key.span(),
+                                "expected `default`, `framing` or `help`",
+                            ));
+                        }
+                    };
+                    content.parse::<syn::Token![=]>()?;
+                    *slot = content.parse::<LitStr>()?.value();
+                }
+                options.outputs.push(output);
+                return Ok(());
+            }
+            if meta.path.is_ident("exit_code") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let code = content.parse::<syn::LitInt>()?.base10_parse::<u8>()?;
+                content.parse::<syn::Token![,]>()?;
+                let help = content.parse::<LitStr>()?.value();
+                options.exit_codes.push((code, help));
+                return Ok(());
+            }
+            if meta.path.is_ident("example") {
+                let example = if meta.input.peek(syn::Token![=]) {
+                    [meta.value()?.parse::<LitStr>()?.value(), String::new(), String::new()]
+                } else {
+                    let (code, [header, help]) = titled(&meta, ["header", "help"])?;
+                    [code, header, help]
+                };
+                options.examples.push(example);
                 return Ok(());
             }
             if meta.path.is_ident("arg_required_else_help") {
@@ -4075,8 +4251,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `default_subcommand_flags`, `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `name`, `version`, `about`, \
-                     `long_about`, `after_help`, `after_long_help` or a `disable_*` option",
+                     `default_subcommand_flags`, `default_subcommand_help`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
+                     `plus_options`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, \
+                     `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
+                     `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));
             }
             let content;
@@ -4106,6 +4284,44 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
         })?;
     }
     Ok(options)
+}
+
+/// `effect = "…"`: what a command or a flag does to what it works on.
+fn effect_name(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<String> {
+    let name = meta.value()?.parse::<LitStr>()?;
+    match name.value().as_str() {
+        "read" | "write" | "destructive" => Ok(name.value()),
+        _ => Err(syn::Error::new(
+            name.span(),
+            "expected \"read\", \"write\" or \"destructive\"",
+        )),
+    }
+}
+
+/// `key("text", name = "…", …)`: the text, and what each of `names` is
+/// given, empty when it is not.
+fn titled<const N: usize>(
+    meta: &syn::meta::ParseNestedMeta<'_>,
+    names: [&str; N],
+) -> syn::Result<(String, [String; N])> {
+    let content;
+    syn::parenthesized!(content in meta.input);
+    let text = content.parse::<LitStr>()?.value();
+    let mut given = [const { String::new() }; N];
+    while !content.is_empty() {
+        content.parse::<syn::Token![,]>()?;
+        if content.is_empty() {
+            break;
+        }
+        let key = content.parse::<Ident>()?;
+        let Some(at) = names.iter().position(|name| key == name) else {
+            let names = names.map(|name| format!("`{name}`")).join(" or ");
+            return Err(syn::Error::new(key.span(), format!("expected {names}")));
+        };
+        content.parse::<syn::Token![=]>()?;
+        given[at] = content.parse::<LitStr>()?.value();
+    }
+    Ok((text, given))
 }
 
 /// The relations between fields, resolved to field indices.
@@ -4526,6 +4742,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
+    let mut warning = String::new();
+    let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let mut value_name = None;
@@ -4591,6 +4809,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("warning") {
+                warning = meta.value()?.parse::<LitStr>()?.value();
+            } else if meta.path.is_ident("effect") {
+                effect = Some(effect_name(&meta)?);
             } else if meta.path.is_ident("negate") {
                 negate = Some(if meta.input.peek(syn::Token![=]) {
                     let name = meta.value()?.parse::<LitStr>()?.value();
@@ -4699,7 +4921,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_note`, `default_if`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
-                     `group`, `help`, `long_help`, `help_heading`, `hide`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -4923,6 +5145,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         value_name: if tristate { None } else { flag_value_name },
         hint,
         complete,
+        warning,
+        effect,
         negative_numbers,
         hyphen_values,
         require_equals,

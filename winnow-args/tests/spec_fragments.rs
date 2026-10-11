@@ -136,7 +136,13 @@ fn types_of_one_name_are_told_apart() {
     // Neither `Opts` is a command of its own, and each can be asked for.
     assert_eq!(
         catalog.roots(),
-        ["SpecBoth", "SpecChange", "SpecCli", "SpecPlace"]
+        [
+            "SpecBoth",
+            "SpecChange",
+            "SpecCli",
+            "SpecPages",
+            "SpecPlace"
+        ]
     );
     // `self::SpecInner` and `super::Opts` of an inline module, below a `use<>`.
     let both = catalog.stitch("SpecBoth").unwrap();
@@ -149,6 +155,100 @@ fn types_of_one_name_are_told_apart() {
         error.contains("add::Opts") && error.contains("remove::Opts"),
         "{error}"
     );
+}
+
+/// What a page says beyond its lists.
+#[derive(Args)]
+#[arg(
+    name = "spec-pages",
+    default_subcommand = "m",
+    effect = "write",
+    example("spec-pages -p world", header = "Try it", help = "Merges nothing."),
+    example = "spec-pages query",
+    heading("Roots", help = "Said by the command."),
+    output("pretty", default, help = "For people"),
+    exit_code(0, "done")
+)]
+struct SpecPages {
+    #[arg(flatten)]
+    roots: SpecRoots,
+    #[arg(subcommand)]
+    command: Option<SpecPagesCommand>,
+}
+
+#[derive(Args)]
+#[arg(
+    next_help_heading = "Roots",
+    heading("Roots", help = "Said by the group."),
+    heading("Other", help = "Only the group says this."),
+    output("json", framing = "json"),
+    exit_code(64, "no such root")
+)]
+struct SpecRoots {
+    /// The tree.
+    #[arg(long)]
+    root: Option<String>,
+    /// Elsewhere.
+    #[arg(
+        long,
+        help_heading = "Other",
+        effect = "destructive",
+        warning = "Not for use."
+    )]
+    wipe: bool,
+}
+
+#[derive(Subcommand)]
+enum SpecPagesCommand {
+    /// Merge.
+    #[arg(alias_hidden = "m")]
+    Merge,
+    /// Query.
+    Query,
+}
+
+#[test]
+fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
+    use winnow_args_spec::{Effect, ExitCode};
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecPages")
+        .unwrap_or_else(|error| panic!("{error}"));
+    // Named by a spelling help does not show, and found all the same.
+    assert_eq!(command.default_subcommand.as_deref(), Some("m"));
+    assert!(command.is_default(&command.subcommands[0]));
+    assert!(!command.is_default(&command.subcommands[1]));
+    assert_eq!(command.effect, Some(Effect::Write));
+    let examples: Vec<_> = command.examples.iter().map(|e| e.code.as_str()).collect();
+    assert_eq!(examples, ["spec-pages -p world", "spec-pages query"]);
+    assert_eq!(command.examples[0].header, "Try it");
+    // A flattened struct's fields are under its heading, unless they name one.
+    assert_eq!(command.items[0].heading.as_deref(), Some("Roots"));
+    assert_eq!(command.items[1].heading.as_deref(), Some("Other"));
+    assert_eq!(command.items[1].effect, Some(Effect::Destructive));
+    // Its outputs and exit codes are the command's too.
+    let outputs: Vec<_> = command.outputs.iter().map(|o| o.name.as_str()).collect();
+    assert_eq!(outputs, ["pretty", "json"]);
+    assert!(command.outputs[0].default);
+    assert_eq!(command.outputs[1].framing, "json");
+    let codes: Vec<u8> = command.exit_codes.iter().map(|e| e.code).collect();
+    assert_eq!(codes, [0, 64]);
+    assert!(matches!(&command.exit_codes[1], ExitCode { code: 64, .. }));
+    #[cfg(feature = "help-text")]
+    {
+        assert_eq!(command.examples[0].help, "Merges nothing.");
+        // What the command says of a heading is read first.
+        assert_eq!(command.heading_help("Roots"), Some("Said by the command."));
+        assert_eq!(
+            command.heading_help("Other"),
+            Some("Only the group says this.")
+        );
+        assert_eq!(command.items[1].warning, "Not for use.");
+        assert_eq!(command.exit_codes[1].help, "no such root");
+    }
 }
 
 #[test]

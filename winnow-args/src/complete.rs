@@ -231,6 +231,28 @@ struct Walk {
 }
 
 impl Walk {
+    /// Where the line stands once `sub` is named: its flags are read, and
+    /// those of this command that are global.
+    fn within(&self, sub: &'static crate::help::Sub) -> Walk {
+        let mut globals = self.globals.clone();
+        globals.extend(self.command.items.iter().filter(|i| i.global));
+        Walk {
+            command: sub.command,
+            globals,
+            owing: None,
+            stopped: false,
+            position: 0,
+        }
+    }
+
+    /// The default subcommand, entered, when a flag this command does not
+    /// take selects it.
+    fn handed_over(&self) -> Option<Walk> {
+        let command = self.command;
+        let sub = command.default_target()?;
+        command.default_subcommand_flags.then(|| self.within(sub))
+    }
+
     fn flags(&self) -> impl Iterator<Item = &'static Item> + '_ {
         let own = self.command.items.iter().filter(|i| !i.positional);
         own.chain(self.globals.iter().copied())
@@ -323,6 +345,15 @@ impl Walk {
 
     fn bundle(&mut self, letters: &str, plus: bool) {
         for (at, letter) in letters.char_indices() {
+            let handed = || {
+                self.handed_over()
+                    .filter(|walk| walk.letter(letter, plus).is_some())
+            };
+            if self.letter(letter, plus).is_none()
+                && let Some(walk) = handed()
+            {
+                *self = walk;
+            }
             let Some(item) = self.letter(letter, plus) else {
                 break;
             };
@@ -351,6 +382,12 @@ impl Walk {
                 Some((name, value)) => (name, Some(value)),
                 None => (body, None),
             };
+            let handed = || self.handed_over().filter(|walk| walk.long(name).is_some());
+            if self.long(name).is_none()
+                && let Some(walk) = handed()
+            {
+                *self = walk;
+            }
             if let Some(item) = self.long(name) {
                 self.owe(item, value.is_some());
             }
@@ -364,10 +401,11 @@ impl Walk {
             .iter()
             .find(|s| s.names.contains(&word))
         {
-            let globals = self.command.items.iter().filter(|i| i.global);
-            self.globals.extend(globals);
-            self.command = sub.command;
-            self.position = 0;
+            *self = self.within(sub);
+        } else if let Some(sub) = self.command.default_target() {
+            // A word that names no subcommand is the default one's.
+            *self = self.within(sub);
+            self.position = 1;
         } else {
             self.position += 1;
         }
@@ -392,7 +430,11 @@ impl Walk {
                 .strip_prefix("--")
                 .and_then(|body| body.split_once('='))
             {
-                if let Some(item) = self.long(name).filter(|i| i.value_name.is_some()) {
+                let handed = self.handed_over();
+                let item = self
+                    .long(name)
+                    .or_else(|| handed.as_ref().and_then(|walk| walk.long(name)));
+                if let Some(item) = item.filter(|i| i.value_name.is_some()) {
                     values(
                         item,
                         &current[..current.len() - value.len()],
@@ -403,6 +445,15 @@ impl Walk {
                 return out;
             }
             self.flag_names(current, &mut out);
+            // And those that select the default subcommand, less its own
+            // help and version.
+            if let Some(walk) = self.handed_over() {
+                let shorts = !current.starts_with("--");
+                let own = walk.command.items.iter().filter(|i| !i.positional);
+                for item in own.filter(|i| !i.hide && !self.takes(i)) {
+                    push_names(item, shorts, current, &mut out);
+                }
+            }
             return out;
         }
         if !self.stopped {
@@ -410,35 +461,40 @@ impl Walk {
                 push(&mut out, sub.name, sub.about, current);
             }
         }
+        self.positional(current, &mut out);
+        // A word that names no subcommand is the default one's first.
+        if !self.stopped
+            && self.position == 0
+            && let Some(sub) = self.command.default_target()
+        {
+            self.within(sub).positional(current, &mut out);
+        }
+        out
+    }
+
+    /// The values of the positional the next word fills.
+    fn positional(&self, current: &str, out: &mut Completions) {
         let mut positionals = self.command.items.iter().filter(|i| i.positional);
         let positional = positionals
             .clone()
             .nth(self.position)
             .or_else(|| positionals.rfind(|i| i.multiple));
         if let Some(item) = positional {
-            values(item, "", current, &mut out);
+            values(item, "", current, out);
         }
-        out
+    }
+
+    /// Whether this command reads a flag spelled as `item` is.
+    fn takes(&self, item: &Item) -> bool {
+        item.long.is_some_and(|long| self.long(long).is_some())
+            || item.short.is_some_and(|c| self.letter(c, false).is_some())
     }
 
     fn flag_names(&self, current: &str, out: &mut Completions) {
         // `--` typed: only long names fit.
         let shorts = !current.starts_with("--");
         for item in self.flags().filter(|i| !i.hide) {
-            if let Some(long) = item.long {
-                push(out, &format!("--{long}"), item.help, current);
-            }
-            if let Some(negate) = item.negate {
-                push(out, &format!("--{negate}"), item.help, current);
-            }
-            if shorts {
-                if let Some(short) = item.short {
-                    push(out, &format!("-{short}"), item.help, current);
-                }
-                for &letter in item.more_shorts {
-                    push(out, &format!("-{letter}"), item.help, current);
-                }
-            }
+            push_names(item, shorts, current, out);
         }
         let command = self.command;
         if command.help_flag {
@@ -460,6 +516,25 @@ impl Walk {
             if let Some(letter) = item.plus {
                 push(out, &format!("+{letter}"), item.help, current);
             }
+        }
+    }
+}
+
+/// Each spelling of the flag `item` that `current` starts; no letter when
+/// `shorts` is unset.
+fn push_names(item: &'static Item, shorts: bool, current: &str, out: &mut Completions) {
+    if let Some(long) = item.long {
+        push(out, &format!("--{long}"), item.help, current);
+    }
+    if let Some(negate) = item.negate {
+        push(out, &format!("--{negate}"), item.help, current);
+    }
+    if shorts {
+        if let Some(short) = item.short {
+            push(out, &format!("-{short}"), item.help, current);
+        }
+        for &letter in item.more_shorts {
+            push(out, &format!("-{letter}"), item.help, current);
         }
     }
 }

@@ -12,8 +12,9 @@ pub use crate::color::{Depth, Palette, Theme};
 
 /// One command's help: what it is, what it takes, what it contains.
 ///
-/// Written by the derive, as [`Item`] and [`Sub`] are: fields are added as
-/// help learns to show more, so a hand-written one tracks the release.
+/// Written by the derive, as [`Item`] and [`Sub`] are. Fields are added as
+/// help learns to show more: a value written by hand ends in
+/// `..Command::EMPTY`, and so keeps compiling when one is.
 #[derive(Debug)]
 pub struct Command {
     /// The command's own name; empty for a root that leaves it to `argv[0]`.
@@ -38,6 +39,86 @@ pub struct Command {
     pub help_short: bool,
     /// The version, when `-V`/`--version` are supplied.
     pub version: Option<&'static str>,
+    /// The subcommand a line that names none runs: marked `(default)` in
+    /// the list.
+    pub default_subcommand: Option<&'static str>,
+    /// Whether a flag this command does not take selects the default
+    /// subcommand too.
+    pub default_subcommand_flags: bool,
+    /// Whether the default subcommand's page follows this one.
+    pub default_subcommand_help: bool,
+    /// Whether each subcommand's usage line, description and arguments stand
+    /// where the list of subcommands would.
+    pub flatten_help: bool,
+    /// Command lines to try, in an Examples section.
+    pub examples: &'static [Example],
+    /// What `--help` says under a heading, before its entries.
+    pub headings: &'static [Heading],
+}
+
+impl Command {
+    /// A command that takes nothing and says nothing. A value written by
+    /// hand ends in `..Command::EMPTY`, and a release that adds a field does
+    /// not break it.
+    pub const EMPTY: Command = Command {
+        name: "",
+        about: "",
+        long_about: "",
+        after_help: "",
+        after_long_help: "",
+        items: &[],
+        subcommands: &[],
+        subcommand_required: false,
+        help_flag: false,
+        help_short: false,
+        version: None,
+        default_subcommand: None,
+        default_subcommand_flags: false,
+        default_subcommand_help: false,
+        flatten_help: false,
+        examples: &[],
+        headings: &[],
+    };
+
+    /// The subcommand a line that names none runs.
+    pub(crate) fn default_target(&self) -> Option<&'static Sub> {
+        let name = self.default_subcommand?;
+        let subs = self.subcommands;
+        subs.iter()
+            .find(|sub| sub.name == name)
+            .or_else(|| subs.iter().find(|sub| sub.names.contains(&name)))
+    }
+
+    /// [`Command::default_target`], when help shows it.
+    fn default_sub(&self) -> Option<&'static Sub> {
+        self.default_target().filter(|sub| !sub.hide)
+    }
+
+    /// What is said under the heading `title`.
+    fn heading_help(&self, title: &str) -> Option<&'static str> {
+        let heading = self.headings.iter().find(|h| h.title == title)?;
+        Some(heading.help).filter(|help| !help.is_empty())
+    }
+}
+
+/// A command line to try.
+#[derive(Debug, Clone, Copy)]
+pub struct Example {
+    /// The line, as typed: `prog build --release`.
+    pub code: &'static str,
+    /// What it is an example of, on a line of its own above; empty for none.
+    pub header: &'static str,
+    /// What it does, for `--help`; empty for none.
+    pub help: &'static str,
+}
+
+/// What a section of the page says before its entries.
+#[derive(Debug, Clone, Copy)]
+pub struct Heading {
+    /// The heading, as an item's [`Item::heading`] spells it.
+    pub title: &'static str,
+    /// The paragraph under it, for `--help`.
+    pub help: &'static str,
 }
 
 /// A flag or positional.
@@ -94,11 +175,15 @@ pub struct Item {
     /// What its value can be, given what is typed of it: asked when a shell
     /// completes it, in place of its choices and its hint.
     pub complete: Option<fn(&str) -> Vec<crate::complete::Candidate>>,
+    /// What to know before using it, shown by `--help` as `Warning: …`;
+    /// empty for none.
+    pub warning: &'static str,
 }
 
 impl Item {
-    /// No flag at all: what [`concat_items`]'s array starts from.
-    const EMPTY: Item = Item {
+    /// A switch with no name. A value written by hand ends in
+    /// `..Item::EMPTY`, and a release that adds a field does not break it.
+    pub const EMPTY: Item = Item {
         short: None,
         long: None,
         aliases: &[],
@@ -124,6 +209,7 @@ impl Item {
         more_values: false,
         hint: crate::complete::Hint::Nothing,
         complete: None,
+        warning: "",
     };
 }
 
@@ -247,6 +333,36 @@ pub const fn concat_items<const N: usize>(parts: &[&[Item]]) -> [Item; N] {
         p += 1;
     }
     assert!(n == N, "concat_items: the length is not the parts' total");
+    out
+}
+
+/// [`concat_items`] for what is said under headings: a struct's own, then
+/// those of the structs it flattens. The first that names a title is read.
+///
+/// # Panics
+///
+/// At compile time, if `N` is not the total length.
+#[doc(hidden)]
+pub const fn concat_headings<const N: usize>(parts: &[&[Heading]]) -> [Heading; N] {
+    let mut out = [Heading {
+        title: "",
+        help: "",
+    }; N];
+    let (mut n, mut p) = (0, 0);
+    while p < parts.len() {
+        let part = parts[p];
+        let mut i = 0;
+        while i < part.len() {
+            out[n] = part[i];
+            n += 1;
+            i += 1;
+        }
+        p += 1;
+    }
+    assert!(
+        n == N,
+        "concat_headings: the length is not the parts' total"
+    );
     out
 }
 
@@ -508,7 +624,60 @@ pub fn render_styled(
     width: usize,
     style: Style,
 ) -> String {
+    render_page(command, path, long, width, style, &[])
+}
+
+/// [`render_styled`] for a subcommand, which also takes `inherited`: the
+/// global flags of the commands above it.
+pub(crate) fn render_page(
+    command: &Command,
+    path: &[&str],
+    long: bool,
+    width: usize,
+    style: Style,
+    inherited: &[&Item],
+) -> String {
     let mut out = String::new();
+    let layout = Layout { long, width, style };
+    page(&mut out, command, path, layout, inherited);
+    // The default subcommand's own page. A flattened page has it already.
+    if let Some(sub) = command.default_sub()
+        && command.default_subcommand_help
+        && !command.flatten_help
+    {
+        trim_blank_lines(&mut out);
+        out.push('\n');
+        heading(&mut out, "Default command:", style);
+        out.push(' ');
+        push_painted(&mut out, style.command(), sub.name);
+        out.push_str("\n  It runs when no command is named.\n\n");
+        let mut path = path.to_vec();
+        path.push(sub.name);
+        // What it inherits is this command's, listed above.
+        page(&mut out, sub.command, &path, layout, &[]);
+    }
+    trim_blank_lines(&mut out);
+    out
+}
+
+/// End `out` with one newline.
+fn trim_blank_lines(out: &mut String) {
+    while out.ends_with("\n\n") {
+        out.pop();
+    }
+}
+
+/// What a page is rendered with.
+#[derive(Clone, Copy)]
+struct Layout {
+    long: bool,
+    width: usize,
+    style: Style,
+}
+
+/// One command's page, appended to `out`.
+fn page(out: &mut String, command: &Command, path: &[&str], layout: Layout, inherited: &[&Item]) {
+    let Layout { long, width, style } = layout;
     let about = if long && !command.long_about.is_empty() {
         command.long_about
     } else {
@@ -518,11 +687,27 @@ pub fn render_styled(
         let about = painted_marks(about, style);
         let _ = writeln!(out, "{}\n", wrap_text(&about, width));
     }
-    push_painted(&mut out, style.header(), "Usage:");
-    let _ = writeln!(out, " {}\n", usage(command, path, style));
-
     let visible_subs: Vec<&Sub> = command.subcommands.iter().filter(|s| !s.hide).collect();
-    if !visible_subs.is_empty() {
+    let flat = command.flatten_help && !visible_subs.is_empty();
+    push_painted(out, style.header(), "Usage:");
+    let mut lines = Vec::new();
+    if !flat || !command.subcommand_required {
+        lines.push(usage(command, path, style));
+    }
+    if flat {
+        lines.extend(visible_subs.iter().map(|sub| {
+            let mut path = path.to_vec();
+            path.push(sub.name);
+            usage(sub.command, &path, style)
+        }));
+    }
+    for (n, line) in lines.iter().enumerate() {
+        let _ = writeln!(out, "{}{line}", if n == 0 { " " } else { "       " });
+    }
+    out.push('\n');
+
+    if !flat && !visible_subs.is_empty() {
+        let default = command.default_sub().map(|sub| sub.name);
         let rows: Vec<(Cell, String)> = visible_subs
             .iter()
             .map(|s| {
@@ -532,24 +717,42 @@ pub fn render_styled(
                     name.push(Ink::NONE, ", ");
                     name.push(style.command(), alias);
                 }
-                (name, painted_marks(s.about, style))
+                let mut about = painted_marks(s.about, style);
+                if default == Some(s.name) {
+                    if !about.is_empty() {
+                        about.push(' ');
+                    }
+                    // As the value of a `[default: …]` is.
+                    push_painted(&mut about, style.default(), "(default)");
+                }
+                (name, about)
             })
             .collect();
-        section(&mut out, "Commands", &rows, false, width, style);
+        // Both pages list a subcommand beside what it is for.
+        section(
+            out,
+            "Commands",
+            None,
+            &rows,
+            Layout {
+                long: false,
+                ..layout
+            },
+        );
+    }
+    if flat {
+        flat_commands(out, command, path, layout);
     }
 
-    let visible: Vec<&Item> = command.items.iter().filter(|i| !i.hide).collect();
-    let arguments: Vec<(Cell, String)> = visible
-        .iter()
-        .filter(|i| i.positional)
-        .map(|i| {
-            let mut cell = Cell::default();
-            push_item_placeholder(&mut cell, style, i);
-            (cell, describe(i, long, style))
-        })
-        .collect();
-    section(&mut out, "Arguments", &arguments, long, width, style);
+    section(
+        out,
+        "Arguments",
+        None,
+        &argument_rows(command, layout),
+        layout,
+    );
 
+    let visible: Vec<&Item> = command.items.iter().filter(|i| !i.hide).collect();
     let mut headings: Vec<Option<&str>> = vec![None];
     for item in visible.iter().filter(|i| !i.positional) {
         if !headings.contains(&item.heading) {
@@ -563,13 +766,13 @@ pub fn render_styled(
         cell.push(style.flag(), long_name);
         cell
     };
-    for heading in headings {
+    for title in headings {
         let mut rows: Vec<(Cell, String)> = visible
             .iter()
-            .filter(|i| !i.positional && i.heading == heading)
+            .filter(|i| !i.positional && i.heading == title)
             .map(|i| (flag_spec(i, style), describe(i, long, style)))
             .collect();
-        if heading.is_none() {
+        if title.is_none() {
             if command.help_flag {
                 let what = if long {
                     "Print help (see a summary with '-h')"
@@ -595,15 +798,17 @@ pub fn render_styled(
                 rows.push((builtin("-V", "--version"), "Print version".into()));
             }
         }
-        section(
-            &mut out,
-            heading.unwrap_or("Options"),
-            &rows,
-            long,
-            width,
-            style,
-        );
+        let prose = title.and_then(|title| command.heading_help(title));
+        section(out, title.unwrap_or("Options"), prose, &rows, layout);
     }
+
+    let rows: Vec<(Cell, String)> = inherited
+        .iter()
+        .map(|i| (flag_spec(i, style), describe(i, long, style)))
+        .collect();
+    section(out, "Global options", None, &rows, layout);
+
+    examples(out, command.examples, layout);
 
     let after = if long && !command.after_long_help.is_empty() {
         command.after_long_help
@@ -613,10 +818,87 @@ pub fn render_styled(
     if !after.is_empty() {
         let _ = writeln!(out, "{}", wrap_text(after, width));
     }
-    while out.ends_with("\n\n") {
-        out.pop();
+}
+
+/// A command's positionals, as the rows of its Arguments section.
+fn argument_rows(command: &Command, layout: Layout) -> Vec<(Cell, String)> {
+    let shown = command.items.iter().filter(|i| i.positional && !i.hide);
+    shown
+        .map(|i| {
+            let mut cell = Cell::default();
+            push_item_placeholder(&mut cell, layout.style, i);
+            (cell, describe(i, layout.long, layout.style))
+        })
+        .collect()
+}
+
+/// Each subcommand of a `flatten_help` command under its own command line:
+/// what it is, then what it takes, and its own subcommands if it flattens
+/// them too.
+fn flat_commands(out: &mut String, command: &Command, path: &[&str], layout: Layout) {
+    let Layout { long, style, .. } = layout;
+    for sub in command.subcommands.iter().filter(|sub| !sub.hide) {
+        let mut path = path.to_vec();
+        path.push(sub.name);
+        heading(out, &format!("{}:", path.join(" ")), style);
+        out.push('\n');
+        let about = if long && !sub.command.long_about.is_empty() {
+            sub.command.long_about
+        } else {
+            sub.about
+        };
+        indented(out, about, 2, layout);
+        let mut rows = argument_rows(sub.command, layout);
+        let flags = sub
+            .command
+            .items
+            .iter()
+            .filter(|i| !i.positional && !i.hide);
+        rows.extend(flags.map(|i| (flag_spec(i, style), describe(i, long, style))));
+        if long && !about.is_empty() && !rows.is_empty() {
+            out.push('\n');
+        }
+        list(out, &rows, layout);
+        if !long || rows.is_empty() {
+            out.push('\n');
+        }
+        if sub.command.flatten_help {
+            flat_commands(out, sub.command, &path, layout);
+        }
     }
-    out
+}
+
+/// The Examples section: each line after `$`, under its header if it has
+/// one, and after what it does on the long page.
+fn examples(out: &mut String, examples: &[Example], layout: Layout) {
+    let Layout { long, style, .. } = layout;
+    if examples.is_empty() {
+        return;
+    }
+    heading(out, "Examples:", style);
+    out.push('\n');
+    let mut spaced = false;
+    for (n, example) in examples.iter().enumerate() {
+        let help = Some(example.help).filter(|help| long && !help.is_empty());
+        let said = !example.header.is_empty() || help.is_some();
+        // A line that is introduced stands apart from its neighbors.
+        if n > 0 && (said || spaced) {
+            out.push('\n');
+        }
+        spaced = said;
+        if !example.header.is_empty() {
+            let _ = writeln!(out, "  {}:", painted_marks(example.header, style));
+        }
+        if let Some(help) = help {
+            indented(out, help, 4, layout);
+        }
+        out.push_str(if said { "    " } else { "  " });
+        push_painted(out, style.dim(), "$");
+        out.push(' ');
+        push_painted(out, style.code(), example.code);
+        out.push('\n');
+    }
+    out.push('\n');
 }
 
 /// `prog [OPTIONS] <A> [B]... [COMMAND]`.
@@ -746,6 +1028,10 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
             choices.join(", "),
             close()
         ));
+    }
+    if long && !item.warning.is_empty() {
+        let label = Style::paint(style.error(), "Warning:");
+        add(format!("{label} {}", painted_marks(item.warning, style)));
     }
     text
 }
@@ -889,24 +1175,36 @@ fn closing(line: &str, from: usize, stars: usize) -> Option<usize> {
     None
 }
 
-/// A titled two-column list; long help puts each description under its item.
-///
-/// Descriptions wrap to `width`. The column is at most two fifths of the
-/// page, so one long spelling does not squeeze every
-/// description; an item wider than that has its description on the next line.
+/// A titled two-column list, after what `--help` says under the title.
 fn section(
     out: &mut String,
     title: &str,
+    prose: Option<&str>,
     rows: &[(Cell, String)],
-    long: bool,
-    width: usize,
-    style: Style,
+    layout: Layout,
 ) {
     if rows.is_empty() {
         return;
     }
-    heading(out, &format!("{title}:"), style);
+    heading(out, &format!("{title}:"), layout.style);
     out.push('\n');
+    if let Some(prose) = prose.filter(|_| layout.long) {
+        indented(out, prose, 2, layout);
+        out.push('\n');
+    }
+    list(out, rows, layout);
+    if !layout.long {
+        out.push('\n');
+    }
+}
+
+/// A two-column list; long help puts each description under its item.
+///
+/// Descriptions wrap to the width. The column is at most two fifths of the
+/// page, so one long spelling does not squeeze every
+/// description; an item wider than that has its description on the next line.
+fn list(out: &mut String, rows: &[(Cell, String)], layout: Layout) {
+    let Layout { long, width, .. } = layout;
     let longest = rows.iter().map(|(left, _)| left.width).max().unwrap_or(0);
     let available = width.saturating_sub(4);
     let column = longest.min(available / 5 * 2 + available % 5 * 2 / 5);
@@ -946,8 +1244,20 @@ fn section(
             out.push('\n');
         }
     }
-    if !long {
-        out.push('\n');
+}
+
+/// `text` painted and wrapped, each line after `indent` spaces; a blank line
+/// between two paragraphs stays empty.
+fn indented(out: &mut String, text: &str, indent: usize, layout: Layout) {
+    let text = painted_marks(text, layout.style);
+    let room = layout.width.saturating_sub(indent).max(20);
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            out.push('\n');
+        }
+        for piece in Wrap::new(line, room) {
+            let _ = writeln!(out, "{:indent$}{piece}", "");
+        }
     }
 }
 

@@ -30,6 +30,9 @@ pub fn render(page: &Page<'_>) -> String {
         out.push_str(&blocks(about));
         out.push_str("\n\n");
     }
+    if let Some(effect) = command.effect {
+        out.push_str(&format!("**Effect:** {}.\n\n", effect.label()));
+    }
 
     heading(&mut out, "Usage");
     out.push_str("```\n");
@@ -40,7 +43,7 @@ pub fn render(page: &Page<'_>) -> String {
     if !subs.is_empty() {
         heading(&mut out, "Commands");
         for sub in subs {
-            push_subcommand(&mut out, page, sub);
+            push_subcommand(&mut out, page, sub, command.is_default(sub));
         }
         out.push('\n');
     }
@@ -66,6 +69,10 @@ pub fn render(page: &Page<'_>) -> String {
     }
     for (title, items) in grouped.headings {
         heading(&mut out, title);
+        if let Some(help) = command.heading_help(title) {
+            out.push_str(&blocks(help));
+            out.push_str("\n\n");
+        }
         for item in items {
             push_item(&mut out, item, "");
         }
@@ -82,6 +89,40 @@ pub fn render(page: &Page<'_>) -> String {
         out.push_str(note);
         out.push_str("\n\n");
     }
+    if !command.outputs.is_empty() {
+        heading(&mut out, "Output formats");
+        for output in &command.outputs {
+            let mut what = escape(&output.help);
+            if output.default {
+                append(&mut what, "The default.");
+            }
+            if !output.framing.is_empty() {
+                append(&mut what, &format!("Framing: `{}`.", output.framing));
+            }
+            push_term(&mut out, &output.name, &what, "");
+        }
+        out.push('\n');
+    }
+    if !command.exit_codes.is_empty() {
+        heading(&mut out, "Exit status");
+        for exit in &command.exit_codes {
+            push_term(&mut out, &exit.code.to_string(), &escape(&exit.help), "");
+        }
+        out.push('\n');
+    }
+    if !command.examples.is_empty() {
+        heading(&mut out, "Examples");
+        for example in &command.examples {
+            if !example.header.is_empty() {
+                out.push_str(&format!("**{}**\n\n", escape(&example.header)));
+            }
+            if !example.help.is_empty() {
+                out.push_str(&blocks(&example.help));
+                out.push_str("\n\n");
+            }
+            out.push_str(&format!("```\n$ {}\n```\n\n", example.code));
+        }
+    }
     let after = command.after();
     if !after.is_empty() {
         out.push_str(&blocks(after));
@@ -96,7 +137,15 @@ fn heading(out: &mut String, title: &str) {
     out.push_str("\n\n");
 }
 
-fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub) {
+/// `more` after `text`, a space between them when there is text.
+fn append(text: &mut String, more: &str) {
+    if !text.is_empty() {
+        text.push(' ');
+    }
+    text.push_str(more);
+}
+
+fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) {
     out.push_str(&format!(
         "* [`{name}`]({stem}-{name}.md)",
         name = sub.name,
@@ -110,6 +159,9 @@ fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub) {
     if !sub.about.is_empty() {
         out.push_str(" — ");
         out.push_str(&escape(&sub.about));
+    }
+    if default {
+        out.push_str(" (default)");
     }
     out.push('\n');
 }
@@ -237,8 +289,8 @@ mod tests {
                 name: "use".to_owned(),
                 aliases: vec!["u".to_owned()],
                 about: "Install *now*.".to_owned(),
-                hide: false,
                 command: child,
+                ..winnow_args_spec::Sub::default()
             }],
             help_flag: true,
             help_short: true,
@@ -287,5 +339,112 @@ mod tests {
             "{child}"
         );
         assert!(child.contains("* `--help` — Print help\n"), "{child}");
+    }
+
+    /// A command that says all a page says beyond its lists.
+    fn telling() -> Command {
+        use winnow_args_spec::{Effect, Example, ExitCode, Heading, Output, Sub};
+        let wipe = Item {
+            long: Some("wipe".to_owned()),
+            help: "Start over.".to_owned(),
+            heading: Some("Roots".to_owned()),
+            warning: "Not for use.".to_owned(),
+            effect: Some(Effect::Destructive),
+            ..Item::default()
+        };
+        let sub = |name: &str, about: &str| Sub {
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            about: about.to_owned(),
+            hide: false,
+            command: Command {
+                name: name.to_owned(),
+                about: about.to_owned(),
+                ..Command::default()
+            },
+            ..Sub::default()
+        };
+        Command {
+            name: "em".to_owned(),
+            about: "A package manager.".to_owned(),
+            items: vec![wipe],
+            subcommands: vec![sub("emerge", "Merge."), sub("query", "Ask.")],
+            default_subcommand: Some("emerge".to_owned()),
+            effect: Some(Effect::Write),
+            examples: vec![
+                Example {
+                    code: "em -ua @world".to_owned(),
+                    header: "Update".to_owned(),
+                    help: "Rebuilds what changed.".to_owned(),
+                },
+                Example {
+                    code: "em query".to_owned(),
+                    ..Example::default()
+                },
+            ],
+            headings: vec![Heading {
+                title: "Roots".to_owned(),
+                help: "Which tree is read.".to_owned(),
+            }],
+            outputs: vec![
+                Output {
+                    name: "pretty".to_owned(),
+                    default: true,
+                    help: "For people.".to_owned(),
+                    ..Output::default()
+                },
+                Output {
+                    name: "json".to_owned(),
+                    framing: "json".to_owned(),
+                    ..Output::default()
+                },
+            ],
+            exit_codes: vec![ExitCode {
+                code: 64,
+                help: "No such root.".to_owned(),
+            }],
+            ..Command::default()
+        }
+    }
+
+    #[test]
+    fn a_page_says_what_is_beyond_its_lists() {
+        let pages = render_pages(&telling(), "em").unwrap();
+        let root = &pages[0].1;
+        assert!(
+            root.starts_with(
+                "# em\n\nA package manager.\n\n**Effect:** modifies state.\n\n## Usage\n"
+            ),
+            "{root}"
+        );
+        assert!(
+            root.contains(
+                "* [`emerge`](em-emerge.md) — Merge. (default)\n* [`query`](em-query.md) — Ask.\n"
+            ),
+            "{root}"
+        );
+        assert!(
+            root.contains(
+                "## Roots\n\nWhich tree is read.\n\n* `--wipe` — Start over. \
+                 Effect: destructive (may delete or irreversibly overwrite). Warning: Not for use.\n"
+            ),
+            "{root}"
+        );
+        assert!(
+            root.contains(
+                "## Output formats\n\n* `pretty` — For people. The default.\n* `json` — Framing: `json`.\n"
+            ),
+            "{root}"
+        );
+        assert!(
+            root.contains("## Exit status\n\n* `64` — No such root.\n"),
+            "{root}"
+        );
+        assert!(
+            root.ends_with(
+                "## Examples\n\n**Update**\n\nRebuilds what changed.\n\n```\n$ em -ua @world\n```\n\n```\n$ em query\n```\n"
+            ),
+            "{root}"
+        );
     }
 }
