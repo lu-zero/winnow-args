@@ -75,6 +75,8 @@
 //! - [`complete`]: completion scripts for bash, zsh, fish, elvish and
 //!   PowerShell, for flags, subcommands and values.
 //! - [`response`]: `@file` words.
+//! - [`run`]: calling the command a line selected, with `#[arg(run)]` on the
+//!   enum of subcommands.
 //! - [`with_env`]: a test's own environment variables.
 //!
 //! Man and markdown pages are made by `winnow-args-man` and
@@ -142,6 +144,7 @@ pub mod env;
 pub mod error;
 pub mod help;
 pub mod response;
+pub mod run;
 pub mod stream;
 pub mod token;
 pub mod value;

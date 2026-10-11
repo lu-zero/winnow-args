@@ -43,4 +43,26 @@ enum SameFlag {
     AlsoLazy,
 }
 
+#[derive(winnow_args::Args)]
+struct Held {}
+
+#[derive(Subcommand)]
+#[arg(run)]
+enum RunsNothing {
+    Held(Held),
+    Bare,
+}
+
+#[derive(Subcommand)]
+#[arg(run, run_async)]
+enum RunsTwice {
+    Held(Held),
+}
+
+#[derive(ValueEnum)]
+#[arg(run)]
+enum NoCommand {
+    Value,
+}
+
 fn main() {}

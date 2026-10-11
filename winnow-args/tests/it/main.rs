@@ -41,6 +41,7 @@ mod preserve;
 mod repeat;
 mod require_equals;
 mod response;
+mod run;
 mod sequence;
 mod subcommand;
 mod suggest;

@@ -88,7 +88,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 |---|:-:|:-:|:-:|:-:|
 | A portable spec of the CLI | – | ✓ | – | – |
 | Config-file settings | – | ✓ | – | – |
-| Generated dispatch | – | ✓ | – | – |
+| Generated dispatch | ✓ `run`, `run_async` | ✓ | – | – |
 | Update a parsed value from another line | – | ✓ | – | ✓ |
 
 [`CHECKLIST.md`](./CHECKLIST.md) lists what winnow-args has and lacks in

@@ -291,6 +291,10 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
 /// - Enum: `spec = "…"`: the name the documentation files the enum under, in place of its own.
+/// - Enum: `run`, `run_async`: implement [`Run`](https://docs.rs/winnow-args/latest/winnow_args/run/trait.Run.html)
+///   or `RunAsync` for the enum, by calling it on the type the selected variant holds. Every variant holds
+///   a type, each implements the trait, and all produce the same `Output`; two variants may hold one type.
+///   The enum then implements it for every context, so it takes no implementation of its own.
 /// - Variant: `name = "…"`: the word that selects it.
 /// - Variant: `spec = "…"`: the name the documentation finds the variant's type under, when it is not the type's own.
 /// - Variant: `alias = "…"`, `alias("…", …)`: other words, shown in help; `alias_hidden` is the same, not shown.
@@ -310,11 +314,14 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Subcommand` can only be derived for enums",
         ));
     };
-    let case = rename_all(input)?;
+    let mut runs = None;
+    let case = rename_all(input, Some(&mut runs))?;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
     let mut subs = Vec::new();
+    // Each variant and the type it holds, for `run`.
+    let mut held: Vec<(&Ident, Type, bool)> = Vec::new();
     let spec_on = spec::enabled();
     let filed = filed(input)?;
     let identity = spec::identity(input.ident.span(), &filed);
@@ -332,6 +339,19 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
             _ => None,
         };
+        match &inner {
+            Some(ty) => {
+                let is_boxed = matches!(&variant.fields, Fields::Unnamed(f) if boxed(&f.unnamed[0].ty).is_some());
+                held.push((ident, ty.clone(), is_boxed));
+            }
+            None if runs.is_some() => {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "`run` calls the type a variant holds, and this variant holds none",
+                ));
+            }
+            None => {}
+        }
         // The whole doc comment, when the description is its first paragraph.
         let unit_long_about = inner.is_none().then(|| {
             let (doc, long_doc) = docs(&variant.attrs);
@@ -457,8 +477,10 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    let run_impl = runs.map(|runs| run_impl(input, runs, &held));
     Ok(quote! {
         #(#spec_checks)*
+        #run_impl
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
 
@@ -550,6 +572,71 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     })
+}
+
+/// `Run` or `RunAsync` for a `Subcommand` enum: the command it holds is run,
+/// with whatever context it takes. Every variant's type produces the same.
+fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> TokenStream2 {
+    if held.is_empty() {
+        // An enum with no variant holds nothing to run: it is never built.
+        return quote!();
+    }
+    let name = &input.ident;
+    let (_, ty_generics, where_clause) = input.generics.split_for_impl();
+    // The enum's own parameters, without the defaults an `impl` may not state.
+    let mut generics = input.generics.clone();
+    for param in &mut generics.params {
+        match param {
+            syn::GenericParam::Type(param) => (param.eq_token, param.default) = (None, None),
+            syn::GenericParam::Const(param) => (param.eq_token, param.default) = (None, None),
+            syn::GenericParam::Lifetime(_) => {}
+        }
+    }
+    let params = generics.params.iter();
+    let (the_trait, method) = match runs {
+        Runs::Sync => (quote!(::winnow_args::run::Run), quote!(run)),
+        Runs::Async => (quote!(::winnow_args::run::RunAsync), quote!(run_async)),
+    };
+    // One output for all: a type two variants hold is then bound twice alike.
+    let bounds = held
+        .iter()
+        .map(|(_, ty, _)| quote!(#ty: #the_trait<__C, Output = __O>));
+    let own_bounds = where_clause
+        .iter()
+        .flat_map(|clause| clause.predicates.iter());
+    let arms = held.iter().map(|(ident, ty, is_boxed)| {
+        let command = match is_boxed {
+            true => quote!(*__command),
+            false => quote!(__command),
+        };
+        let call = quote!(<#ty as #the_trait<__C>>::#method(#command, __context));
+        match runs {
+            Runs::Sync => quote!(Self::#ident(__command) => #call,),
+            Runs::Async => quote!(Self::#ident(__command) => #call.await,),
+        }
+    });
+    let function = match runs {
+        Runs::Sync => quote!(fn run(self, __context: __C) -> Self::Output),
+        Runs::Async => quote!(async fn run_async(self, __context: __C) -> Self::Output),
+    };
+    quote! {
+        #[automatically_derived]
+        // Whether the future is `Send` is the commands' to say, not this `match`'s.
+        #[allow(clippy::future_not_send)]
+        impl<#(#params,)* __C, __O> #the_trait<__C> for #name #ty_generics
+        where
+            #(#own_bounds,)*
+            #(#bounds,)*
+        {
+            type Output = __O;
+
+            #function {
+                match self {
+                    #(#arms)*
+                }
+            }
+        }
+    }
 }
 
 /// Derive `Occurrence` for an enum: one variant per flag or positional, kept
@@ -1417,7 +1504,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`ValueEnum` can only be derived for enums",
         ));
     };
-    let case = rename_all(input)?;
+    let case = rename_all(input, None)?;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut visible = Vec::new();
@@ -1520,16 +1607,41 @@ impl Case {
     }
 }
 
-/// An enum's `#[arg(rename_all = "…")]`, kebab-case if absent.
-fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
+/// How a `Subcommand` enum runs the command it holds: `#[arg(run)]` or
+/// `#[arg(run_async)]`.
+#[derive(Clone, Copy, PartialEq)]
+enum Runs {
+    Sync,
+    Async,
+}
+
+/// An enum's `#[arg(rename_all = "…")]`, kebab-case if absent, and for a
+/// `Subcommand` its `run` or `run_async`.
+fn rename_all(input: &DeriveInput, runs: Option<&mut Option<Runs>>) -> syn::Result<Case> {
     let mut case = Case::Kebab;
+    let mut found = None;
+    let may_run = runs.is_some();
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if skip_spec(&meta)? {
                 return Ok(());
             }
+            let run = match () {
+                () if meta.path.is_ident("run") => Some(Runs::Sync),
+                () if meta.path.is_ident("run_async") => Some(Runs::Async),
+                () => None,
+            };
+            if let (Some(run), true) = (run, may_run) {
+                if found.replace(run).is_some() {
+                    return Err(meta.error("`run` or `run_async`, once"));
+                }
+                return Ok(());
+            }
             if !meta.path.is_ident("rename_all") {
-                return Err(meta.error("expected `rename_all` or `spec`"));
+                return Err(meta.error(match may_run {
+                    true => "expected `rename_all`, `run`, `run_async` or `spec`",
+                    false => "expected `rename_all` or `spec`",
+                }));
             }
             let lit = meta.value()?.parse::<LitStr>()?;
             case = match lit.value().as_str() {
@@ -1547,6 +1659,9 @@ fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
             };
             Ok(())
         })?;
+    }
+    if let Some(runs) = runs {
+        *runs = found;
     }
     Ok(case)
 }

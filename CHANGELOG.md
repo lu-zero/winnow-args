@@ -10,6 +10,10 @@ released together. Versions follow [semver](https://semver.org).
   `default_subcommand`. A flag the struct does not take selects the default
   subcommand, which reads it as its own: `em -pu @world` is
   `em emerge -pu @world`. Every later word is then that subcommand's.
+- **Added**: `#[arg(run)]` and `#[arg(run_async)]` on a `Subcommand` enum,
+  with the traits `run::Run` and `run::RunAsync`. Each command implements the
+  trait, and the enum implements it by calling the one it holds, with
+  whatever context the commands take. A parse pays nothing for it.
 
 ## 0.2.0 (2026-10-11)
 

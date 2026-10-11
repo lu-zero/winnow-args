@@ -66,6 +66,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `Subcommand` enums, nested, `Option<E>`, unit and `Box<T>` variants,
       aliases (visible or hidden); `default_subcommand`,
       `default_subcommand_flags`, `arg_required_else_help`
+- [x] `run` and `run_async` on a `Subcommand` enum: it runs the command it
+      holds, through `run::Run` or `run::RunAsync`
 - [x] `global` flags at any depth, bundles included
 - [x] `flatten` (flags-only structs, nested; a clash is a compile error)
 - [x] `sequence` of an `Occurrence` enum: flags and words kept in order, with
@@ -222,7 +224,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Program surface
 
 - [ ] `update_from`: merge another command line into a held value
-- [ ] Generated dispatch, testing helpers, declared outputs and exit codes
+- [ ] Testing helpers, declared outputs and exit codes
 - [ ] Config-file settings (`setting = "key"`), between env and default
 - [ ] Emit usage's KDL spec, so its tools (SDKs, spec diff, completion from
       a spec) work from a winnow-args program

@@ -33,3 +33,21 @@ error: `--lazy` is already used by `Lazy`
    |
 42 |     #[arg(long = "lazy")]
    |     ^
+
+error: `run` calls the type a variant holds, and this variant holds none
+  --> tests/ui/enums.rs:53:5
+   |
+53 |     Bare,
+   |     ^^^^
+
+error: `run` or `run_async`, once
+  --> tests/ui/enums.rs:57:12
+   |
+57 | #[arg(run, run_async)]
+   |            ^^^^^^^^^
+
+error: expected `rename_all` or `spec`
+  --> tests/ui/enums.rs:63:7
+   |
+63 | #[arg(run)]
+   |       ^^^
