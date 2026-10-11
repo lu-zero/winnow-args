@@ -140,7 +140,10 @@ fn generate(cli: &Cli) -> Result<()> {
     let catalog = Catalog::load(&spec)?;
     // (the name given, the name of last resort, the type)
     let roots: Vec<(Option<&str>, &str, String)> = if docs.root.is_empty() {
-        vec![(None, name, catalog.root()?)]
+        let root = catalog
+            .root()
+            .map_err(|error| format!("{error}: name the one to document with --root"))?;
+        vec![(None, name, root)]
     } else {
         docs.root
             .iter()

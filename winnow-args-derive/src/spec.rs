@@ -342,7 +342,8 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     let mut body = format!("{version}\n");
     field(&mut body, "file", &source);
     body.push_str(rest);
-    let key = (target.clone(), source.clone(), ident.to_owned());
+    // Where a file system has one name for `Opts` and `OPTS`, so has this.
+    let key = (target.clone(), source.clone(), ident.to_lowercase());
     let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
     match written.get_or_insert_default().insert(key, body.clone()) {
         Some(earlier) if earlier == body => return Ok(()),

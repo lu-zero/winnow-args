@@ -1158,7 +1158,8 @@ fn filed(input: &DeriveInput) -> syn::Result<String> {
 }
 
 /// A type as it is written, `add::Opts`: its modules tell two types of one
-/// name apart. `crate`, `self` and `super` are no module's name.
+/// name apart. `crate`, `self` and `super` are no module's name, and all
+/// three say the type is this crate's: `crate::Opts`.
 fn type_path(ty: &Type) -> Option<String> {
     let Type::Path(path) = boxed(ty).unwrap_or(ty) else {
         return None;
@@ -1166,14 +1167,20 @@ fn type_path(ty: &Type) -> Option<String> {
     if path.qself.is_some() {
         return None;
     }
-    let names: Vec<String> = path
+    let mut names: Vec<String> = path
         .path
         .segments
         .iter()
         .map(|segment| segment.ident.unraw().to_string())
-        .filter(|name| !matches!(name.as_str(), "crate" | "self" | "super"))
         .collect();
-    (!names.is_empty()).then(|| names.join("::"))
+    let rooted = names
+        .iter()
+        .take_while(|name| matches!(name.as_str(), "crate" | "self" | "super"))
+        .count();
+    if rooted > 0 {
+        names.splice(..rooted, ["crate".to_owned()]);
+    }
+    (names.len() > usize::from(rooted > 0)).then(|| names.join("::"))
 }
 
 /// `Opts` of `add::Opts`: what a type is filed under.

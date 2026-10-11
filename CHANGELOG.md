@@ -15,6 +15,8 @@ are released together. Versions follow [semver](https://semver.org).
 - **Added**: `spec = "Name"` on a derived type, and on a field or a variant
   that holds one: the name the documentation files the type under, for two
   types of one name that their source files do not tell apart.
+- **Added**: `winnow_args::complete::Shell` as a field's type has its choices
+  in the pages.
 - **Added**: a hidden `SPEC` constant on `Args`, `Subcommand`, `Occurrence`
   and `FromArg`, which the derives set: a documentation build uses it to
   refuse a field that names a type other than as it is filed, or a value

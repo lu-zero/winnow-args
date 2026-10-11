@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use toml::Table;
 use toml::Value;
@@ -363,8 +364,21 @@ impl Catalog {
                     Fragment::Occurrence(_) | Fragment::Choices(_) => Vec::new(),
                 };
                 for (name, kind) in links {
-                    if let Ok(Some((_, to))) = self.find(at, name, kind) {
-                        referenced.insert(std::ptr::from_ref(to));
+                    match self.find(at, name, kind) {
+                        Ok(Some((_, to))) => {
+                            referenced.insert(std::ptr::from_ref(to));
+                        }
+                        Ok(None) => {}
+                        // Stitching says which the name may be. None of them
+                        // is a command nothing names.
+                        Err(_) => {
+                            let ident = name.rsplit("::").next().unwrap_or(name);
+                            let all = self.crates.values().flatten();
+                            referenced.extend(
+                                all.filter(|entry| entry.ident == ident)
+                                    .map(std::ptr::from_ref),
+                            );
+                        }
                     }
                 }
             }
@@ -386,6 +400,17 @@ impl Catalog {
         roots
     }
 }
+
+/// `winnow_args::complete::Shell`, whose choices no derive writes.
+static SHELL: LazyLock<Entry> = LazyLock::new(|| Entry {
+    ident: "Shell".to_owned(),
+    file: "src/complete.rs".to_owned(),
+    fragment: Fragment::Choices(
+        ["bash", "zsh", "fish", "elvish", "powershell"]
+            .map(str::to_owned)
+            .to_vec(),
+    ),
+});
 
 /// Which fragments a name may be: a flatten is not a list of choices.
 type Kind = fn(&Fragment) -> bool;
@@ -843,43 +868,77 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
 impl Catalog {
     /// The fragment `name` refers to where it is read.
     ///
-    /// The last part of `name` is what the type is filed under. It is looked
-    /// for in the crate the parts before it start with, when they name one,
-    /// then in the crate it is read in, then in all the others. Where several
-    /// types have the name, the one whose file is the module `name` gives is
-    /// meant, or the one in the file `name` is read in when it gives none.
+    /// The last part of `name` is what the type is filed under, and only a
+    /// fragment of the `kind` asked for is one. It is looked for in the crate
+    /// the parts before it start with, when they name one, then in the crate
+    /// it is read in, then in all the others. Where several types have the
+    /// name, the one whose file is the module `name` gives is meant, or the
+    /// one in the file `name` is read in when it gives none.
+    ///
+    /// A `use` may bring a dependency's type under a bare name. So where the
+    /// crate it is read in and another both have the name, this crate's is
+    /// meant only in its own file, by its module, or as `crate::Type`.
     fn find(&self, at: At<'_>, name: &str, kind: Kind) -> Result<Option<Found<'_>>, Error> {
         let mut modules: Vec<&str> = name.split("::").collect();
         let ident = modules.pop().unwrap_or(name);
-        let named = |krate: &str| {
-            let (krate, entries) = self.crates.get_key_value(krate)?;
-            let named = entries.iter().filter(|entry| entry.ident == ident);
-            Some(named.map(|entry| (krate.as_str(), entry)).collect())
+        let local = modules.first() == Some(&"crate");
+        if local {
+            modules.remove(0);
+        }
+        let named = |krate: &str| -> Vec<Found<'_>> {
+            let Some((krate, entries)) = self.crates.get_key_value(krate) else {
+                return Vec::new();
+            };
+            let named = entries
+                .iter()
+                .filter(|entry| entry.ident == ident && kind(&entry.fragment));
+            named.map(|entry| (krate.as_str(), entry)).collect()
         };
-        let stated: Vec<Found<'_>> = modules
-            .first()
-            .and_then(|first| named(first))
-            .unwrap_or_default();
-        let own: Vec<Found<'_>> = named(at.krate).unwrap_or_default();
-        let others = self
+        if let [first, rest @ ..] = &modules[..]
+            && !local
+            && let Some(one) = pick(named(first), rest, at.file, name)?
+        {
+            return Ok(Some(one));
+        }
+        let others: Vec<Found<'_>> = self
             .crates
             .keys()
-            .filter(|krate| *krate != at.krate)
-            .filter_map(|krate| named(krate))
-            .flatten()
+            .filter(|krate| !local && *krate != at.krate)
+            .flat_map(|krate| named(krate))
             .collect();
-        let rest = modules.get(1..).unwrap_or_default();
-        for (found, modules) in [(stated, rest), (own, &modules[..]), (others, &modules[..])] {
-            if let Some(one) = pick(found, modules, at.file, kind, name)? {
-                return Ok(Some(one));
-            }
+        let Some((krate, entry)) = pick(named(at.krate), &modules, at.file, name)? else {
+            return match pick(others, &modules, at.file, name)? {
+                // A type of the library, which has no derive to write it.
+                None if !local && ident == "Shell" && kind(&SHELL.fragment) => {
+                    Ok(Some(("winnow_args", &*SHELL)))
+                }
+                one => Ok(one),
+            };
+        };
+        let here = entry.file == at.file
+            || !modules.is_empty() && modules_of(&entry.file).ends_with(&modules);
+        if let Some((other, _)) = others.first()
+            && !here
+        {
+            return Err(Error::new(format!(
+                "`{name}` may be `{}` or a type of `{other}`: where it is named, write it from \
+                 `crate::` or from `{other}::`, or give one of the types another name for the \
+                 documentation, as `#[arg(spec = \"Name\")]`",
+                whole_name(krate, entry)
+            )));
         }
-        Ok(None)
+        Ok(Some((krate, entry)))
     }
 
-    fn fragment(&self, at: At<'_>, name: &str, kind: Kind) -> Result<Found<'_>, Error> {
-        self.find(at, name, kind)?
-            .ok_or_else(|| Error::new(format!("no fragment named `{name}`")))
+    /// The fragment `name` refers to, which is `what`: "a command".
+    fn fragment(&self, at: At<'_>, name: &str, kind: Kind, what: &str) -> Result<Found<'_>, Error> {
+        if let Some(found) = self.find(at, name, kind)? {
+            return Ok(found);
+        }
+        Err(Error::new(match self.find(at, name, |_| true) {
+            Ok(None) => format!("no fragment named `{name}`"),
+            _ => format!("`{name}` is not {what}"),
+        }))
     }
 
     fn command(
@@ -888,7 +947,7 @@ impl Catalog {
         name: &str,
         stack: &mut Vec<*const Entry>,
     ) -> Result<Command, Error> {
-        let (krate, entry) = self.fragment(at, name, COMMAND)?;
+        let (krate, entry) = self.fragment(at, name, COMMAND, "a command")?;
         let ident = &entry.ident;
         if stack.contains(&std::ptr::from_ref(entry)) {
             return Err(Error::new(format!("`{ident}` refers to itself")));
@@ -928,7 +987,7 @@ impl Catalog {
             subcommands.extend(flattened.subcommands);
         }
         if let Some(sequence) = &args.sequence {
-            let (krate, entry) = self.fragment(at, sequence, OCCURRENCE)?;
+            let (krate, entry) = self.fragment(at, sequence, OCCURRENCE, "an occurrence enum")?;
             let Fragment::Occurrence(drafts) = &entry.fragment else {
                 return Err(Error::new(format!(
                     "`{sequence}` is not an occurrence enum"
@@ -969,7 +1028,7 @@ impl Catalog {
         let Some(name) = name else {
             return Ok(Vec::new());
         };
-        let (krate, entry) = self.fragment(at, name, SUBCOMMANDS)?;
+        let (krate, entry) = self.fragment(at, name, SUBCOMMANDS, "a subcommand enum")?;
         let Fragment::Subcommands(subs) = &entry.fragment else {
             return Err(Error::new(format!("`{name}` is not a subcommand enum")));
         };
@@ -1049,18 +1108,14 @@ impl Catalog {
 
 /// The one of `found` that `name` means, when they all have its last part.
 ///
-/// Several are told apart by what `name` may be, then by the modules it
-/// gives, or by the file it is read in when it gives none.
+/// Several are told apart by the modules `name` gives, or by the file it is
+/// read in when it gives none.
 fn pick<'a>(
     mut found: Vec<Found<'a>>,
     modules: &[&str],
     file: &str,
-    kind: Kind,
     name: &str,
 ) -> Result<Option<Found<'a>>, Error> {
-    if found.len() > 1 {
-        found.retain(|(_, entry)| kind(&entry.fragment));
-    }
     if found.len() < 2 {
         return Ok(found.pop());
     }
@@ -1547,10 +1602,8 @@ mod tests {
             .map(|item| item.long.as_deref().unwrap())
             .collect();
         assert_eq!(longs, ["main", "add", "dep"]);
-        assert_eq!(
-            catalog.roots(),
-            ["Cli", "Lost", "app::src::cli::remove::Opts"]
-        );
+        // `Lost` may mean any `Opts`, the one nothing else names too.
+        assert_eq!(catalog.roots(), ["Cli", "Lost"]);
         let one = catalog.stitch("app::src::cli::remove::Opts").unwrap();
         assert_eq!(one.items[0].long.as_deref(), Some("remove"));
         assert_eq!(
@@ -1564,6 +1617,82 @@ mod tests {
         assert!(error.contains("`Opts` may be"), "{error}");
         assert!(error.contains("app::src::cli::add::Opts"), "{error}");
         assert!(!error.contains("dep::"), "{error}");
+    }
+
+    #[test]
+    fn a_name_two_crates_have_is_this_crate_s_only_where_that_is_sure() {
+        let frag = |file: &str, kind: &str, ident: &str, rest: &str| {
+            format!(
+                "version = 1\nfile = \"{file}\"\nkind = \"{kind}\"\nident = \"{ident}\"\n{rest}"
+            )
+        };
+        let load = |flatten: &str, mode: &str| {
+            let mut catalog = Catalog::default();
+            let item = format!("[[item]]\nlong = \"mode\"\nchoices_ty = \"{mode}\"");
+            for (krate, text) in [
+                (
+                    "app",
+                    frag(
+                        "src/main.rs",
+                        "args",
+                        "Cli",
+                        &format!("flatten = [\"{flatten}\"]\n{item}"),
+                    ),
+                ),
+                (
+                    "app",
+                    frag("src/sub.rs", "args", "Opts", "[[item]]\nlong = \"mine\""),
+                ),
+                ("app", frag("src/sub.rs", "args", "Mode", "")),
+                (
+                    "dep",
+                    frag("src/lib.rs", "args", "Opts", "[[item]]\nlong = \"theirs\""),
+                ),
+                (
+                    "dep",
+                    frag(
+                        "src/lib.rs",
+                        "choices",
+                        "Mode",
+                        "choices = [\"fast\", \"slow\"]",
+                    ),
+                ),
+            ] {
+                catalog.insert(krate, krate, &text).unwrap();
+            }
+            catalog
+        };
+        let longs = |catalog: &Catalog| {
+            let command = catalog.stitch("Cli").unwrap();
+            let longs: Vec<_> = command
+                .items
+                .iter()
+                .map(|item| item.long.clone().unwrap())
+                .collect();
+            (longs, command.items[0].choices.clone())
+        };
+        // `use dep::Opts` or `use sub::Opts`: the name alone does not say.
+        let error = load("Opts", "Mode").stitch("Cli").unwrap_err().to_string();
+        assert!(
+            error.contains("`app::src::sub::Opts` or a type of `dep`"),
+            "{error}"
+        );
+        assert_eq!(load("Opts", "Mode").roots(), ["Cli", "Mode"]);
+        // A struct named as the value's type is not its choices.
+        let choices = ["fast".to_owned(), "slow".to_owned()];
+        assert_eq!(
+            longs(&load("crate::sub::Opts", "Mode")),
+            (vec!["mode".into(), "mine".into()], choices.to_vec())
+        );
+        assert_eq!(longs(&load("sub::Opts", "dep::Mode")).0, ["mode", "mine"]);
+        assert_eq!(longs(&load("dep::Opts", "Mode")).0, ["mode", "theirs"]);
+        // The library's own shells, and a program's when it has an enum of the name.
+        let shells = load("dep::Opts", "Shell");
+        assert_eq!(longs(&shells).1.len(), 5);
+        let mut own = load("dep::Opts", "Shell");
+        let text = frag("src/sub.rs", "choices", "Shell", "choices = [\"sh\"]");
+        own.insert("app", "app", &text).unwrap();
+        assert_eq!(longs(&own).1, ["sh"]);
     }
 
     #[test]

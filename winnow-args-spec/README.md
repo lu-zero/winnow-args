@@ -20,6 +20,11 @@ several have the name, the path's modules say which file's is meant
 type of the same file. A root is named the same way, and `CRATE::Type` picks a
 crate's.
 
+A `use` can bring a dependency's type under a bare name, which the derive
+cannot see. So where the crate and a dependency both have a type of the name,
+the crate's own is meant only in its own file, by its module, or as
+`crate::Type`; any other spelling is refused with the two it may be.
+
 When that does not tell two types apart (two of one name in one file, a
 module brought in under another name), the stitching says which types the
 name may be. `#[arg(spec = "AddOpts")]` on a type files it under a name of its
@@ -35,5 +40,8 @@ dash.
 The derive names a value's type, and finds its choices under that name. A type
 named through an alias, or one that implements `FromArg` by hand, has choices
 the name does not lead to: the documentation build stops there, and `spec`
-(the name the choices are filed under) or `choices` on the field states them. A type that implements `Args` by hand writes no
+(the name the choices are filed under) or `choices` on the field states them. `winnow_args::complete::Shell` is known. A type
+with no fixed choices that shares its name with a `ValueEnum` of the build is
+given that enum's choices, unless the field states a `spec` that names
+nothing. A type that implements `Args` by hand writes no
 fragment; one written by hand beside the others stands for it.

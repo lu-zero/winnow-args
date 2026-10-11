@@ -172,6 +172,7 @@ fn arg(text: &str) -> String {
     } else {
         printable(text)
             .replace(['\n', '\t'], " ")
+            .replace('\\', "\\e")
             .replace('"', "\\(dq")
     }
 }

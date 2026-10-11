@@ -100,6 +100,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       and the modules a field writes, and by a name of their own (`spec`) where
       that is not enough; a field that names a type other than as it is filed
       fails the documentation build
+- [ ] In those pages: a value type with no choices, named as a `ValueEnum` of
+      the build is, takes that enum's choices
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate

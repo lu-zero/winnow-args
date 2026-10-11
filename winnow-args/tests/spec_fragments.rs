@@ -52,6 +52,9 @@ struct SpecRun {
     /// When.
     #[arg(long)]
     when: SpecWhen,
+    /// The library's own choices, which no derive writes.
+    #[arg(long)]
+    completions: Option<winnow_args::complete::Shell>,
 }
 
 /// When to run.
@@ -144,6 +147,10 @@ fn emitted_fragments_stitch() {
     assert_eq!(
         command.subcommands[0].command.items[0].choices,
         ["auto", "always"]
+    );
+    assert_eq!(
+        command.subcommands[0].command.items[1].choices,
+        <winnow_args::complete::Shell as winnow_args::FromArg>::CHOICES
     );
     assert_eq!(command.subcommands[1].name, "true");
     assert_eq!(command.name, "spec-tool");
