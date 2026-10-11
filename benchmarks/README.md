@@ -71,7 +71,7 @@ instructions, warm time, stripped size.
 | winnow-args, `dispatch!` | 3 279 | 0.6 | 252 ns | 369 KB |
 | winnow-args, combinators | 4 491 | 0.8 | 391 ns | 377 KB |
 | usage | 5 682 | 1 | 516 ns | 382 KB |
-| clap | 134 820 | 24 | 15.0 µs | 752 KB |
+| clap 4 | 134 820 | 24 | 15.0 µs | 752 KB |
 | bpaf 0.9 | 141 614 | 25 | 14.8 µs | 574 KB |
 | bpaf 0.10, pre-release (`844357f`) | 143 770 | 25 | 17.2 µs | 812 KB |
 
@@ -82,7 +82,7 @@ instructions, warm time, stripped size.
 | winnow-args, derive | 3 997 | 0.5 | 327 ns | 1.74 MB |
 | usage | 7 391 | 1 | 767 ns | 1.16 MB |
 | bpaf 0.10, pre-release (`844357f`) | 1 187 954 | 161 | 164 µs | 2.95 MB |
-| clap | 4 883 364 | 661 | 757 µs | 2.23 MB |
+| clap 4 | 4 883 364 | 661 | 757 µs | 2.23 MB |
 | bpaf 0.9 | 21 878 285 | 2 960 | 2.65 ms | 1.94 MB |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf

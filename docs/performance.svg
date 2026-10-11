@@ -20,7 +20,7 @@
 <text x="92.0" y="69" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">usage 7</text>
 <rect x="98" y="59" width="34.2" height="13" rx="2" fill="#87afaf"/>
 <text x="136.2" y="69" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a">516 ns</text>
-<text x="92.0" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">clap</text>
+<text x="92.0" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">clap 4</text>
 <rect x="98" y="81" width="104.5" height="13" rx="2" fill="#d78787"/>
 <text x="206.5" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a">15.0 µs</text>
 <text x="92.0" y="113" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>
@@ -46,7 +46,7 @@
 <text x="474.0" y="69" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">usage 7</text>
 <rect x="480" y="59" width="42.5" height="13" rx="2" fill="#87afaf"/>
 <text x="526.5" y="69" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a">767 ns</text>
-<text x="474.0" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">clap</text>
+<text x="474.0" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">clap 4</text>
 <rect x="480" y="81" width="186.2" height="13" rx="2" fill="#d78787"/>
 <text x="670.2" y="91" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a">757 µs</text>
 <text x="474.0" y="113" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>

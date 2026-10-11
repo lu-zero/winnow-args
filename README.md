@@ -56,7 +56,7 @@ profile, pinned to one core.
 |---|---:|---:|---:|---:|
 | winnow-args | 2 896 | 187 ns | 3 997 | 327 ns |
 | usage 7 | 5 682 | 516 ns | 7 391 | 767 ns |
-| clap | 134 820 | 15.0 µs | 4 883 364 | 757 µs |
+| clap 4 | 134 820 | 15.0 µs | 4 883 364 | 757 µs |
 | bpaf 0.9 | 141 614 | 14.8 µs | 21 878 285 | 2.65 ms |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
