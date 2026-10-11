@@ -64,7 +64,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `double_dash = "required" | "automatic" | "preserve"`, `stop_flags`
 - [x] `restart_token`: positionals restart, flags keep their values
 - [x] `Subcommand` enums, nested, `Option<E>`, unit and `Box<T>` variants,
-      aliases (visible or hidden); `default_subcommand`, `arg_required_else_help`
+      aliases (visible or hidden); `default_subcommand`,
+      `default_subcommand_flags`, `arg_required_else_help`
 - [x] `global` flags at any depth, bundles included
 - [x] `flatten` (flags-only structs, nested; a clash is a compile error)
 - [x] `sequence` of an `Occurrence` enum: flags and words kept in order, with
@@ -194,7 +195,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] `args_override_self = false`, `subcommand_negates_reqs`,
       `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`,
       `dont_delimit_trailing_values`
-- [ ] `default_subcommand_on_empty`, `default_subcommand_flags`
+- [ ] `default_subcommand_on_empty`, `default_subcommand_help`; completion of
+      the default subcommand's flags before it is named
 - [ ] External subcommands (`cargo foo`), multicall (`argv[0]` selects),
       executable views
 - [ ] Sigil arguments (`+node@22`), clauses (repeated groups split by `:::`)

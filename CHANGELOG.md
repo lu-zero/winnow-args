@@ -4,6 +4,13 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: `default_subcommand_flags` on a struct with a
+  `default_subcommand`. A flag the struct does not take selects the default
+  subcommand, which reads it as its own: `em -pu @world` is
+  `em emerge -pu @world`. Every later word is then that subcommand's.
+
 ## 0.2.0 (2026-10-11)
 
 - **Added**: an unknown flag or subcommand, or a value that is not one of

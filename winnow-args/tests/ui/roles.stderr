@@ -45,3 +45,15 @@ error: `default_subcommand` needs an `#[arg(subcommand)]` field
    |
 71 | struct DefaultOfNothing {
    |        ^^^^^^^^^^^^^^^^
+
+error: `default_subcommand_flags` needs `default_subcommand`
+  --> tests/ui/roles.rs:78:8
+   |
+78 | struct FlagsOfNoDefault {
+   |        ^^^^^^^^^^^^^^^^
+
+error: `default_subcommand_flags` hands an unknown flag to the default subcommand: this struct cannot keep unknown flags too
+  --> tests/ui/roles.rs:85:8
+   |
+85 | struct FlagsKeptAndHandedOver {
+   |        ^^^^^^^^^^^^^^^^^^^^^^

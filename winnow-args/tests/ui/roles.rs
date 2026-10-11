@@ -73,4 +73,20 @@ struct DefaultOfNothing {
     verbose: bool,
 }
 
+#[derive(Args)]
+#[arg(default_subcommand_flags)]
+struct FlagsOfNoDefault {
+    #[arg(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Args)]
+#[arg(default_subcommand = "run", default_subcommand_flags, unknown_flags = "value")]
+struct FlagsKeptAndHandedOver {
+    #[arg(positional)]
+    words: Vec<String>,
+    #[arg(subcommand)]
+    command: Option<Command>,
+}
+
 fn main() {}

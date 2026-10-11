@@ -127,6 +127,10 @@ mod spec;
 /// - `plus_options`: `+abc` is a bundle of `+` options, for fields with `plus`.
 /// - `restart_token = "…"`: a word that starts a new run of positionals; flags resume and keep their values.
 /// - `default_subcommand = "…"`: the subcommand for a line whose first word names none; needs a `subcommand` field.
+/// - `default_subcommand_flags`: a flag this struct does not take selects the default subcommand too, which
+///   reads it as its own (`tool -p pkg` is `tool run -p pkg`). Every later word is then the subcommand's,
+///   one that names another subcommand included, and so is every later flag: one of this struct's that is
+///   not `global` goes before (`tool -qp pkg`, not `tool -pq pkg`).
 /// - `group("name", required, multiple)`: declare a group; fields join it with `group = "name"`.
 ///   `required` means at least one member. Without `multiple`, a second member conflicts.
 /// - `spec = "…"`: the name the documentation files the type under, in place of its own. A field or a variant
@@ -2421,6 +2425,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         groups,
         restart_token,
         default_subcommand,
+        default_subcommand_flags,
         arg_required_else_help,
         name: program_name,
         version,
@@ -2767,7 +2772,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     };
-    let route = subcommand.map(|f| {
+    let routes = subcommand.map(|f| {
         let ident = slot(&f.ident);
         let ty = subcommand_type(f);
         let not_filled = track_filled.then(|| quote!(!__filled &&));
@@ -2831,7 +2836,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 break;
             }
         });
-        quote! {
+        // A flag this struct does not take selects it too, and is read again as its own.
+        let flag_fallback = fallback
+            .as_ref()
+            .filter(|_| default_subcommand_flags)
+            .map(|fallback| match track_filled {
+                true => quote!(if __filled { #unexpected; } #fallback),
+                false => fallback.clone(),
+            });
+        let route = quote! {
             if #not_filled !__word.after_separator {
                 if <#ty as __wa::Subcommand>::has(&**__word.value) {
                     let __sub = {
@@ -2846,8 +2859,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #help_word
                 #fallback
             }
-        }
+        };
+        (route, flag_fallback)
     });
+    let (route, flag_fallback) = match routes {
+        Some((route, flag_fallback)) => (Some(route), flag_fallback),
+        None => (None, None),
+    };
     // A new invocation of the same command: positionals start over, flags keep theirs.
     let restart = restart_token.map(|token| {
         let token = LitByteStr::new(token.as_bytes(), Span::call_site());
@@ -3040,11 +3058,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`plus` needs `#[arg(plus_options)]` on the struct",
         ));
     }
+    // A `+x` this struct does not take selects the default subcommand as a flag does.
+    let plus_unknown = match &flag_fallback {
+        Some(fallback) => quote!(#fallback),
+        None => quote!(#unexpected;),
+    };
     let plus_match = plus_options.then(|| {
         quote! {
             __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
                 #(#plus_arms)*
-                _ => #flatten_arg if !__globals.bind(&__arg, __input)? { #unexpected; }
+                _ => #flatten_arg if !__globals.bind(&__arg, __input)? { #plus_unknown }
             },
         }
     });
@@ -3084,6 +3107,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new(
             input.ident.span(),
             "`default_subcommand` needs an `#[arg(subcommand)]` field",
+        ));
+    }
+    if default_subcommand_flags && default_subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`default_subcommand_flags` needs `default_subcommand`",
+        ));
+    }
+    if default_subcommand_flags && (unknown_flags_value || unknown.is_some() || sequence_unknown) {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`default_subcommand_flags` hands an unknown flag to the default subcommand: \
+             this struct cannot keep unknown flags too",
         ));
     }
     // `-h`/`--help` and `-V`/`--version`, unless declared or disabled: arms after
@@ -3227,7 +3263,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
         )
     } else {
-        (quote!(), quote!(), quote!(#unexpected;))
+        let unknown_flag = match &flag_fallback {
+            Some(fallback) => quote!(#fallback),
+            None => quote!(#unexpected;),
+        };
+        (quote!(), quote!(), unknown_flag)
     };
     let mut names = Vec::new();
     if long_only {
@@ -3728,6 +3768,8 @@ struct StructOptions {
     restart_token: Option<String>,
     /// The subcommand a word naming none selects.
     default_subcommand: Option<String>,
+    /// A flag this struct does not take selects it too.
+    default_subcommand_flags: bool,
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
     /// The program name for the usage line; `argv[0]` when empty.
@@ -3765,6 +3807,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("default_subcommand") {
                 options.default_subcommand = Some(meta.value()?.parse::<LitStr>()?.value());
+                return Ok(());
+            }
+            if meta.path.is_ident("default_subcommand_flags") {
+                options.default_subcommand_flags = true;
                 return Ok(());
             }
             if meta.path.is_ident("arg_required_else_help") {
@@ -3844,7 +3890,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `name`, `version`, `about`, \
+                     `default_subcommand_flags`, `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `name`, `version`, `about`, \
                      `long_about`, `after_help`, `after_long_help` or a `disable_*` option",
                 ));
             }
