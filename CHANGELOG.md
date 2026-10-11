@@ -22,6 +22,9 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `flatten_help` on a struct with subcommands: each one's usage
   line, description and arguments stand where their list would.
 - **Added**: `warning = "…"` on a field, shown by `--help`.
+- **Added**: a `Subcommand` variant may have named fields. They are parsed as
+  a struct's are, with the variant's doc comment and options as the
+  command's: `Build { #[arg(long)] release: bool }`.
 - **Added**: `effect`, `output(…)` and `exit_code(…)` on a struct, and
   `effect` on a field, for the man and markdown pages, which also show the
   examples, the paragraphs under headings, the warnings and the default

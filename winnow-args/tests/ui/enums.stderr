@@ -51,3 +51,21 @@ error: expected `rename_all` or `spec`
    |
 63 | #[arg(run)]
    |       ^^^
+
+error: `run` calls the type a variant holds, and this variant has fields of its own
+  --> tests/ui/enums.rs:71:5
+   |
+71 |     Build {
+   |     ^^^^^
+
+error: a variant with fields in a generic enum is not supported: hold a struct that derives `Args`
+  --> tests/ui/enums.rs:79:5
+   |
+79 |     Build {
+   |     ^^^^^
+
+error: expected `group("name", ...)`, `restart_token`, `default_subcommand`, `default_subcommand_flags`, `default_subcommand_help`, `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, `heading("title", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output("name", ...)`, `exit_code(n, "meaning")` or a `disable_*` option
+  --> tests/ui/enums.rs:88:11
+   |
+88 |     #[arg(exmaple = "tool build")]
+   |           ^^^^^^^

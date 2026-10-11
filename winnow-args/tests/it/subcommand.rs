@@ -206,3 +206,140 @@ fn subcommands_nest() {
         ErrorKind::MissingSubcommand
     );
 }
+
+/// A variant with fields is a command that takes them.
+mod fields {
+    use winnow_args::{Args, ErrorKind, Subcommand};
+
+    #[derive(Args, Debug, PartialEq)]
+    struct Tool {
+        #[arg(short, long, global)]
+        verbose: bool,
+        #[arg(subcommand)]
+        command: Query,
+    }
+
+    #[derive(Args, Debug, PartialEq, Default)]
+    struct Format {
+        #[arg(long)]
+        json: bool,
+    }
+
+    #[derive(Subcommand, Debug, PartialEq)]
+    enum Query {
+        /// Find the package that owns a file
+        ///
+        /// Reads the installed database.
+        #[arg(alias_hidden = "b", example = "tool belongs /bin/sh")]
+        Belongs {
+            /// The files to look for
+            #[arg(positional, required)]
+            file: Vec<String>,
+            #[arg(flatten)]
+            format: Format,
+        },
+        #[arg(help = "Show the tree", name = "graph")]
+        Depgraph {
+            #[arg(short, long)]
+            deep: bool,
+            #[arg(positional)]
+            atom: String,
+        },
+        /// Nothing to say
+        Unit,
+        /// Held
+        Held(Format),
+        /// Its fields carry what another derive or the compiler reads.
+        Marked {
+            #[cfg(test)]
+            #[arg(long)]
+            #[allow(clippy::struct_field_names)]
+            marked_twice: bool,
+            #[cfg(not(test))]
+            #[arg(long)]
+            never: bool,
+        },
+    }
+
+    #[cfg(feature = "help-text")]
+    fn help(line: &[&str]) -> String {
+        Tool::parse_from(line)
+            .unwrap_err()
+            .render_help("tool")
+            .unwrap()
+    }
+
+    #[test]
+    fn its_fields_are_parsed_as_a_struct_s_are() {
+        assert_eq!(
+            Tool::parse_from(["belongs", "-v", "/bin/sh", "--json", "/bin/ls"]).unwrap(),
+            Tool {
+                verbose: true,
+                command: Query::Belongs {
+                    file: vec!["/bin/sh".into(), "/bin/ls".into()],
+                    format: Format { json: true },
+                },
+            }
+        );
+        assert_eq!(
+            Tool::parse_from(["b", "x"]).unwrap().command,
+            Query::Belongs {
+                file: vec!["x".into()],
+                format: Format::default(),
+            }
+        );
+        assert_eq!(
+            Tool::parse_from(["graph", "-d", "zlib"]).unwrap().command,
+            Query::Depgraph {
+                deep: true,
+                atom: "zlib".into(),
+            }
+        );
+        assert_eq!(Tool::parse_from(["unit"]).unwrap().command, Query::Unit);
+        assert_eq!(
+            Tool::parse_from(["marked", "--marked-twice"])
+                .unwrap()
+                .command,
+            Query::Marked { marked_twice: true }
+        );
+        assert_eq!(
+            Tool::parse_from(["held", "--json"]).unwrap().command,
+            Query::Held(Format { json: true })
+        );
+        let error = Tool::parse_from(["belongs"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingArgument);
+    }
+
+    #[cfg(feature = "help-text")]
+    #[test]
+    fn its_doc_comment_and_options_are_its_command_s() {
+        let list = help(&["-h"]);
+        assert!(
+            list.contains("  belongs  Find the package that owns a file\n"),
+            "{list}"
+        );
+        assert!(list.contains("  graph    Show the tree\n"), "{list}");
+        let page = help(&["belongs", "--help"]);
+        assert!(
+            page.starts_with(
+                "Find the package that owns a file\n\nReads the installed database.\n\n\
+                 Usage: tool belongs [OPTIONS] <FILE>...\n"
+            ),
+            "{page}"
+        );
+        assert!(page.contains("      --json\n"), "{page}");
+        assert!(
+            page.contains("\nGlobal options:\n  -v, --verbose\n"),
+            "{page}"
+        );
+        assert!(
+            page.ends_with("\nExamples:\n  $ tool belongs /bin/sh\n"),
+            "{page}"
+        );
+        let page = help(&["graph", "-h"]);
+        assert!(
+            page.starts_with("Show the tree\n\nUsage: tool graph [OPTIONS] <ATOM>\n"),
+            "{page}"
+        );
+    }
+}

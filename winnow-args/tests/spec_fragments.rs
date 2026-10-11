@@ -140,6 +140,8 @@ fn types_of_one_name_are_told_apart() {
             "SpecBoth",
             "SpecChange",
             "SpecCli",
+            "SpecDupA",
+            "SpecDupB",
             "SpecPages",
             "SpecPlace"
         ]
@@ -204,7 +206,14 @@ enum SpecPagesCommand {
     #[arg(alias_hidden = "m")]
     Merge,
     /// Query.
-    Query,
+    #[arg(example = "spec-pages query zlib", effect = "read")]
+    Query {
+        /// What to ask about.
+        #[arg(positional)]
+        atom: String,
+        #[arg(flatten)]
+        roots: SpecRoots,
+    },
 }
 
 #[test]
@@ -237,6 +246,17 @@ fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
     let codes: Vec<u8> = command.exit_codes.iter().map(|e| e.code).collect();
     assert_eq!(codes, [0, 64]);
     assert!(matches!(&command.exit_codes[1], ExitCode { code: 64, .. }));
+    // A variant with fields is a command of its own.
+    let query = &command.subcommands[1].command;
+    assert_eq!(query.name, "query");
+    assert_eq!(query.effect, Some(Effect::Read));
+    assert_eq!(query.examples[0].code, "spec-pages query zlib");
+    let labels: Vec<_> = query
+        .items
+        .iter()
+        .map(|item| item.value_name.as_deref().or(item.long.as_deref()).unwrap())
+        .collect();
+    assert_eq!(labels, ["ATOM", "ROOT", "wipe"]);
     #[cfg(feature = "help-text")]
     {
         assert_eq!(command.examples[0].help, "Merges nothing.");
@@ -249,6 +269,53 @@ fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
         assert_eq!(command.items[1].warning, "Not for use.");
         assert_eq!(command.exit_codes[1].help, "no such root");
     }
+}
+
+/// Two enums of one name in a file, each with a variant that has fields:
+/// the name each states is their variants' too.
+mod dup_a {
+    #[derive(winnow_args::Subcommand)]
+    #[arg(spec = "SpecDupA")]
+    pub enum SpecDup {
+        Build {
+            #[arg(long)]
+            alpha: bool,
+        },
+    }
+}
+
+mod dup_b {
+    #[derive(winnow_args::Subcommand)]
+    #[arg(spec = "SpecDupB")]
+    pub enum SpecDup {
+        Build {
+            #[arg(long)]
+            beta: bool,
+        },
+        #[arg(spec = "SpecDupTest")]
+        Test {
+            #[arg(long)]
+            gamma: bool,
+        },
+    }
+}
+
+#[test]
+fn variants_with_fields_of_enums_of_one_name_are_told_apart() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let flags = |root: &str| -> Vec<String> {
+        let command = catalog
+            .stitch(root)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let subs = command.subcommands.iter();
+        subs.map(|sub| sub.command.items[0].long.clone().unwrap())
+            .collect()
+    };
+    assert_eq!(flags("SpecDupA"), ["alpha"]);
+    assert_eq!(flags("SpecDupB"), ["beta", "gamma"]);
 }
 
 #[test]

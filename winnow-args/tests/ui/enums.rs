@@ -65,4 +65,31 @@ enum NoCommand {
     Value,
 }
 
+#[derive(Subcommand)]
+#[arg(run)]
+enum RunsFields {
+    Build {
+        #[arg(long)]
+        release: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum GenericFields<T> {
+    Build {
+        #[arg(long)]
+        release: bool,
+    },
+    Other(T),
+}
+
+#[derive(Subcommand)]
+enum FieldsMisspelled {
+    #[arg(exmaple = "tool build")]
+    Build {
+        #[arg(long)]
+        release: bool,
+    },
+}
+
 fn main() {}

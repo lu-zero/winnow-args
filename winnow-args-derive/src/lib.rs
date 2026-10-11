@@ -322,6 +322,27 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 /// - Variant: `alias = "…"`, `alias("…", …)`: other words, shown in help; `alias_hidden` is the same, not shown.
 /// - Variant: `hide`: leave it out of the list in help and completion.
 /// - Variant: `help = "…"`: the one-line description; `long_help = "…"` is accepted and unused in the list.
+///
+/// A variant with named fields is a command that takes them: the fields are declared as a struct's are,
+/// and the variant's doc comment and its other options (`example`, `flatten_help`, `group(…)`, …) are that
+/// command's. `help` and `long_help` are then its `about` and `long_about`. An enum with `run` holds
+/// types, and has no such variant.
+///
+/// ```ignore
+/// #[derive(Subcommand, Debug, PartialEq)]
+/// enum Command {
+///     /// Compile the package
+///     Build {
+///         #[arg(long)]
+///         release: bool,
+///     },
+///     Clean,
+/// }
+///
+/// let cli = Cli::parse_from(["build", "--release"])?;
+/// assert_eq!(cli.command, Command::Build { release: true });
+/// # Ok::<(), winnow_args::Error>(())
+/// ```
 #[proc_macro_derive(Subcommand, attributes(arg, winnow_args))]
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -349,19 +370,40 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_variants = Vec::new();
     let mut spec_checks = Vec::new();
+    // The struct each variant with fields is parsed as.
+    let mut structs = Vec::new();
     for variant in &data.variants {
         let ident = &variant.ident;
         let info = variant_names(variant, &mut names, case)?;
         let pattern = byte_patterns(&info.names);
         let primary = LitStr::new(&info.names[0], Span::call_site());
-        let inner = match &variant.fields {
-            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+        let fields_of = match &variant.fields {
+            Fields::Named(_) => Some(variant_struct(input, variant)?),
+            _ => None,
+        };
+        let inner = match (&variant.fields, &fields_of) {
+            (Fields::Unnamed(fields), _) if fields.unnamed.len() == 1 => {
                 let ty = &fields.unnamed[0].ty;
                 Some(boxed(ty).unwrap_or(ty).clone())
             }
+            (_, Some((name, ..))) => Some(syn::parse_quote!(#name)),
             _ => None,
         };
+        // The name a variant with fields is filed under, when it is not its
+        // struct's own.
+        let mut filed_as = None;
+        if let Some((_, tokens, stated)) = fields_of {
+            structs.push(tokens);
+            filed_as = stated;
+            if runs.is_some() {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "`run` calls the type a variant holds, and this variant has fields of its own",
+                ));
+            }
+        }
         match &inner {
+            Some(_) if matches!(variant.fields, Fields::Named(_)) => {}
             Some(ty) => {
                 let is_boxed = matches!(&variant.fields, Fields::Unnamed(f) if boxed(&f.unnamed[0].ty).is_some());
                 held.push((ident, ty.clone(), is_boxed));
@@ -407,7 +449,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         if spec_on {
             let ty = match &inner {
                 Some(ty) => {
-                    let name = spec_type(spec_name(&variant.attrs)?, ty)?;
+                    let stated = spec_name(&variant.attrs)?.or(filed_as);
+                    let name = spec_type(stated, ty)?;
                     spec_checks.extend(spec_filed(&input.generics, quote!(Args), ty, &name));
                     Some(name)
                 }
@@ -470,10 +513,19 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     },
                 }
             }
+            Fields::Named(fields) => {
+                let ty = inner.as_ref().expect("a struct for the fields");
+                let names = fields.named.iter().map(|field| &field.ident);
+                let names: Vec<_> = names.collect();
+                quote! {
+                    <#ty as ::winnow_args::Args>::parse_argv_with(__input, __globals)
+                        .map(|#ty { #(#names),* }| Self::#ident { #(#names),* })
+                }
+            }
             _ => {
                 return Err(syn::Error::new(
                     variant.span(),
-                    "a subcommand variant is a unit or holds one `Args` type",
+                    "a subcommand variant is a unit, holds one `Args` type or has named fields",
                 ));
             }
         };
@@ -496,6 +548,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let run_impl = runs.map(|runs| run_impl(input, runs, &held));
     Ok(quote! {
+        #(#structs)*
         #(#spec_checks)*
         #run_impl
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
@@ -585,6 +638,79 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     })
+}
+
+/// The struct a variant with named fields is parsed as: its name, and its
+/// definition with the `Args` it derives. The variant's doc comment and the
+/// options that are not about its name are the struct's.
+fn variant_struct(
+    input: &DeriveInput,
+    variant: &syn::Variant,
+) -> syn::Result<(Ident, TokenStream2, Option<String>)> {
+    let Fields::Named(fields) = &variant.fields else {
+        unreachable!("called for a variant with named fields");
+    };
+    if !input.generics.params.is_empty() {
+        return Err(syn::Error::new(
+            variant.ident.span(),
+            "a variant with fields in a generic enum is not supported: hold a struct that derives `Args`",
+        ));
+    }
+    let name = quote::format_ident!("__{}_{}", input.ident, variant.ident);
+    let mut options: Vec<syn::Meta> = Vec::new();
+    for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
+        let metas = attr.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+        )?;
+        for meta in metas {
+            let key = meta.path().get_ident().map(Ident::to_string);
+            match (key.as_deref(), &meta) {
+                // Its name among the subcommands, which the enum reads.
+                (Some("name" | "alias" | "alias_hidden" | "hide"), _) => {}
+                (Some("help"), syn::Meta::NameValue(pair)) => {
+                    let text = &pair.value;
+                    options.push(syn::parse_quote!(about = #text));
+                }
+                (Some("long_help"), syn::Meta::NameValue(pair)) => {
+                    let text = &pair.value;
+                    options.push(syn::parse_quote!(long_about = #text));
+                }
+                _ => options.push(meta),
+            }
+        }
+    }
+    // An enum filed under another name has its variants filed under it too,
+    // so two enums of one name in a file are told apart as they are. A
+    // variant that states its own name keeps it: `spec` is among the options.
+    let enum_name = filed(input)?;
+    let stated = (spec_name(&variant.attrs)?.is_none() && input.ident != enum_name.as_str())
+        .then(|| format!("__{enum_name}_{}", variant.ident));
+    if let Some(stated) = &stated {
+        options.push(syn::parse_quote!(spec = #stated));
+    }
+    let docs = variant.attrs.iter().filter(|a| a.path().is_ident("doc"));
+    let docs: Vec<_> = docs.collect();
+    let named = &fields.named;
+    let derived: DeriveInput = syn::parse_quote! {
+        #(#docs)*
+        #[arg(#(#options),*)]
+        struct #name { #named }
+    };
+    let args = expand(&derived)?;
+    // The definition has no derive, so no attribute of ours or of another
+    // derive of the enum: only what the compiler itself reads.
+    let plain = named.iter().map(|field| {
+        let attrs = field.attrs.iter().filter(|a| a.path().is_ident("cfg"));
+        let (ident, ty) = (&field.ident, &field.ty);
+        quote!(#(#attrs)* #ident: #ty)
+    });
+    let tokens = quote! {
+        #[doc(hidden)]
+        #[allow(non_camel_case_types)]
+        struct #name { #(#plain),* }
+        #args
+    };
+    Ok((name, tokens, stated))
 }
 
 /// `Run` or `RunAsync` for a `Subcommand` enum: the command it holds is run,
@@ -1710,6 +1836,16 @@ fn variant_names<'a>(
                 if !holds_type {
                     return Err(meta
                         .error("`spec` names the type a variant holds, and this one holds none"));
+                }
+            } else if matches!(variant.fields, Fields::Named(_)) {
+                // An option of the command its fields make, checked as a
+                // struct's are.
+                if meta.input.peek(syn::Token![=]) {
+                    meta.value()?.parse::<syn::Expr>()?;
+                } else if meta.input.peek(syn::token::Paren) {
+                    let content;
+                    syn::parenthesized!(content in meta.input);
+                    content.parse::<TokenStream2>()?;
                 }
             } else {
                 return Err(meta.error(
@@ -3657,6 +3793,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_prefix(__c)));
         quote! {
             #[doc(hidden)]
+            #[allow(non_camel_case_types)]
             #[allow(clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)]
             #vis struct #slots_name {
                 #(#decls)*
