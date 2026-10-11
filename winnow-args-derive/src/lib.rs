@@ -14,14 +14,50 @@
 //!
 //! The names are patterns of a `match`, which rustc compiles: no list of
 //! parsers is walked, whatever the number of flags.
+//!
+//! # Documentation
+//!
+//! When the environment variable `WINNOW_ARGS_SPEC` holds the absolute path of
+//! a directory, each derive also writes `CRATE/FILE/Type.toml` under it,
+//! `FILE` being the type's source file: what help knows of the type, with a
+//! flatten or a subcommand as the other type's path, as it is written. A
+//! binary or an example writes under `CRATE-bin`, apart from the library of
+//! its package. `winnow-args-spec` reads them back, for `winnow-args-man` and
+//! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
+//! crate again when the variable changes.
+//!
+//! Two types of one name are told apart by their modules, which a fragment
+//! records: those of the source file, then the `mod name { }` blocks the file
+//! has around the type (the file is read for them). `add::Opts` is the `Opts`
+//! of a module `add`, and a bare `Opts` what the file's `use` lines bring in
+//! under that name, or the one the file declares. Where that
+//! does not say which, `winnow-args-spec` asks for a name:
+//! `#[arg(spec = "AddOpts")]` on the type files it under that name, and the
+//! same on a field or a variant that holds the type finds it there. Two types
+//! of one name in one file need it, and the build with the variable set
+//! says so. It also fails where the path a field writes does not lead to its
+//! type (an alias, a module under another name, a `spec` not repeated), so a
+//! page never describes another type.
+//!
+//! Set the variable for the documentation build alone, not in a shell: a
+//! test or a doctest would write its types beside the program's.
+//! rust-analyzer's macro server writes nothing.
+//!
+//! A value's choices are found under the name of its type. Where that name is
+//! an alias, or the type implements `FromArg` by hand, the build with the
+//! variable set fails at the field until `spec = "Name"` or `choices(...)`
+//! states them there, and fails again if the choices stated are not what the
+//! type accepts.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::{
     Data, DeriveInput, Fields, GenericArgument, Ident, LitByteStr, LitChar, LitStr, PathArguments,
-    Type, parse_macro_input, spanned::Spanned as _,
+    Type, ext::IdentExt as _, parse_macro_input, spanned::Spanned as _,
 };
+
+mod spec;
 
 /// Derive `Args` for a struct with named fields: the generated loop parses the whole command line.
 ///
@@ -92,6 +128,8 @@ use syn::{
 /// - `default_subcommand = "…"`: the subcommand for a line whose first word names none; needs a `subcommand` field.
 /// - `group("name", required, multiple)`: declare a group; fields join it with `group = "name"`.
 ///   `required` means at least one member. Without `multiple`, a second member conflicts.
+/// - `spec = "…"`: the name the documentation files the type under, in place of its own. A field or a variant
+///   that holds the type states it too. See [Documentation](crate#documentation).
 ///
 /// # Field roles
 ///
@@ -152,6 +190,8 @@ use syn::{
 /// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
 /// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
 /// - `keywords`: on a flag of a type deriving `Args`, each value is `--value` of that type (`-z now`).
+/// - `spec = "…"`: the name the documentation finds the field's type under, when it is not the type's own:
+///   the type states a `spec`, or is named here through an alias. Also on a `flatten` or `sequence` field.
 ///
 /// # Positionals
 ///
@@ -178,9 +218,18 @@ use syn::{
 #[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    finish(expand(&input))
+}
+
+/// The expansion, or its error, and what tells Cargo to compile the crate
+/// again when `WINNOW_ARGS_SPEC` changes.
+fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
+    let expanded = expanded.unwrap_or_else(syn::Error::into_compile_error);
+    quote! {
+        #expanded
+        const _: ::core::option::Option<&str> = ::core::option_env!("WINNOW_ARGS_SPEC");
+    }
+    .into()
 }
 
 /// Derive `Subcommand` (and `Args`, so the enum can be the whole command line) for an enum of subcommands.
@@ -230,16 +279,16 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 ///
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
+/// - Enum: `spec = "…"`: the name the documentation files the enum under, in place of its own.
 /// - Variant: `name = "…"`: the word that selects it.
+/// - Variant: `spec = "…"`: the name the documentation finds the variant's type under, when it is not the type's own.
 /// - Variant: `alias = "…"`, `alias("…", …)`: other words, shown in help; `alias_hidden` is the same, not shown.
 /// - Variant: `hide`: leave it out of the list in help and completion.
 /// - Variant: `help = "…"`: the one-line description; `long_help = "…"` is accepted and unused in the list.
 #[proc_macro_derive(Subcommand, attributes(arg, winnow_args))]
 pub fn derive_subcommand(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand_subcommand(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    finish(expand_subcommand(&input))
 }
 
 /// One `match` on the subcommand's name; the variant's `Args` parses the rest.
@@ -255,6 +304,11 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
     let mut subs = Vec::new();
+    let spec_on = spec::enabled();
+    let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
+    let mut spec_variants = Vec::new();
+    let mut spec_checks = Vec::new();
     for variant in &data.variants {
         let ident = &variant.ident;
         let info = variant_names(variant, &mut names, case)?;
@@ -267,16 +321,19 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
             _ => None,
         };
-        let command = match &inner {
-            Some(ty) => quote!(<#ty as ::winnow_args::Args>::HELP),
-            None => {
-                // The whole doc comment, when the description is its first paragraph.
-                let (doc, long_doc) = docs(&variant.attrs);
-                let long_about = text(if doc == info.about {
-                    &long_doc
-                } else {
-                    &info.about
-                });
+        // The whole doc comment, when the description is its first paragraph.
+        let unit_long_about = inner.is_none().then(|| {
+            let (doc, long_doc) = docs(&variant.attrs);
+            if doc == info.about {
+                long_doc
+            } else {
+                info.about.clone()
+            }
+        });
+        let command = match (&inner, &unit_long_about) {
+            (Some(ty), _) => quote!(<#ty as ::winnow_args::Args>::HELP),
+            (None, long_about) => {
+                let long_about = text(long_about.as_deref().unwrap_or_default());
                 let about = text(&info.about);
                 quote!(&::winnow_args::help::Command {
                     name: "",
@@ -300,6 +357,24 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let shown = &info.names[1..=info.shown];
         let all = &info.names;
         let hide = info.hide;
+        if spec_on {
+            let ty = match &inner {
+                Some(ty) => {
+                    let name = spec_type(spec_name(&variant.attrs)?, ty)?;
+                    spec_checks.extend(spec_filed(&input.generics, quote!(Args), ty, &name));
+                    Some(name)
+                }
+                None => None,
+            };
+            spec_variants.push(spec::VariantDoc {
+                name: info.names[0].clone(),
+                aliases: shown.to_vec(),
+                about: info.about.clone(),
+                long_about: unit_long_about.unwrap_or_default(),
+                hide: info.hide,
+                ty,
+            });
+        }
         subs.push(quote! {
             ::winnow_args::help::Sub {
                 name: #primary,
@@ -357,13 +432,25 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         arms.push(quote!(#pattern => (#parse).map_err(|e| e.within(#primary)),));
         patterns.push(pattern);
     }
-    let (about, long_about) = docs(&input.attrs);
-    let (about, long_about) = (text(&about), text(&long_about));
+    let (about_text, long_about_text) = docs(&input.attrs);
+    let (about, long_about) = (text(&about_text), text(&long_about_text));
+    if spec_on {
+        spec::write_subcommands(
+            input.ident.span(),
+            &filed,
+            &about_text,
+            &long_about_text,
+            &spec_variants,
+        )?;
+    }
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     Ok(quote! {
+        #(#spec_checks)*
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
+            const SPEC: &'static str = #identity;
+
             #[inline]
             fn has(__name: &[u8]) -> bool {
                 matches!(__name, #(#patterns)|*)
@@ -386,6 +473,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
 
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
+            const SPEC: &'static str = #identity;
+
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: "",
                 about: #about,
@@ -513,9 +602,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 #[proc_macro_derive(Occurrence, attributes(arg, winnow_args))]
 pub fn derive_occurrence(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand_occurrence(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    finish(expand_occurrence(&input))
 }
 
 /// Derive `FromArg` for an enum of unit variants, matched on the value's bytes; help lists them as possible values.
@@ -547,6 +634,7 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 ///
 /// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
 ///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
+/// - Enum: `spec = "…"`: the name the documentation files the choices under, in place of the enum's own.
 /// - Variant: `name = "…"`: the value that selects it.
 /// - Variant: `alias = "…"`, `alias("…", …)`: other accepted values; `alias_hidden` is the same, not listed.
 /// - Variant: `hide`: accepted, but named neither in help nor in errors.
@@ -554,9 +642,7 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    expand_value_enum(&input)
-        .unwrap_or_else(syn::Error::into_compile_error)
-        .into()
+    finish(expand_value_enum(&input))
 }
 
 /// `from_arg`: a `match` on the long name and one on the letter, each arm
@@ -575,6 +661,11 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut seen = std::collections::HashMap::new();
     // What help lists: one row a variant, in declaration order.
     let mut help_items = Vec::new();
+    let spec_on = spec::enabled();
+    let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
+    let mut spec_rows = Vec::new();
+    let mut spec_checks = Vec::new();
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
     // variant's default.
     let (mut enum_hyphen_values, mut enum_keep_equals) = (false, false);
@@ -586,8 +677,10 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             } else if meta.path.is_ident("keep_equals") {
                 enum_keep_equals = true;
                 Ok(())
+            } else if skip_spec(&meta)? {
+                Ok(())
             } else {
-                Err(meta.error("expected `allow_hyphen_values` or `keep_equals`"))
+                Err(meta.error("expected `allow_hyphen_values`, `keep_equals` or `spec`"))
             }
         })?;
     }
@@ -599,6 +692,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let (mut require_equals, mut default_missing) = (false, None);
         let mut keep_equals = enum_keep_equals;
         let (mut skip, mut is_unknown, mut is_bundle) = (false, false, false);
+        let stated = spec_name(&variant.attrs)?;
         for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("allow_hyphen_values") {
@@ -638,6 +732,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     prefix = true;
                 } else if meta.path.is_ident("value_name") {
                     value_name = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if skip_spec(&meta)? {
                 } else {
                     return Err(meta.error(
                         "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
@@ -720,6 +815,17 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     false,
                     false,
                 ));
+                if spec_on {
+                    spec_checks.extend(spec_check(&input.generics, Some(ty), stated.as_ref()));
+                    spec_rows.push(occurrence_spec(
+                        variant,
+                        spec::ItemDoc {
+                            value_name: Some(name.clone()),
+                            choices_ty: choices_name(stated.as_ref(), ty),
+                            ..spec::ItemDoc::default()
+                        },
+                    ));
+                }
             }
             let value = wrap(
                 quote!(__word.convert::<#ty>(#name)?),
@@ -773,6 +879,26 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             require_equals,
             default_missing.is_some(),
         ));
+        if spec_on {
+            let value_ty = takes.map(|ty| spanned.or(optional).unwrap_or(ty));
+            spec_checks.extend(spec_check(&input.generics, value_ty, stated.as_ref()));
+            spec_rows.push(occurrence_spec(
+                variant,
+                spec::ItemDoc {
+                    short,
+                    long: longs.first().cloned(),
+                    aliases: longs.iter().skip(1).cloned().collect(),
+                    value_name: value_ty
+                        .map(|_| value_name.clone().unwrap_or_else(|| "VALUE".to_owned())),
+                    choices_ty: value_ty.and_then(|ty| choices_name(stated.as_ref(), ty)),
+                    require_equals,
+                    optional_value: default_missing.is_some(),
+                    two_dashes,
+                    prefix,
+                    ..spec::ItemDoc::default()
+                },
+            ));
+        }
         let body = match takes {
             None => quote! {
                 __arg.check_switch()?;
@@ -889,8 +1015,14 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let is_long = matches_name(&single_dash);
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    if spec_on {
+        spec::write_occurrence(input.ident.span(), &filed, &spec_rows)?;
+    }
     Ok(quote! {
+        #(#spec_checks)*
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
+            const SPEC: &'static str = #identity;
+
             const PREFIXES: &'static [u8] = &[#(#prefixes),*];
 
             const POSITIONAL: bool = #has_positional;
@@ -985,6 +1117,276 @@ fn occurrence_item(
     })
 }
 
+/// `spec = "Name"` among the options of a type, a field or a variant: the
+/// name the documentation files the type under, or finds it under.
+fn spec_name(attrs: &[syn::Attribute]) -> syn::Result<Option<String>> {
+    let mut name = None;
+    for attr in attrs.iter().filter(|a| is_ours(a)) {
+        // The parser of each derive has already rejected what it does not know.
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("spec") {
+                name = Some(meta.value()?.parse::<LitStr>()?);
+            } else if meta.input.peek(syn::Token![=]) {
+                meta.value()?.parse::<syn::Expr>()?;
+            } else if meta.input.peek(syn::token::Paren) {
+                let _content;
+                syn::parenthesized!(_content in meta.input);
+                _content.parse::<TokenStream2>()?;
+            }
+            Ok(())
+        });
+    }
+    let Some(name) = name else {
+        return Ok(None);
+    };
+    let text = name.value();
+    if text.is_empty() || text.contains(['/', '\\', ':', '.']) {
+        return Err(syn::Error::new(
+            name.span(),
+            "`spec` is a name as a type's is: a file is named after it",
+        ));
+    }
+    Ok(Some(text))
+}
+
+/// Reads past `spec = "Name"`, which [`spec_name`] reads.
+fn skip_spec(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<bool> {
+    if !meta.path.is_ident("spec") {
+        return Ok(false);
+    }
+    meta.value()?.parse::<LitStr>()?;
+    Ok(true)
+}
+
+/// The name a derived type is filed under: its `spec`, or its own.
+fn filed(input: &DeriveInput) -> syn::Result<String> {
+    Ok(spec_name(&input.attrs)?.unwrap_or_else(|| input.ident.unraw().to_string()))
+}
+
+/// A type as it is written, `add::Opts`: its modules tell two types of one
+/// name apart. `crate`, `self` and `super` are no module's name. `self` and
+/// `super` are written as the modules they are, from `crate`; where those
+/// are not known, as `crate` alone, which says the type is this crate's.
+///
+/// A bare name is the path its file's `use` brings it in by, when one does.
+/// One the file neither declares nor brings in by name is `?::Opts`: it may
+/// be any type of that name, or none the documentation knows.
+fn type_path(ty: &Type) -> Option<String> {
+    let Type::Path(path) = boxed(ty).unwrap_or(ty) else {
+        return None;
+    };
+    if path.qself.is_some() {
+        return None;
+    }
+    let mut names: Vec<String> = path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.unraw().to_string())
+        .collect();
+    if let [name] = &names[..] {
+        match spec::origin(ty.span(), name) {
+            spec::Origin::Here => {}
+            spec::Origin::Imported(from) => names = from,
+            spec::Origin::Unknown => names.insert(0, "?".to_owned()),
+        }
+    }
+    let rooted = names
+        .iter()
+        .take_while(|name| matches!(name.as_str(), "crate" | "self" | "super"))
+        .count();
+    if rooted > 0 {
+        let supers = names[..rooted]
+            .iter()
+            .filter(|name| *name == "super")
+            .count();
+        let relative = names[0] != "crate";
+        let modules = relative.then(|| spec::above(supers)).flatten();
+        let root = ["crate".to_owned()].into_iter();
+        names.splice(..rooted, root.chain(modules.unwrap_or_default()));
+    }
+    (names.len() > usize::from(rooted > 0)).then(|| names.join("::"))
+}
+
+/// The name `ty` is looked for under: the one stated where it is referred
+/// to, or its own.
+fn spec_type(stated: Option<String>, ty: &Type) -> syn::Result<String> {
+    stated.or_else(|| type_path(ty)).ok_or_else(|| {
+        syn::Error::new(
+            ty.span(),
+            "this type needs a name when `WINNOW_ARGS_SPEC` is set: state it, as `spec = \"Name\"`",
+        )
+    })
+}
+
+/// A documentation build fails where a type is looked for under a name it is
+/// not filed under, so that a page never describes another type of that name.
+/// A generic type is not checked: a constant cannot name its parameters.
+fn spec_filed(
+    generics: &syn::Generics,
+    kind: TokenStream2,
+    ty: &Type,
+    name: &str,
+) -> Option<TokenStream2> {
+    if !generics.params.is_empty() {
+        return None;
+    }
+    let ty = boxed(ty).unwrap_or(ty);
+    let name = name.strip_prefix("?::").unwrap_or(name);
+    Some(quote::quote_spanned! {ty.span()=>
+        const _: () = ::core::assert!(
+            ::winnow_args::__private::filed_as(<#ty as ::winnow_args::#kind>::SPEC, #name),
+            "the documentation does not find this type by this path: it is named through an alias or a re-export, its module goes by another name here, or it states a `spec`. State the name it is filed under, as `spec = \"Name\"`",
+        );
+    })
+}
+
+/// The type of a field's value.
+fn value_type(field: &Field) -> Option<&Type> {
+    if !field.takes_value() || field.keywords || matches!(field.role, Role::Subcommand) {
+        return None;
+    }
+    match &field.kind {
+        Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty) => Some(ty),
+        Kind::Switch | Kind::Count(_) => None,
+    }
+}
+
+/// The type of a field's value, where its choices are looked for: none when
+/// the field states them.
+fn choices_type(field: &Field) -> Option<&Type> {
+    value_type(field).filter(|_| field.choices.is_none())
+}
+
+/// A documentation build fails where the choices a field states are not
+/// those of its type, so that a list written twice cannot drift.
+fn spec_check_stated(generics: &syn::Generics, field: &Field) -> Option<TokenStream2> {
+    let stated = field.choices.as_ref()?;
+    let ty = value_type(field).filter(|_| generics.params.is_empty())?;
+    Some(quote::quote_spanned! {ty.span()=>
+        const _: () = ::core::assert!(
+            ::winnow_args::__private::stated_choices::<#ty>(&[#(#stated),*]),
+            "the choices stated on this field are not those of its type, in number, spelling or order",
+        );
+    })
+}
+
+/// The name the value type's choices are looked for under: the field's
+/// `spec`, or the type's own. Only a `ValueEnum` has a fragment under it.
+fn choices_link(field: &Field) -> Option<String> {
+    choices_name(field.spec.as_ref(), choices_type(field)?)
+}
+
+fn choices_name(stated: Option<&String>, ty: &Type) -> Option<String> {
+    stated.cloned().or_else(|| type_path(ty))
+}
+
+/// A documentation build fails where a value has choices its fragment cannot
+/// name, so that a page never leaves them out. A generic type is not checked:
+/// a constant cannot name its parameters.
+fn spec_check(
+    generics: &syn::Generics,
+    ty: Option<&Type>,
+    stated: Option<&String>,
+) -> Option<TokenStream2> {
+    let ty = ty.filter(|_| generics.params.is_empty())?;
+    let name = choices_name(stated, ty)?;
+    let name = name.strip_prefix("?::").unwrap_or(&name);
+    Some(quote::quote_spanned! {ty.span()=>
+        const _: () = ::core::assert!(
+            ::winnow_args::__private::documented_choices::<#ty>(#name),
+            "the documentation cannot find the choices of this value: its type is named through an alias or a re-export, states a `spec`, or implements `FromArg` by hand. State the name they are filed under, as `spec = \"Name\"`, or the choices, as `choices(\"a\", \"b\")`",
+        );
+    })
+}
+
+/// A bare `version` becomes `env!("CARGO_PKG_VERSION")` in help. Cargo has
+/// already set that variable for the crate being compiled.
+fn package_version(version: &Option<TokenStream2>, enabled: bool) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    let tokens = version.as_ref()?;
+    if let Ok(lit) = syn::parse2::<LitStr>(tokens.clone()) {
+        let text = lit.value();
+        return (!text.is_empty()).then_some(text);
+    }
+    std::env::var("CARGO_PKG_VERSION")
+        .ok()
+        .filter(|text| !text.is_empty())
+}
+
+fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
+    let longs = field.longs();
+    let keywords = if field.keywords {
+        match &field.kind {
+            Kind::Required(ty) => Some(spec_type(field.spec.clone(), ty)?),
+            _ => {
+                return Err(syn::Error::new(
+                    field.ident.span(),
+                    "`keywords` needs a named type",
+                ));
+            }
+        }
+    } else {
+        None
+    };
+    let required = (matches!(field.kind, Kind::Required(_))
+        && field.default.is_none()
+        && field.default_fn.is_none()
+        && field.env.is_none()
+        && !field.keywords)
+        || field.required;
+    Ok(spec::ItemDoc {
+        short: field.short(),
+        more_shorts: field.short_aliases.clone(),
+        plus: field.plus,
+        long: longs.first().map(|name| (*name).to_owned()),
+        aliases: longs
+            .iter()
+            .skip(1)
+            .map(|name| (*name).to_owned())
+            .collect(),
+        negate: field.negate.clone(),
+        value_name: if field.is_positional() {
+            Some(field.display())
+        } else {
+            field.value_name.clone()
+        },
+        help: field.help.clone(),
+        long_help: field.long_help.clone(),
+        heading: field.heading.clone(),
+        hide: field.hide,
+        positional: field.is_positional(),
+        required,
+        multiple: matches!(field.kind, Kind::Many(_) | Kind::Count(_)),
+        trailing: field.double_dash() == DoubleDash::Required,
+        default: field.default.clone().or_else(|| field.default_note.clone()),
+        env: field.env.clone(),
+        choices: field.choices.clone().unwrap_or_default(),
+        choices_ty: choices_link(field),
+        require_equals: field.require_equals,
+        global: field.is_global(),
+        optional_value: field.default_missing.is_some()
+            || field.require_equals && matches!(field.kind, Kind::Optional(_)),
+        values: field.values,
+        more_values: field.values_max.is_some(),
+        two_dashes: field.two_dashes,
+        prefix: field.prefix,
+        stop_flags: field.stop_flags,
+        keywords,
+    })
+}
+
+fn occurrence_spec(variant: &syn::Variant, mut item: spec::ItemDoc) -> spec::ItemDoc {
+    let (help, long_help) = docs(&variant.attrs);
+    item.help = help;
+    item.long_help = long_help;
+    item.positional = item.short.is_none() && item.long.is_none();
+    item.multiple = item.positional;
+    item
+}
+
 /// `FromArg` as one `match` on the value's bytes.
 fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let Data::Enum(data) = &input.data else {
@@ -997,6 +1399,10 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut visible = Vec::new();
+    let spec_on = spec::enabled();
+    let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
+    let mut spec_choices = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -1011,6 +1417,9 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         } = variant_names(variant, &mut names, case)?;
         let name = LitStr::new(&spellings[0], Span::call_site());
         if !hide {
+            if spec_on {
+                spec_choices.push(spellings[0].clone());
+            }
             visible.push(name);
         }
         let pattern = byte_patterns(&spellings);
@@ -1019,9 +1428,13 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    if spec_on {
+        spec::write_choices(input.ident.span(), &filed, &spec_choices)?;
+    }
     Ok(quote! {
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
             const CHOICES: &'static [&'static str] = &[#(#visible),*];
+            const SPEC: &'static str = #identity;
 
             fn from_arg(
                 __value: &::winnow_args::__private::BStr,
@@ -1090,8 +1503,11 @@ fn rename_all(input: &DeriveInput) -> syn::Result<Case> {
     let mut case = Case::Kebab;
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
+            if skip_spec(&meta)? {
+                return Ok(());
+            }
             if !meta.path.is_ident("rename_all") {
-                return Err(meta.error("expected `rename_all`"));
+                return Err(meta.error("expected `rename_all` or `spec`"));
             }
             let lit = meta.value()?.parse::<LitStr>()?;
             case = match lit.value().as_str() {
@@ -1119,6 +1535,7 @@ fn variant_names<'a>(
     seen: &mut Vec<(String, &'a Ident)>,
     case: Case,
 ) -> syn::Result<Variant> {
+    let holds_type = !matches!(variant.fields, Fields::Unit);
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
     for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
@@ -1136,6 +1553,11 @@ fn variant_names<'a>(
             } else if meta.path.is_ident("long_help") {
                 // The listing shows one line; the subcommand's own help has the rest.
                 meta.value()?.parse::<LitStr>()?;
+            } else if skip_spec(&meta)? {
+                if !holds_type {
+                    return Err(meta
+                        .error("`spec` names the type a variant holds, and this one holds none"));
+                }
             } else {
                 return Err(meta.error(
                     "expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`",
@@ -1330,7 +1752,10 @@ fn role_alone(f: &syn::Field) -> syn::Result<()> {
         attr.parse_nested_meta(|meta| {
             let alone =
                 meta.path.is_ident(role) || (role == "sequence" && meta.path.is_ident("unknown"));
-            if alone {
+            // The name the documentation finds a flattened struct or a
+            // sequence enum under.
+            let named = matches!(role, "flatten" | "sequence") && skip_spec(&meta)?;
+            if alone || named {
                 Ok(())
             } else {
                 Err(meta.error(format!("a `{role}` field takes no other `arg` options")))
@@ -1394,6 +1819,9 @@ enum DoubleDash {
 
 struct Field {
     ident: Ident,
+    /// The name the documentation finds the field's type under, when it is
+    /// not the type's own.
+    spec: Option<String>,
     kind: Kind,
     role: Role,
     /// Splits each value of a `Vec` field.
@@ -1973,8 +2401,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (doc_about, doc_long_about) = docs(&input.attrs);
     let about = about.unwrap_or(doc_about);
     let long_about = long_about.unwrap_or(doc_long_about);
-    let (about, long_about) = (text(&about), text(&long_about));
-    let (after_help, after_long_help) = (text(&after_help), text(&after_long_help));
+    let (about_text, long_about_text) = (about, long_about);
+    let (after_text, after_long_text) = (after_help, after_long_help);
+    let (about, long_about) = (text(&about_text), text(&long_about_text));
+    let (after_help, after_long_help) = (text(&after_text), text(&after_long_text));
     let rules = Rules::new(&fields, &groups)?;
 
     let name = &input.ident;
@@ -2566,13 +2996,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     } else {
         quote!(__wa::arg)
     };
-    if !plus_options {
-        if let Some(f) = fields.iter().find(|f| f.plus.is_some()) {
-            return Err(syn::Error::new(
-                f.ident.span(),
-                "`plus` needs `#[arg(plus_options)]` on the struct",
-            ));
-        }
+    if !plus_options && let Some(f) = fields.iter().find(|f| f.plus.is_some()) {
+        return Err(syn::Error::new(
+            f.ident.span(),
+            "`plus` needs `#[arg(plus_options)]` on the struct",
+        ));
     }
     let plus_match = plus_options.then(|| {
         quote! {
@@ -3092,9 +3520,80 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             &__ALL
         })
     };
+    let mut spec_checks = Vec::new();
+    let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
+    if spec::enabled() {
+        spec_checks.extend(fields.iter().filter_map(|field| {
+            spec_check(&input.generics, choices_type(field), field.spec.as_ref())
+                .or_else(|| spec_check_stated(&input.generics, field))
+        }));
+        // The name stated on a `flatten` or `sequence` field, which `field`
+        // does not read.
+        let stated = |ident: &Ident| {
+            let field = named.named.iter().find(|f| f.ident.as_ref() == Some(ident));
+            field.map_or(Ok(None), |f| spec_name(&f.attrs))
+        };
+        let mut link = |kind: TokenStream2, stated: Option<String>, ty: &Type| {
+            let name = spec_type(stated, ty)?;
+            spec_checks.extend(spec_filed(&input.generics, kind, ty, &name));
+            syn::Result::Ok(name)
+        };
+        for field in fields.iter().filter(|field| field.keywords) {
+            if let Kind::Required(ty) = &field.kind {
+                link(quote!(Args), field.spec.clone(), ty)?;
+            }
+        }
+        let items = fields
+            .iter()
+            .filter(|field| !matches!(field.role, Role::Subcommand))
+            .map(spec_item)
+            .collect::<syn::Result<Vec<_>>>()?;
+        let flatten = flattens
+            .iter()
+            .map(|(ident, ty)| link(quote!(Args), stated(ident)?, ty))
+            .collect::<syn::Result<Vec<_>>>()?;
+        let sequence = sequence
+            .as_ref()
+            .map(|(ident, ty)| link(quote!(Occurrence), stated(ident)?, ty))
+            .transpose()?;
+        let subcommand_ty = subcommand
+            .map(|field| {
+                link(
+                    quote!(Subcommand),
+                    field.spec.clone(),
+                    subcommand_type(field),
+                )
+            })
+            .transpose()?;
+        spec::write_args(
+            input.ident.span(),
+            &spec::ArgsDoc {
+                ident: filed.clone(),
+                name: program_name.clone(),
+                about: about_text,
+                long_about: long_about_text,
+                after_help: after_text,
+                after_long_help: after_long_text,
+                package_version: package_version(&version, with_version),
+                items,
+                flatten,
+                sequence,
+                subcommand: subcommand_ty,
+                subcommand_required,
+                help_flag,
+                help_short: help_short_flag,
+                long_only,
+                unknown_flags_value,
+            },
+        )?;
+    }
 
     Ok(quote! {
+        #(#spec_checks)*
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
+            const SPEC: &'static str = #identity;
+
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: #program_name,
                 about: #about,
@@ -3212,6 +3711,9 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
     let mut options = StructOptions::default();
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
+            if skip_spec(&meta)? {
+                return Ok(());
+            }
             if meta.path.is_ident("restart_token") {
                 options.restart_token = Some(meta.value()?.parse::<LitStr>()?.value());
                 return Ok(());
@@ -3805,6 +4307,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 });
             } else if meta.path.is_ident("keywords") {
                 keywords = true;
+            } else if skip_spec(&meta)? {
             } else if meta.path.is_ident("plus") {
                 plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {
@@ -4044,10 +4547,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return error(format!("`{l}` is not a usable long name"));
             }
         }
-        if let Some(c) = short {
-            if c == '-' || c == '=' {
-                return error(format!("`{c}` is not a usable short name"));
-            }
+        if let Some(c) = short
+            && (c == '-' || c == '=')
+        {
+            return error(format!("`{c}` is not a usable short name"));
         }
         Role::Flag {
             short,
@@ -4076,10 +4579,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             _ => return error("`negate` without a name needs a `long` to prefix".into()),
         },
     };
-    if let Some(no) = &negate {
-        if no.is_empty() || no.starts_with('-') || no.contains('=') {
-            return error(format!("`{no}` is not a usable long name"));
-        }
+    if let Some(no) = &negate
+        && (no.is_empty() || no.starts_with('-') || no.contains('='))
+    {
+        return error(format!("`{no}` is not a usable long name"));
     }
     match (&default, &negate) {
         (Some(d), Some(_)) if d != "true" && d != "false" => {
@@ -4090,8 +4593,13 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         _ => {}
     }
+    let spec = spec_name(&f.attrs)?;
+    if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
+        return error("`spec` names the type of a field's value, and this field has none".into());
+    }
     Ok(Field {
         ident,
+        spec,
         kind,
         role,
         delimiter,
@@ -4240,14 +4748,14 @@ fn kind(ty: &Type) -> Kind {
     if is_bool(ty) {
         return Kind::Switch;
     }
-    if let Some(last) = last_segment(ty) {
-        if let Some(inner) = inner(last) {
-            if last.ident == "Option" {
-                return Kind::Optional(inner.clone());
-            }
-            if last.ident == "Vec" {
-                return Kind::Many(inner.clone());
-            }
+    if let Some(last) = last_segment(ty)
+        && let Some(inner) = inner(last)
+    {
+        if last.ident == "Option" {
+            return Kind::Optional(inner.clone());
+        }
+        if last.ident == "Vec" {
+            return Kind::Many(inner.clone());
         }
     }
     Kind::Required(ty.clone())

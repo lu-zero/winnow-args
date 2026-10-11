@@ -3,6 +3,27 @@
 What changed in each release of `winnow-args` and `winnow-args-derive`, which
 are released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: man and markdown pages for a derived command. With
+  `WINNOW_ARGS_SPEC` set to an absolute directory, each derive also writes a
+  TOML description of its type; `winnow-args-spec` stitches them into a
+  command, `winnow-args-man` and `winnow-args-markdown` render one page per
+  command. The program is only checked, so pages can describe a target that
+  is installed and cannot be run. Unset, nothing is written and the generated
+  parser is unchanged.
+- **Added**: `spec = "Name"` on a derived type, and on a field or a variant
+  that holds one: the name the documentation files the type under, for two
+  types of one name that their source files do not tell apart.
+- **Added**: `winnow_args::complete::Shell` as a field's type has its choices
+  in the pages.
+- **Added**: a hidden `SPEC` constant on `Args`, `Subcommand`, `Occurrence`
+  and `FromArg`, which the derives set: a documentation build uses it to
+  refuse a field that names a type other than as it is filed, or a value
+  whose choices it cannot find.
+- **Changed**: the MSRV is 1.88, where a derive can tell which source file a
+  type is in.
+
 ## 0.1.2 (2026-10-07)
 
 - **Added**: an `Option` field with `require_equals` holds `None` for a bare

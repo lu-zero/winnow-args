@@ -106,6 +106,9 @@ impl Shell {
 
 /// So a program's own `--completions <SHELL>` flag can be a `Shell`.
 impl crate::FromArg for Shell {
+    // `winnow-args-spec` knows these choices under this name.
+    const SPEC: &'static str = "Shell";
+
     const CHOICES: &'static [&'static str] = &["bash", "zsh", "fish", "elvish", "powershell"];
 
     fn from_arg(value: &BStr) -> Result<Self, crate::error::BoxError> {

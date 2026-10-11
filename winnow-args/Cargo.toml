@@ -43,3 +43,4 @@ required-features = ["derive"]
 
 [dev-dependencies]
 trybuild = "1"
+winnow-args-spec.workspace = true

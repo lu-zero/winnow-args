@@ -57,6 +57,11 @@ pub trait FromArg: Sized {
     /// it with each visible variant's name.
     const CHOICES: &'static [&'static str] = &[];
 
+    /// The name `#[derive(ValueEnum)]` files its choices under when the
+    /// documentation is built. Empty for an implementation written by hand.
+    #[doc(hidden)]
+    const SPEC: &'static str = "";
+
     /// Convert one value.
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }
@@ -281,9 +286,206 @@ impl<K: FromArg, V: FromArg> FromArg for KeyValue<K, V> {
     }
 }
 
+/// Whether a documentation build finds `T`'s choices by `path`: it has none,
+/// or `#[derive(ValueEnum)]` filed them where `path` leads. A type named
+/// through an alias, or one that implements [`FromArg`] by hand, does not.
+#[doc(hidden)]
+pub const fn documented_choices<T: FromArg>(path: &str) -> bool {
+    if T::SPEC.is_empty() {
+        T::CHOICES.is_empty()
+    } else {
+        filed_as(T::SPEC, path)
+    }
+}
+
+/// Whether a documentation build finds a type by `path`, as a field writes
+/// it: `add::Opts`, `crate::Opts`, `dep::Opts`, or the name it states.
+///
+/// `spec` is the type's, `CRATE:MODULES:Name` from a derive in such a build.
+/// The name is the last of `path`. What is before it starts at a crate's
+/// root (`crate::`, or the name of the type's crate), or names modules of the
+/// type, one after the other: the module it is in, or one above that brings
+/// it out with a `pub use`. `winnow-args-spec` looks for the same, so that it
+/// never takes another type of the name for this. An empty `spec` is a type written by hand, and
+/// filed by hand.
+#[doc(hidden)]
+pub const fn filed_as(spec: &str, path: &str) -> bool {
+    let (spec, path) = (spec.as_bytes(), path.as_bytes());
+    if spec.is_empty() {
+        return true;
+    }
+    // CRATE:MODULES:Name, or the name alone.
+    let (mut first, mut last, mut at) = (spec.len(), 0, 0);
+    while at < spec.len() {
+        if spec[at] == b':' {
+            if first == spec.len() {
+                first = at;
+            }
+            last = at + 1;
+        }
+        at += 1;
+    }
+    // `a::b::Name`: the name, and the modules before it.
+    let mut name = path.len();
+    while name > 0 && path[name - 1] != b':' {
+        name -= 1;
+    }
+    if !same_bytes(spec, last, spec.len(), path, name, path.len()) {
+        return false;
+    }
+    if first == spec.len() || name == 0 {
+        return true;
+    }
+    // From a crate's root, a `pub use` may bring the type out anywhere.
+    let to = name - 2;
+    if starts_with(path, b"crate::") || first + 2 >= last {
+        return true;
+    }
+    if among_modules(spec, first + 1, last - 1, path, 0, to) {
+        return true;
+    }
+    let mut end = 0;
+    while end < to && path[end] != b':' {
+        end += 1;
+    }
+    same_bytes(spec, 0, first, path, 0, end)
+}
+
+/// Whether the modules `a/b/c` in `spec` have the modules `a::b` or `b::c` in
+/// `path` among them, in a row.
+const fn among_modules(
+    spec: &[u8],
+    start: usize,
+    mut end: usize,
+    path: &[u8],
+    from: usize,
+    to: usize,
+) -> bool {
+    loop {
+        if ends_with_modules(spec, start, end, path, from, to) {
+            return true;
+        }
+        while end > start && spec[end - 1] != b'/' {
+            end -= 1;
+        }
+        if end == start {
+            return false;
+        }
+        end -= 1;
+    }
+}
+
+/// Whether the modules `a/b/c` in `spec` end with the modules `b::c` in `path`.
+const fn ends_with_modules(
+    spec: &[u8],
+    start: usize,
+    mut end: usize,
+    path: &[u8],
+    from: usize,
+    mut to: usize,
+) -> bool {
+    loop {
+        let (mut module, mut written) = (end, to);
+        while module > start && spec[module - 1] != b'/' {
+            module -= 1;
+        }
+        while written > from && path[written - 1] != b':' {
+            written -= 1;
+        }
+        if !same_bytes(spec, module, end, path, written, to) {
+            return false;
+        }
+        if written == from {
+            return true;
+        }
+        if module == start {
+            return false;
+        }
+        (end, to) = (module - 1, written - 2);
+    }
+}
+
+const fn starts_with(text: &[u8], prefix: &[u8]) -> bool {
+    text.len() >= prefix.len() && same_bytes(text, 0, prefix.len(), prefix, 0, prefix.len())
+}
+
+const fn same_bytes(a: &[u8], from: usize, to: usize, b: &[u8], start: usize, end: usize) -> bool {
+    if to - from != end - start {
+        return false;
+    }
+    let mut at = 0;
+    while at < to - from {
+        if a[from + at] != b[start + at] {
+            return false;
+        }
+        at += 1;
+    }
+    true
+}
+
+/// Whether the choices a field states are those of its type `T`, when `T`
+/// has any: what a documentation build shows is then what is accepted.
+#[doc(hidden)]
+pub const fn stated_choices<T: FromArg>(stated: &[&str]) -> bool {
+    if T::CHOICES.is_empty() {
+        return true;
+    }
+    if T::CHOICES.len() != stated.len() {
+        return false;
+    }
+    let mut at = 0;
+    while at < stated.len() {
+        if !same(T::CHOICES[at], stated[at]) {
+            return false;
+        }
+        at += 1;
+    }
+    true
+}
+
+const fn same(a: &str, b: &str) -> bool {
+    same_bytes(a.as_bytes(), 0, a.len(), b.as_bytes(), 0, b.len())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_path_leads_to_a_type_by_its_modules_or_its_crate() {
+        let spec = "app:src/cli/add:Opts";
+        for path in [
+            "Opts",
+            "add::Opts",
+            "cli::add::Opts",
+            "cli::Opts",
+            "crate::Opts",
+            "crate::cli::add::Opts",
+            "app::Opts",
+            "app::cli::Opts",
+            "app::src::cli::add::Opts",
+            "app::prelude::Opts",
+            "crate::prelude::Opts",
+        ] {
+            assert!(filed_as(spec, path), "{path}");
+        }
+        for path in [
+            "AddOpts",
+            "remove::Opts",
+            "add::cli::Opts",
+            "src::add::Opts",
+            "dep::Opts",
+            "dep::cli::add::Opts",
+            "std::net::Opts",
+        ] {
+            assert!(!filed_as(spec, path), "{path}");
+        }
+        // The name alone, as any other build has it, and a type written by hand.
+        assert!(filed_as("Opts", "anywhere::Opts"));
+        assert!(!filed_as("Opts", "anywhere::Other"));
+        assert!(filed_as("", "anywhere::Opts"));
+        assert!(filed_as("app::Opts", "x::Opts"));
+    }
 
     fn c<T>(text: &str) -> Result<T, String>
     where

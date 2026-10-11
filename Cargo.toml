@@ -8,6 +8,9 @@ members = [
     "benchmarks/shadows/mise-bpaf",
     "benchmarks/shadows/mise-clap",
     "benchmarks/shadows/mise-wa",
+    "winnow-args-spec",
+    "winnow-args-markdown",
+    "winnow-args-man",
     "xtask",
 ]
 # bpaf 0.10 comes from git: kept out, so that it going out of sync breaks nothing.
@@ -20,7 +23,7 @@ default-members = ["winnow-args", "winnow-args-derive"]
 version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.88"
 repository = "https://github.com/lu-zero/winnow-args"
 
 [workspace.dependencies]
@@ -28,6 +31,9 @@ winnow = { version = "1.0.4", default-features = false, features = ["std", "pars
 bpaf = { version = "0.9", features = ["derive"] }
 winnow-args = { path = "winnow-args", version = "0.1.1", default-features = false, features = ["derive"] }
 winnow-args-derive = { path = "winnow-args-derive", version = "=0.1.2" }
+winnow-args-spec = { path = "winnow-args-spec", version = "0.1.2" }
+winnow-args-markdown = { path = "winnow-args-markdown", version = "0.1.2" }
+winnow-args-man = { path = "winnow-args-man", version = "0.1.2" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }

@@ -90,6 +90,20 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Completion scripts for bash, zsh, fish, elvish, PowerShell, answered by
       the program from its help data; the answers are tested, the bash and zsh
       scripts tried by hand
+- [x] Man and markdown pages, one per command, from TOML fragments the derive
+      writes when `WINNOW_ARGS_SPEC` is set: the program is checked, not run,
+      so the pages describe any installed target
+- [x] A documentation build fails where a value's choices are out of the
+      derive's sight (a type alias, a hand-written `FromArg`), until the field
+      states them
+- [x] Two types of one name in those pages: told apart by their modules (the
+      source file's, and those written in it) and the path a field writes, and
+      by a name of their own (`spec`) where that is not enough; a field whose
+      path does not lead to its type fails the documentation build
+- [x] A bare name is the path its file's `use` brings it in by; one nothing
+      accounts for is refused where a `ValueEnum` of another file has it,
+      rather than given that enum's choices
+- [ ] In those pages: a `use` inside a function is read as its module's
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate
@@ -195,8 +209,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] `update_from`: merge another command line into a held value
 - [ ] Generated dispatch, testing helpers, declared outputs and exit codes
 - [ ] Config-file settings (`setting = "key"`), between env and default
-- [ ] Emit usage's KDL spec, so its tools (markdown, man pages, SDKs, spec
-      diff) work from a winnow-args program; markdown and man pages directly
+- [ ] Emit usage's KDL spec, so its tools (SDKs, spec diff, completion from
+      a spec) work from a winnow-args program
 - [ ] Metadata usage carries: `effect`, `author`, `surface`, `available_if`
 - [ ] `no_std` + `alloc`
 

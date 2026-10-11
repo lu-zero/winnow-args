@@ -79,7 +79,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | "Did you mean" suggestions | – | – | ✓ | ✓ |
 | Completion scripts | ✓ | ✓ | ✓ | ~ `clap_complete` |
 | Completion of values by hint or function | – | ✓ | ✓ | ~ |
-| Man pages, markdown | – | ✓ | ✓ | ~ `clap_mangen` |
+| Man pages, markdown | ~ `winnow-args-man`, `-markdown` | ✓ | ✓ | ~ `clap_mangen` |
 | Deprecated flags with warnings | – | ✓ | – | – |
 
 ## Around the parser
