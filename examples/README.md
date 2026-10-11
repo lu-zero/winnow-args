@@ -64,5 +64,5 @@ needs no cross toolchain, only `rustup target add`.
 A crate with several commands, as brush's builtins are, has no single
 command that nothing else names. `--root` names each type to document, and
 may repeat. `NAME=TYPE` also gives the word the pages use for a command
-that has no name of its own, and `CRATE::TYPE` picks the type of one crate
-when a dependency has one of the same name.
+that has no name of its own. When several types have the name, `CRATE::TYPE`
+picks the one of a crate and `MODULE::TYPE` the one of a source file.

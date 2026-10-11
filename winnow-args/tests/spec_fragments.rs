@@ -61,14 +61,73 @@ enum SpecWhen {
     Always,
 }
 
+// Two files, and a type named `Opts` in each: the module a variant names
+// says which.
+#[path = "spec/add.rs"]
+mod add;
+#[path = "spec/remove.rs"]
+mod remove;
+
+/// Changes.
+#[derive(Subcommand)]
+enum SpecChange {
+    Add(add::Opts),
+    Remove(remove::Opts),
+    /// List them.
+    #[arg(spec = "SpecListOpts")]
+    List(list::Opts),
+    #[arg(spec = "SpecListOpts")]
+    Ls(Listing),
+}
+
+// A third `Opts`, in this file: a name of its own, stated where it is held,
+// also through an alias.
+mod list {
+    use winnow_args::Args;
+
+    #[derive(Args)]
+    #[arg(spec = "SpecListOpts")]
+    pub struct Opts {
+        /// Every one.
+        #[arg(long)]
+        all: bool,
+    }
+}
+
+type Listing = list::Opts;
+
+#[test]
+fn types_of_one_name_are_told_apart() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecChange")
+        .unwrap_or_else(|error| panic!("{error}"));
+    let flags: Vec<_> = command
+        .subcommands
+        .iter()
+        .map(|sub| sub.command.items[0].long.as_deref().unwrap())
+        .collect();
+    assert_eq!(flags, ["force", "recursive", "all", "all"]);
+    // Neither `Opts` is a command of its own, and each can be asked for.
+    assert_eq!(catalog.roots(), ["SpecChange", "SpecCli"]);
+    let one = catalog.stitch("remove::Opts").unwrap();
+    assert_eq!(one.items[0].long.as_deref(), Some("recursive"));
+    let error = catalog.stitch("Opts").unwrap_err().to_string();
+    assert!(
+        error.contains("add::Opts") && error.contains("remove::Opts"),
+        "{error}"
+    );
+}
+
 #[test]
 fn emitted_fragments_stitch() {
     let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
         return;
     };
-    // The derive files a crate's fragments under its name.
-    let crate_dir = Path::new(dir).join(env!("CARGO_CRATE_NAME"));
-    let command = Catalog::load(&crate_dir)
+    let command = Catalog::load(Path::new(dir))
         .unwrap_or_else(|error| panic!("{error}"))
         .stitch("SpecCli")
         .unwrap_or_else(|error| panic!("{error}"));

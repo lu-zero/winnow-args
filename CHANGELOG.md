@@ -12,8 +12,15 @@ are released together. Versions follow [semver](https://semver.org).
   command. The program is only checked, so pages can describe a target that
   is installed and cannot be run. Unset, nothing is written and the generated
   parser is unchanged.
-- **Added**: `FromArg::SPEC`, hidden, which `#[derive(ValueEnum)]` sets: a
-  documentation build uses it to refuse a value whose choices it cannot find.
+- **Added**: `spec = "Name"` on a derived type, and on a field or a variant
+  that holds one: the name the documentation files the type under, for two
+  types of one name that their source files do not tell apart.
+- **Added**: a hidden `SPEC` constant on `Args`, `Subcommand`, `Occurrence`
+  and `FromArg`, which the derives set: a documentation build uses it to
+  refuse a field that names a type other than as it is filed, or a value
+  whose choices it cannot find.
+- **Changed**: the MSRV is 1.88, where a derive can tell which source file a
+  type is in.
 - **Changed**: the examples are in `examples/` at the top of the repository,
   with a guide and two documentation generators, an xtask and a justfile.
 

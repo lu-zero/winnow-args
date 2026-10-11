@@ -294,6 +294,13 @@ pub const fn documented_choices<T: FromArg>(name: &str) -> bool {
     T::CHOICES.is_empty() || same(T::SPEC, name)
 }
 
+/// Whether a documentation build finds a type under `name`: the derive filed
+/// it there (`spec`), or it is written by hand and filed by hand.
+#[doc(hidden)]
+pub const fn filed_as(spec: &str, name: &str) -> bool {
+    spec.is_empty() || same(spec, name)
+}
+
 /// Whether the choices a field states are those of its type `T`, when `T`
 /// has any: what a documentation build shows is then what is accepted.
 #[doc(hidden)]

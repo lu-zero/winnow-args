@@ -5,6 +5,8 @@
 //! absolute path, and one Cargo does not watch (`target/spec`).
 
 use std::collections::HashMap;
+use std::path::Component;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::PoisonError;
@@ -277,9 +279,42 @@ fn quote_basic(text: &str) -> String {
     out
 }
 
-/// Fragments this process has written, by directory and type name. A second
-/// body under one of them is a second type of that name in that target.
-static WRITTEN: Mutex<Option<HashMap<(String, String), String>>> = Mutex::new(None);
+/// Fragments this process has written, by directory, source file and name.
+/// A second body under one of them is a second type filed there.
+static WRITTEN: Mutex<Option<HashMap<Filed, String>>> = Mutex::new(None);
+
+/// A fragment's directory, source file and name.
+type Filed = (String, String, String);
+
+/// The source file of `span`, from the package's directory, with `/` between
+/// its parts: two types of one name are told apart by it.
+fn source(span: Span) -> String {
+    let file = span.unwrap().local_file().unwrap_or_default();
+    let file = normal(&std::path::absolute(&file).unwrap_or(file));
+    let package = std::env::var_os("CARGO_MANIFEST_DIR").map(|dir| normal(Path::new(&dir)));
+    // A file outside the package (`path = "../examples/x.rs"`) is told from
+    // where the two part ways.
+    let shared = package.map_or(0, |package| {
+        let same = file.iter().zip(&package).take_while(|(a, b)| a == b);
+        same.count().min(file.len().saturating_sub(1))
+    });
+    file[shared..].join("/")
+}
+
+/// The names in a path, `..` followed.
+fn normal(path: &Path) -> Vec<String> {
+    let mut parts = Vec::new();
+    for part in path.components() {
+        match part {
+            Component::Normal(name) => parts.push(name.to_string_lossy().into_owned()),
+            Component::ParentDir => {
+                parts.pop();
+            }
+            _ => {}
+        }
+    }
+    parts
+}
 
 fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     let Some(root) = dir() else {
@@ -301,18 +336,26 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     if std::env::var_os("CARGO_BIN_NAME").is_some() {
         target.push_str("-bin");
     }
-    let key = (target.clone(), ident.to_owned());
+    let source = source(span);
+    // With the other keys of the fragment, before its first table.
+    let (version, rest) = body.split_once('\n').unwrap_or((body, ""));
+    let mut body = format!("{version}\n");
+    field(&mut body, "file", &source);
+    body.push_str(rest);
+    let key = (target.clone(), source.clone(), ident.to_owned());
     let mut written = WRITTEN.lock().unwrap_or_else(PoisonError::into_inner);
-    match written.get_or_insert_default().insert(key, body.to_owned()) {
+    match written.get_or_insert_default().insert(key, body.clone()) {
         Some(earlier) if earlier == body => return Ok(()),
         Some(_) => {
             return Err(error(format!(
-                "two types of this crate are named `{ident}`, and a fragment is filed under its type's name"
+                "two types of this file are filed under `{ident}`: give one another name for the documentation, as `#[arg(spec = \"Name\")]`, and state it again where a field or a variant holds that type"
             )));
         }
         None => {}
     }
-    let dir = root.join(target);
+    // One directory a source file: a type of the same name in another file
+    // has its own.
+    let dir = root.join(target).join(&source);
     std::fs::create_dir_all(&dir)
         .map_err(|source| error(format!("creating {}: {source}", dir.display())))?;
     // Another target of this crate may be writing the same file. A rename

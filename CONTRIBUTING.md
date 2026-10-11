@@ -76,8 +76,8 @@ Outside the workspace, `benchmarks/bpaf010` takes the unreleased bpaf 0.10
 from git, and only `BPAF010=1 just perf` builds it, so its going out of sync
 breaks nothing.
 
-`rust-version` in the workspace manifest is the MSRV (1.85, the edition 2024
-floor). CI builds with the current stable compiler, and tests the two
+`rust-version` in the workspace manifest is the MSRV (1.88, where a derive
+can tell a type's source file). CI builds with the current stable compiler, and tests the two
 published crates with the MSRV; the benchmarks need a newer one (usage asks
 for 1.91). A dependency is not held back for an older compiler, and
 `rust-version` moves in the commit that starts using a newer feature.

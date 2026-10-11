@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@v1
         with:
-          toolchain: "1.85"
+          toolchain: "1.88"
       # The compile-fail cases pin the current compiler's messages.
       - run: cargo test -p winnow-args --all-features -- --skip compile_fail
 

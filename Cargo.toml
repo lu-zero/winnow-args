@@ -25,7 +25,7 @@ default-members = ["winnow-args", "winnow-args-derive"]
 version = "0.1.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.88"
 repository = "https://github.com/lu-zero/winnow-args"
 
 [workspace.dependencies]

@@ -303,6 +303,11 @@ pub mod derive_examples {
 
 /// A type parsed from a whole command line.
 pub trait Args: Sized {
+    /// The name the derive files this type under when the documentation is
+    /// built. Empty for an implementation written by hand.
+    #[doc(hidden)]
+    const SPEC: &'static str = "";
+
     /// Parse the command line in `input`, consuming all of it.
     ///
     /// This is a winnow parser: `Cli::parse_argv` can be passed anywhere a
@@ -492,6 +497,11 @@ pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
 /// `--whole-archive` apply to the inputs after them, so the linker folds the
 /// sequence rather than reading fields.
 pub trait Occurrence: Sized {
+    /// The name the derive files this type under when the documentation is
+    /// built. Empty for an implementation written by hand.
+    #[doc(hidden)]
+    const SPEC: &'static str = "";
+
     /// Letters that always take the rest of their word (`-lfoo`), for a
     /// `long_only` parent: no single-dash long name starting with one is tried.
     const PREFIXES: &'static [u8] = &[];
@@ -547,6 +557,11 @@ pub trait Occurrence: Sized {
 /// `#[arg(subcommand)]` field. The derive also implements [`Args`] for the enum,
 /// so it can be the whole command line.
 pub trait Subcommand: Sized {
+    /// The name the derive files this type under when the documentation is
+    /// built. Empty for an implementation written by hand.
+    #[doc(hidden)]
+    const SPEC: &'static str = "";
+
     /// Whether `name` names a subcommand. Asked of every eligible word, so kept
     /// apart from [`Subcommand::parse_subcommand`] and cheap to inline.
     fn has(name: &[u8]) -> bool;
@@ -672,7 +687,7 @@ pub mod __private {
     pub use crate::help::concat_items;
     pub use crate::stream::Argv;
     pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
-    pub use crate::value::{ChoiceError, FromArg, documented_choices, stated_choices};
+    pub use crate::value::{ChoiceError, FromArg, documented_choices, filed_as, stated_choices};
     pub use crate::{Globals, Subcommand, globals, inherit};
     pub use winnow::stream::BStr;
     pub type BoxError = crate::error::BoxError;

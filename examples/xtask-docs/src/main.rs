@@ -83,7 +83,7 @@ struct Docs {
     ///
     /// A crate with several commands names each one. `NAME=TYPE` also gives
     /// the word the pages call it, for a command that has no name of its own.
-    /// `CRATE::TYPE` is the type of one crate, when two have one of that name.
+    /// `CRATE::TYPE` or `MODULE::TYPE` is one type, when several have the name.
     #[arg(long, value_name = "[NAME=]TYPE")]
     root: Vec<String>,
 }

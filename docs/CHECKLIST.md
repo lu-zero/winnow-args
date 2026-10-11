@@ -96,7 +96,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] A documentation build fails where a value's choices are out of the
       derive's sight (a type alias, a hand-written `FromArg`), until the field
       states them
-- [ ] In those pages: two types of one target under one name
+- [x] Two types of one name in those pages: told apart by their source files
+      and the modules a field writes, and by a name of their own (`spec`) where
+      that is not enough; a field that names a type other than as it is filed
+      fails the documentation build
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate
