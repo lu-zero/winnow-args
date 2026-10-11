@@ -185,6 +185,9 @@ struct Entry {
     /// From the package's directory, `/` between its parts. Empty for a
     /// fragment written by hand that does not say.
     file: String,
+    /// The modules the type is in: those of its file, then those written in
+    /// the file around it. Empty when the fragment gives neither.
+    modules: Vec<String>,
     fragment: Fragment,
 }
 
@@ -405,6 +408,7 @@ impl Catalog {
 static SHELL: LazyLock<Entry> = LazyLock::new(|| Entry {
     ident: "Shell".to_owned(),
     file: "src/complete.rs".to_owned(),
+    modules: vec!["src".to_owned(), "complete".to_owned()],
     fragment: Fragment::Choices(
         ["bash", "zsh", "fish", "elvish", "powershell"]
             .map(str::to_owned)
@@ -421,8 +425,9 @@ const OCCURRENCE: Kind = |fragment| matches!(fragment, Fragment::Occurrence(_));
 const CHOICES: Kind = |fragment| matches!(fragment, Fragment::Choices(_));
 
 /// `src/cli/add.rs` as the modules a path to its types may name: `src`,
-/// `cli`, `add`. A `mod.rs` is its directory's module.
-fn modules_of(file: &str) -> Vec<&str> {
+/// `cli`, `add`. A `mod.rs` is its directory's module. The derive writes
+/// them itself; this is for a fragment that only says its file.
+fn modules_of(file: &str) -> Vec<String> {
     let mut modules: Vec<&str> = file.split('/').filter(|part| !part.is_empty()).collect();
     if let Some(last) = modules.pop() {
         let stem = last.rsplit_once('.').map_or(last, |(stem, _)| stem);
@@ -430,16 +435,40 @@ fn modules_of(file: &str) -> Vec<&str> {
             modules.push(stem);
         }
     }
-    modules
+    modules.into_iter().map(str::to_owned).collect()
+}
+
+/// Whether `modules`, written before a type's name, lead to `entry` of the
+/// crate `krate`: they are modules of it, one after the other, after its
+/// crate's name or not. The last ones are where it is, and others are where
+/// a `pub use` brings it out.
+///
+/// The derive holds a field to the same rule when the documentation is
+/// built (`filed_as` in `winnow-args`), so a path that leads here is the
+/// type's, and one that does not is another type's of that name.
+///
+/// A fragment that gives no module is only told from another crate's.
+fn leads(modules: &[&str], krate: &str, entry: &Entry, crates: &[&str]) -> bool {
+    let among = |written: &[&str]| {
+        let mut runs = entry.modules.windows(written.len().max(1));
+        written.is_empty() || runs.any(|run| run.iter().eq(written))
+    };
+    match modules {
+        [] => true,
+        [first, ..] if entry.modules.is_empty() => *first == krate || !crates.contains(first),
+        [first, rest @ ..] => among(modules) || *first == krate && among(rest),
+    }
 }
 
 /// A type by its crate, its file's modules and its name: no other has all three.
 fn whole_name(krate: &str, entry: &Entry) -> String {
-    let mut parts = modules_of(&entry.file);
-    if !krate.is_empty() {
-        parts.insert(0, krate);
-    }
-    parts.push(&entry.ident);
+    let modules = entry.modules.iter().map(String::as_str);
+    let parts: Vec<&str> = [krate]
+        .into_iter()
+        .filter(|krate| !krate.is_empty())
+        .chain(modules)
+        .chain([entry.ident.as_str()])
+        .collect();
     parts.join("::")
 }
 
@@ -777,9 +806,15 @@ fn parse_fragment(text: &str) -> Result<Entry, Error> {
         "choices" => Fragment::Choices(strings(&table, "choices")?),
         other => return Err(Error::new(format!("unknown kind `{other}`"))),
     };
+    let file = opt_str(&table, "file")?;
+    let modules = match opt_present(&table, "module")? {
+        Some(module) => module.split('/').map(str::to_owned).collect(),
+        None => modules_of(&file),
+    };
     Ok(Entry {
         ident,
-        file: opt_str(&table, "file")?,
+        file,
+        modules,
         fragment,
     })
 }
@@ -869,11 +904,10 @@ impl Catalog {
     /// The fragment `name` refers to where it is read.
     ///
     /// The last part of `name` is what the type is filed under, and only a
-    /// fragment of the `kind` asked for is one. It is looked for in the crate
-    /// the parts before it start with, when they name one, then in the crate
-    /// it is read in, then in all the others. Where several types have the
-    /// name, the one whose file is the module `name` gives is meant, or the
-    /// one in the file `name` is read in when it gives none.
+    /// fragment of the `kind` asked for, in the modules `name` gives, is one
+    /// ([`leads`]). It is looked for in the crate it is read in, then in all
+    /// the others. Where several types are left, the one in the file `name`
+    /// is read in is meant.
     ///
     /// A `use` may bring a dependency's type under a bare name. So where the
     /// crate it is read in and another both have the name, this crate's is
@@ -885,38 +919,40 @@ impl Catalog {
         if local {
             modules.remove(0);
         }
+        let modules = &modules[..];
+        let crates: Vec<&str> = self.crates.keys().map(String::as_str).collect();
         let named = |krate: &str| -> Vec<Found<'_>> {
             let Some((krate, entries)) = self.crates.get_key_value(krate) else {
                 return Vec::new();
             };
-            let named = entries
-                .iter()
-                .filter(|entry| entry.ident == ident && kind(&entry.fragment));
+            let named = entries.iter().filter(|entry| {
+                entry.ident == ident
+                    && kind(&entry.fragment)
+                    && leads(modules, krate, entry, &crates)
+            });
             named.map(|entry| (krate.as_str(), entry)).collect()
         };
-        if let [first, rest @ ..] = &modules[..]
-            && !local
-            && let Some(one) = pick(named(first), rest, at.file, name)?
-        {
-            return Ok(Some(one));
-        }
+        let own = named(at.krate);
         let others: Vec<Found<'_>> = self
             .crates
             .keys()
             .filter(|krate| !local && *krate != at.krate)
             .flat_map(|krate| named(krate))
             .collect();
-        let Some((krate, entry)) = pick(named(at.krate), &modules, at.file, name)? else {
-            return match pick(others, &modules, at.file, name)? {
+        let Some((krate, entry)) = pick(own, at.file, name)? else {
+            return match pick(others, at.file, name)? {
                 // A type of the library, which has no derive to write it.
-                None if !local && ident == "Shell" && kind(&SHELL.fragment) => {
+                None if !local
+                    && ident == "Shell"
+                    && kind(&SHELL.fragment)
+                    && leads(modules, "winnow_args", &SHELL, &crates) =>
+                {
                     Ok(Some(("winnow_args", &*SHELL)))
                 }
                 one => Ok(one),
             };
         };
-        let here = entry.file == at.file
-            || !modules.is_empty() && modules_of(&entry.file).ends_with(&modules);
+        let here = local || entry.file == at.file || !modules.is_empty();
         if let Some((other, _)) = others.first()
             && !here
         {
@@ -1106,24 +1142,14 @@ impl Catalog {
     }
 }
 
-/// The one of `found` that `name` means, when they all have its last part.
-///
-/// Several are told apart by the modules `name` gives, or by the file it is
-/// read in when it gives none.
-fn pick<'a>(
-    mut found: Vec<Found<'a>>,
-    modules: &[&str],
-    file: &str,
-    name: &str,
-) -> Result<Option<Found<'a>>, Error> {
+/// The one of `found` that `name` means, when it may be each of them: the
+/// one in the file it is read in.
+fn pick<'a>(mut found: Vec<Found<'a>>, file: &str, name: &str) -> Result<Option<Found<'a>>, Error> {
     if found.len() < 2 {
         return Ok(found.pop());
     }
-    let meant = |(_, entry): &Found<'_>| match modules {
-        [] => entry.file == file,
-        _ => modules_of(&entry.file).ends_with(modules),
-    };
-    if let [one] = found.iter().copied().filter(meant).collect::<Vec<_>>()[..] {
+    let here = |(_, entry): &Found<'_>| entry.file == file;
+    if let [one] = found.iter().copied().filter(here).collect::<Vec<_>>()[..] {
         return Ok(Some(one));
     }
     let all: Vec<String> = found

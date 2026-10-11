@@ -26,14 +26,17 @@
 //! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
 //! crate again when the variable changes.
 //!
-//! Two types of one name are told apart by their files: `add::Opts` is the
-//! `Opts` of `add.rs` or `add/mod.rs`, and a bare `Opts` the one of the same
-//! file. Where that does not say which, `winnow-args-spec` asks for a name:
+//! Two types of one name are told apart by their modules, which a fragment
+//! records: those of the source file, then the `mod name { }` blocks the file
+//! has around the type (the file is read for them). `add::Opts` is the `Opts`
+//! of a module `add`, and a bare `Opts` the one of the same file. Where that
+//! does not say which, `winnow-args-spec` asks for a name:
 //! `#[arg(spec = "AddOpts")]` on the type files it under that name, and the
 //! same on a field or a variant that holds the type finds it there. Two types
-//! of one name in one file need it, and the build with the variable set says
-//! so. It also fails where a field names a type other than as it is filed (an
-//! alias, a `spec` not repeated), so a page never describes another type.
+//! of one name in one file need it, and the build with the variable set
+//! says so. It also fails where the path a field writes does not lead to its
+//! type (an alias, a module under another name, a `spec` not repeated), so a
+//! page never describes another type.
 //!
 //! Set the variable for the documentation build alone, not in a shell: a
 //! test or a doctest would write its types beside the program's.
@@ -302,6 +305,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut subs = Vec::new();
     let spec_on = spec::enabled();
     let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_variants = Vec::new();
     let mut spec_checks = Vec::new();
     for variant in &data.variants {
@@ -444,7 +448,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         #(#spec_checks)*
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
-            const SPEC: &'static str = #filed;
+            const SPEC: &'static str = #identity;
 
             #[inline]
             fn has(__name: &[u8]) -> bool {
@@ -468,7 +472,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
 
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
-            const SPEC: &'static str = #filed;
+            const SPEC: &'static str = #identity;
 
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: "",
@@ -658,6 +662,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut help_items = Vec::new();
     let spec_on = spec::enabled();
     let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_rows = Vec::new();
     let mut spec_checks = Vec::new();
     // `allow_hyphen_values` and `keep_equals` on the enum: every value
@@ -1015,7 +1020,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         #(#spec_checks)*
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
-            const SPEC: &'static str = #filed;
+            const SPEC: &'static str = #identity;
 
             const PREFIXES: &'static [u8] = &[#(#prefixes),*];
 
@@ -1183,11 +1188,6 @@ fn type_path(ty: &Type) -> Option<String> {
     (names.len() > usize::from(rooted > 0)).then(|| names.join("::"))
 }
 
-/// `Opts` of `add::Opts`: what a type is filed under.
-fn filed_name(path: &str) -> &str {
-    path.rsplit("::").next().unwrap_or(path)
-}
-
 /// The name `ty` is looked for under: the one stated where it is referred
 /// to, or its own.
 fn spec_type(stated: Option<String>, ty: &Type) -> syn::Result<String> {
@@ -1212,11 +1212,10 @@ fn spec_filed(
         return None;
     }
     let ty = boxed(ty).unwrap_or(ty);
-    let name = filed_name(name);
     Some(quote::quote_spanned! {ty.span()=>
         const _: () = ::core::assert!(
             ::winnow_args::__private::filed_as(<#ty as ::winnow_args::#kind>::SPEC, #name),
-            "the documentation files this type under another name: it is named here through an alias, or it states a `spec`. State the name it is filed under here too, as `spec = \"Name\"`",
+            "the documentation does not find this type by this path: it is named through an alias or a re-export, its module goes by another name here, or it states a `spec`. State the name it is filed under, as `spec = \"Name\"`",
         );
     })
 }
@@ -1271,11 +1270,10 @@ fn spec_check(
 ) -> Option<TokenStream2> {
     let ty = ty.filter(|_| generics.params.is_empty())?;
     let name = choices_name(stated, ty)?;
-    let name = filed_name(&name);
     Some(quote::quote_spanned! {ty.span()=>
         const _: () = ::core::assert!(
             ::winnow_args::__private::documented_choices::<#ty>(#name),
-            "the documentation cannot find the choices of this value: its type is named through an alias, states a `spec`, or implements `FromArg` by hand. State the name they are filed under, as `spec = \"Name\"`, or the choices, as `choices(\"a\", \"b\")`",
+            "the documentation cannot find the choices of this value: its type is named through an alias or a re-export, states a `spec`, or implements `FromArg` by hand. State the name they are filed under, as `spec = \"Name\"`, or the choices, as `choices(\"a\", \"b\")`",
         );
     })
 }
@@ -1381,6 +1379,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut visible = Vec::new();
     let spec_on = spec::enabled();
     let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_choices = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
@@ -1413,7 +1412,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
             const CHOICES: &'static [&'static str] = &[#(#visible),*];
-            const SPEC: &'static str = #filed;
+            const SPEC: &'static str = #identity;
 
             fn from_arg(
                 __value: &::winnow_args::__private::BStr,
@@ -3501,6 +3500,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
     let mut spec_checks = Vec::new();
     let filed = filed(input)?;
+    let identity = spec::identity(input.ident.span(), &filed);
     if spec::enabled() {
         spec_checks.extend(fields.iter().filter_map(|field| {
             spec_check(&input.generics, choices_type(field), field.spec.as_ref())
@@ -3570,7 +3570,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     Ok(quote! {
         #(#spec_checks)*
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
-            const SPEC: &'static str = #filed;
+            const SPEC: &'static str = #identity;
 
             const HELP: &'static ::winnow_args::help::Command = &::winnow_args::help::Command {
                 name: #program_name,

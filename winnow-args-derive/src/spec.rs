@@ -286,19 +286,119 @@ static WRITTEN: Mutex<Option<HashMap<Filed, String>>> = Mutex::new(None);
 /// A fragment's directory, source file and name.
 type Filed = (String, String, String);
 
-/// The source file of `span`, from the package's directory, with `/` between
-/// its parts: two types of one name are told apart by it.
-fn source(span: Span) -> String {
-    let file = span.unwrap().local_file().unwrap_or_default();
-    let file = normal(&std::path::absolute(&file).unwrap_or(file));
+/// Where a type is: the directory of its crate's fragments, its source file
+/// from the package's directory, and its modules, both with `/` between
+/// their parts. Two types of one name are told apart by them.
+struct Place {
+    target: String,
+    file: String,
+    module: String,
+}
+
+fn place(span: Span) -> Place {
+    // A library and a binary of one package have one crate name, and may each
+    // have a type of one name: the binary's directory says which it is.
+    let mut target = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| "_".to_owned());
+    if std::env::var_os("CARGO_BIN_NAME").is_some() {
+        target.push_str("-bin");
+    }
+    let local = span.unwrap().local_file().unwrap_or_default();
+    let local = std::path::absolute(&local).unwrap_or(local);
+    let parts = normal(&local);
     let package = std::env::var_os("CARGO_MANIFEST_DIR").map(|dir| normal(Path::new(&dir)));
     // A file outside the package (`path = "../examples/x.rs"`) is told from
     // where the two part ways.
     let shared = package.map_or(0, |package| {
-        let same = file.iter().zip(&package).take_while(|(a, b)| a == b);
-        same.count().min(file.len().saturating_sub(1))
+        let same = parts.iter().zip(&package).take_while(|(a, b)| a == b);
+        same.count().min(parts.len().saturating_sub(1))
     });
-    file[shared..].join("/")
+    let parts = &parts[shared..];
+    // `cli/add.rs` and `cli/add/mod.rs` are both the module `cli::add`.
+    let mut modules = parts.to_vec();
+    if let Some(last) = modules.pop() {
+        let stem = last
+            .rsplit_once('.')
+            .map_or(last.as_str(), |(stem, _)| stem);
+        if stem != "mod" {
+            modules.push(stem.to_owned());
+        }
+    }
+    let ident = span.unwrap().source_text().unwrap_or_default();
+    modules.extend(inline_modules(&local, ident.trim_start_matches("r#")));
+    Place {
+        target,
+        file: parts.join("/"),
+        module: modules.join("/"),
+    }
+}
+
+/// The types each source file declares, by name, with the `mod name { … }`
+/// blocks of the file around each: none for a name the file has twice.
+type Declared = HashMap<String, Option<Vec<String>>>;
+
+static DECLARED: Mutex<Option<HashMap<PathBuf, Declared>>> = Mutex::new(None);
+
+/// The modules written in `file` around the type `ident`. A derive is given
+/// its type and not what is around it, so the file is read for them.
+fn inline_modules(file: &Path, ident: &str) -> Vec<String> {
+    let mut files = DECLARED.lock().unwrap_or_else(PoisonError::into_inner);
+    let declared = files
+        .get_or_insert_default()
+        .entry(file.to_owned())
+        .or_insert_with(|| {
+            let mut declared = Declared::new();
+            let tokens = std::fs::read_to_string(file)
+                .ok()
+                .and_then(|text| text.parse::<proc_macro2::TokenStream>().ok());
+            declare(tokens.unwrap_or_default(), &mut Vec::new(), &mut declared);
+            declared
+        });
+    declared.get(ident).cloned().flatten().unwrap_or_default()
+}
+
+fn declare(tokens: proc_macro2::TokenStream, inside: &mut Vec<String>, declared: &mut Declared) {
+    use proc_macro2::Delimiter;
+    use proc_macro2::TokenTree;
+    let unraw = |ident: &proc_macro2::Ident| ident.to_string().trim_start_matches("r#").to_owned();
+    let mut tokens = tokens.into_iter().peekable();
+    while let Some(token) = tokens.next() {
+        match token {
+            TokenTree::Ident(word) if word == "mod" => {
+                let Some(TokenTree::Ident(name)) = tokens.next() else {
+                    continue;
+                };
+                if let Some(TokenTree::Group(body)) = tokens.peek()
+                    && body.delimiter() == Delimiter::Brace
+                {
+                    inside.push(unraw(&name));
+                    declare(body.stream(), inside, declared);
+                    inside.pop();
+                    tokens.next();
+                }
+            }
+            TokenTree::Ident(word) if word == "struct" || word == "enum" => {
+                if let Some(TokenTree::Ident(name)) = tokens.peek() {
+                    declared
+                        .entry(unraw(name))
+                        .and_modify(|twice| *twice = None)
+                        .or_insert_with(|| Some(inside.clone()));
+                }
+            }
+            TokenTree::Group(group) => declare(group.stream(), inside, declared),
+            _ => {}
+        }
+    }
+}
+
+/// What a derived type's `SPEC` constant holds in a documentation build:
+/// `CRATE:MODULES:Name`, for the check where a field names the type. Any
+/// other build has the name alone, and no file is read for it.
+pub(crate) fn identity(span: Span, filed: &str) -> String {
+    if !enabled() {
+        return filed.to_owned();
+    }
+    let place = place(span);
+    format!("{}:{}:{filed}", place.target, place.module)
 }
 
 /// The names in a path, `..` followed.
@@ -330,17 +430,16 @@ fn write_at(span: Span, ident: &str, body: &str) -> syn::Result<()> {
     if ident.is_empty() || ident.contains(['/', '\\']) {
         return Err(error(format!("`{ident}` is not a file name")));
     }
-    // A library and a binary of one package have one crate name, and may each
-    // have a type of one name: the binary's directory says which it is.
-    let mut target = std::env::var("CARGO_CRATE_NAME").unwrap_or_else(|_| "_".to_owned());
-    if std::env::var_os("CARGO_BIN_NAME").is_some() {
-        target.push_str("-bin");
-    }
-    let source = source(span);
+    let Place {
+        target,
+        file: source,
+        module,
+    } = place(span);
     // With the other keys of the fragment, before its first table.
     let (version, rest) = body.split_once('\n').unwrap_or((body, ""));
     let mut body = format!("{version}\n");
     field(&mut body, "file", &source);
+    field(&mut body, "module", &module);
     body.push_str(rest);
     // Where a file system has one name for `Opts` and `OPTS`, so has this.
     let key = (target.clone(), source.clone(), ident.to_lowercase());
