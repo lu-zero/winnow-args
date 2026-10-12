@@ -1,11 +1,12 @@
 //! What derived help looks like: a small mise-like CLI whose help covers
-//! subcommands, aliases, value names, defaults, environment variables,
-//! possible values, a heading, and long help.
+//! subcommands (one of them the default, one a variant with fields), aliases,
+//! value names, defaults, environment variables, possible values, a heading
+//! with a paragraph, a warning, examples, and long help.
 //!
 //!     cargo run --example help -- -h            # short help
 //!     cargo run --example help -- --help        # long help
 //!     cargo run --example help -- help use      # a subcommand's help
-//!     cargo run --example help -- use -h
+//!     cargo run --example help -- use -h        # with the global flags it inherits
 //!     COLUMNS=60 cargo run --example help -- -h # wrapped to 60 columns
 //!     cargo run --example help --features terminal-size -- -h
 //!     cargo run --example help --no-default-features --features derive -- -h
@@ -38,7 +39,10 @@ const THEME: Theme = Theme {
 #[arg(
     name = "tool",
     version = "0.1.0",
-    after_help = "Examples:\n    $ tool use -g node@20\n    $ tool ls --json"
+    default_subcommand = "use",
+    heading("Performance", help = "How much is done at once."),
+    example("tool use -g node@20", header = "Install a tool for every project"),
+    example = "tool ls --json"
 )]
 struct Cli {
     /// Show extra output (repeat for more)
@@ -59,6 +63,13 @@ struct Cli {
     /// Colorize progress bars
     #[arg(long, negate, default = "true")]
     progress: bool,
+    /// Install without checking signatures
+    #[arg(
+        long,
+        help_heading = "Performance",
+        warning = "Only for a mirror you trust."
+    )]
+    unverified: bool,
     #[arg(subcommand)]
     command: Option<Command>,
 }
@@ -78,6 +89,13 @@ enum Command {
     /// List installed tools
     #[arg(alias = "list")]
     Ls(LsArgs),
+    /// Remove a tool
+    #[arg(alias = "rm", example = "tool remove node@20")]
+    Remove {
+        /// The tool to remove, as `name@version`
+        #[arg(positional, value_name = "TOOL@VERSION")]
+        tool: String,
+    },
 }
 
 /// Install a tool and add it to the project.
@@ -108,12 +126,13 @@ fn main() {
         Err(e) => std::process::exit(report_with(&e, "tool", &THEME)),
     };
     println!(
-        "verbose {}, cd {:?}, jobs {:?}, color {:?}, progress {}",
-        cli.verbose, cli.cd, cli.jobs, cli.color, cli.progress
+        "verbose {}, cd {:?}, jobs {:?}, color {:?}, progress {}, unverified {}",
+        cli.verbose, cli.cd, cli.jobs, cli.color, cli.progress, cli.unverified
     );
     match cli.command {
         Some(Command::Use(u)) => println!("use: global {}, tools {:?}", u.global, u.tools),
         Some(Command::Ls(l)) => println!("ls: json {}", l.json),
+        Some(Command::Remove { tool }) => println!("remove: {tool}"),
         None => {}
     }
 }

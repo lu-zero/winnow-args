@@ -55,6 +55,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | Positionals, `--`, a trailing list | ✓ | ✓ | ✓ | ✓ |
 | Words after `--` only, or `--` kept | ✓ | ✓ | ~ | ✓ |
 | Subcommands, nested, with aliases | ✓ | ✓ | ✓ | ✓ |
+| A subcommand declared as a variant with fields | ✓ | ✓ | ✓ | ✓ |
 | Global flags | ✓ | ✓ | – (0.10: ✓) | ✓ |
 | Shared flags (`flatten`) | ✓ | ✓ | ✓ | ✓ |
 | Default subcommand | ✓ | ✓ | ~ | ~ |
@@ -76,6 +77,9 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 |---|:-:|:-:|:-:|:-:|
 | Help from doc comments, wrapped, coloured | ✓ | ✓ | ✓ | ✓ |
 | Help prose left out of the binary by a feature | ✓ | ~ help as a whole | – | – |
+| Examples, a paragraph under a heading, a flag's warning | ✓ | ✓ | ~ | ~ after-help text |
+| Subcommands laid out on their parent's page | ✓ | ✓ | – | ✓ |
+| The default subcommand's page after the root's | ✓ | ✓ | – | – |
 | "Did you mean" suggestions | ✓ | ✓ | ✓ | ✓ |
 | Completion scripts | ✓ | ✓ | ✓ | ~ `clap_complete` |
 | Completion of values by hint or function | ✓ | ✓ | ✓ | ~ |
