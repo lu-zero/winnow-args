@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.3.0 (2026-10-12)
 
 - **Added**: a subcommand's help lists the global flags it inherits, under
   `Global options:`. A parse through `parse_words` and what is built on it
