@@ -36,6 +36,9 @@ released together. Versions follow [semver](https://semver.org).
   `--` before the next automatic positional has a value is a separator and
   not that value: `tool name -- -x` leaves `-x`. Only the first is: a
   second `--` is a word.
+- **Fixed**: a markdown page had trailing spaces on the blank line between
+  two paragraphs of a description, and backticks in a flag's spelling ended
+  its code span: a span or a fence is now longer than any run it holds.
 - **Changed**: `help::Command` has six more fields (`default_subcommand`,
   `default_subcommand_flags`, `default_subcommand_help`, `flatten_help`,
   `examples`, `headings`) and `help::Item` one (`warning`). Both now have a

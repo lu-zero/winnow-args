@@ -97,7 +97,7 @@ pub fn render(page: &Page<'_>) -> String {
                 append(&mut what, "The default.");
             }
             if !output.framing.is_empty() {
-                append(&mut what, &format!("Framing: `{}`.", output.framing));
+                append(&mut what, &format!("Framing: {}.", code(&output.framing)));
             }
             push_term(&mut out, &output.name, &what, "");
         }
@@ -120,7 +120,9 @@ pub fn render(page: &Page<'_>) -> String {
                 out.push_str(&blocks(&example.help));
                 out.push_str("\n\n");
             }
-            out.push_str(&format!("```\n$ {}\n```\n\n", example.code));
+            // A fence longer than any run of backticks in the line.
+            let fence = "`".repeat(backticks(&example.code).max(2) + 1);
+            out.push_str(&format!("{fence}\n$ {}\n{fence}\n\n", example.code));
         }
     }
     let after = command.after();
@@ -180,14 +182,41 @@ fn push_item(out: &mut String, item: &Item, indent: &str) {
 
 fn push_term(out: &mut String, synopsis: &str, description: &str, indent: &str) {
     out.push_str(indent);
-    out.push_str("* `");
-    out.push_str(synopsis);
-    out.push('`');
+    out.push_str("* ");
+    out.push_str(&code(synopsis));
     if !description.is_empty() {
         out.push_str(" — ");
-        out.push_str(&description.replace('\n', &format!("\n{indent}  ")));
+        // A blank line between paragraphs stays empty: no trailing spaces.
+        for (n, line) in description.split('\n').enumerate() {
+            if n > 0 {
+                out.push('\n');
+                if !line.is_empty() {
+                    out.push_str(indent);
+                    out.push_str("  ");
+                }
+            }
+            out.push_str(line);
+        }
     }
     out.push('\n');
+}
+
+/// The longest run of backticks in `text`.
+fn backticks(text: &str) -> usize {
+    let runs = text.split(|c| c != '`').map(str::len);
+    runs.max().unwrap_or(0)
+}
+
+/// `text` as a code span: between more backticks than it has in a row, and
+/// away from them where it begins or ends with one.
+fn code(text: &str) -> String {
+    let ticks = "`".repeat(backticks(text) + 1);
+    let pad = if text.starts_with('`') || text.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{ticks}{pad}{text}{pad}{ticks}")
 }
 
 /// The text of a page, outside its lists. A run of lines indented by four
@@ -271,7 +300,7 @@ mod tests {
             long: Some("file".to_owned()),
             value_name: Some("PATH".to_owned()),
             help: "A path.".to_owned(),
-            long_help: "A path.\n.TH is prose".to_owned(),
+            long_help: "A path.\n.TH is prose\n\nAnother paragraph.".to_owned(),
             ..Item::default()
         };
         let child = Command {
@@ -320,7 +349,7 @@ mod tests {
             "{root}"
         );
         assert!(
-            root.contains("* `--file <PATH>` — A path.\n  .TH is prose"),
+            root.contains("* `--file <PATH>` — A path.\n  .TH is prose\n\n  Another paragraph.\n"),
             "{root}"
         );
         assert!(
@@ -328,6 +357,10 @@ mod tests {
             "{root}"
         );
         assert!(root.contains("* `-V, --version` — Print version"), "{root}");
+        for (name, page) in &pages {
+            let trailing = page.lines().find(|line| line.ends_with([' ', '\t']));
+            assert_eq!(trailing, None, "a line of {name} ends in a space");
+        }
         assert!(root.contains("names none is a positional value"), "{root}");
         assert!(
             root.ends_with("Examples:\n```\n    $ tool use <x>\n```\n\\# not a heading\n"),
@@ -356,7 +389,6 @@ mod tests {
             name: name.to_owned(),
             aliases: Vec::new(),
             about: about.to_owned(),
-            hide: false,
             command: Command {
                 name: name.to_owned(),
                 about: about.to_owned(),
@@ -405,6 +437,23 @@ mod tests {
             }],
             ..Command::default()
         }
+    }
+
+    #[test]
+    fn backticks_in_code_do_not_end_it() {
+        let mut command = telling();
+        command.examples[0].code = "em run \"```\" `date`".to_owned();
+        command.outputs[1].name = "a`b".to_owned();
+        command.outputs[1].framing = "`x`".to_owned();
+        let pages = render_pages(&command, "em").unwrap();
+        let root = &pages[0].1;
+        assert!(
+            root.contains("````\n$ em run \"```\" `date`\n````\n"),
+            "{root}"
+        );
+        assert!(root.contains("* ``a`b`` — Framing: `` `x` ``.\n"), "{root}");
+        // Without any, a page is as it was.
+        assert_eq!(code("--file <PATH>"), "`--file <PATH>`");
     }
 
     #[test]
