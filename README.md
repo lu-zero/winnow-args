@@ -80,6 +80,7 @@ the brush and mold ports.
   and clap, for `just perf`.
 - `xtask/` (unpublished): the generators for the mold port, the examples and
   the mise shadow.
+- `scripts/`: the generators of the two figures under `docs/`.
 
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) shows how they fit together.
 
