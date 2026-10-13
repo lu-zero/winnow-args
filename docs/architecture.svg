@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1095" viewBox="0 0 720 770" role="img" aria-label="winnow-args: build time, run time, and man and documentation generation.">
+<rect width="1024" height="1095" fill="none"/>
+<defs>
+<marker id="arrow-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8a8a8a"/></marker>
+<marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#5faf5f"/></marker>
+</defs>
+<text x="20" y="22" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">BUILD TIME</text>
+<line x1="20" y1="28" x2="700" y2="28" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
+<rect x="20" y="44" width="210" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="125.0" y="70.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">your struct or enum</text>
+<text x="125.0" y="88.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">#[derive(Args)]</text>
+<rect x="270" y="44" width="210" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="375.0" y="70.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">winnow-args-derive</text>
+<text x="375.0" y="88.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">the proc macro</text>
+<rect x="20" y="140" width="206" height="60" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="123.0" y="166.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">fragments</text>
+<text x="123.0" y="184.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">with WINNOW_ARGS_SPEC</text>
+<rect x="262" y="140" width="210" height="60" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5"/>
+<text x="367.0" y="166.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">help data</text>
+<text x="367.0" y="184.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">static, read only</text>
+<rect x="494" y="140" width="206" height="60" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5"/>
+<text x="597.0" y="166.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">a parser</text>
+<text x="597.0" y="184.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">a match over the flags</text>
+<path d="M230 74 L268 74" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M375 104 L375 138" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M375 122 L123 122 L123 138" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M375 122 L597 122 L597 138" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<text x="20" y="232" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">RUN TIME</text>
+<line x1="20" y1="238" x2="700" y2="238" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
+<rect x="20" y="262" width="170" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="105.0" y="288.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">argv</text>
+<text x="105.0" y="306.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">words, borrowed</text>
+<rect x="225" y="262" width="215" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="332.5" y="288.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">token</text>
+<text x="332.5" y="306.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">-v  --long=value  word  --</text>
+<rect x="485" y="262" width="215" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="592.5" y="288.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">the parser</text>
+<text x="592.5" y="306.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">generated, or written by hand</text>
+<path d="M190 292 L223 292" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M440 292 L483 292" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M597 200 L597 260" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-g)"/>
+<text x="604" y="222" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="start">is</text>
+<rect x="20" y="358" width="195" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="117.5" y="384.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">FromArg</text>
+<text x="117.5" y="402.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">words to values</text>
+<rect x="250" y="358" width="190" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="345.0" y="384.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">finish</text>
+<text x="345.0" y="402.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">env, defaults, rules</text>
+<rect x="590" y="350" width="110" height="34" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5"/>
+<text x="645.0" y="372.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">Ok(Cli)</text>
+<rect x="590" y="392" width="110" height="34" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5"/>
+<text x="645.0" y="414.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">Err(Error)</text>
+<path d="M597 322 L597 340 L117 340 L117 356" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M215 388 L248 388" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M440 380 L588 367" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M440 396 L588 409" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<rect x="20" y="462" width="210" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="125.0" y="488.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">complete</text>
+<text x="125.0" y="506.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">answers the shell's script</text>
+<rect x="255" y="462" width="190" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="350.0" y="488.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">help</text>
+<text x="350.0" y="506.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">rendered when asked for</text>
+<rect x="510" y="462" width="190" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="605.0" y="488.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">report</text>
+<text x="605.0" y="506.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">error, tip, exit status</text>
+<path d="M645 426 L645 460" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M510 492 L447 492" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<text x="478" y="485" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="11" fill="#8a8a8a" text-anchor="middle">--help</text>
+<path d="M462 200 L462 444" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3"/>
+<path d="M462 444 L125 444 L125 460" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-g)"/>
+<path d="M350 444 L350 460" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-g)"/>
+<path d="M462 444 L575 444 L575 460" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-g)"/>
+<text x="468" y="222" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="start">read by</text>
+<text x="20" y="560" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">MAN AND DOCUMENTATION GENERATION</text>
+<line x1="20" y1="566" x2="700" y2="566" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
+<rect x="20" y="582" width="206" height="60" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="123.0" y="608.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">fragments</text>
+<text x="123.0" y="626.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">one file per derived type</text>
+<rect x="262" y="582" width="438" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="481.0" y="608.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">winnow-args-spec</text>
+<text x="481.0" y="626.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">stitches them into a command tree</text>
+<rect x="20" y="686" width="380" height="60" rx="6" fill="#5fafaf" fill-opacity="0.08" stroke="#5fafaf" stroke-width="1.5"/>
+<text x="210.0" y="712.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5fafaf" text-anchor="middle" font-weight="600">winnow-args-man, winnow-args-markdown</text>
+<text x="210.0" y="730.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">one page per command</text>
+<rect x="440" y="686" width="260" height="60" rx="6" fill="#5faf5f" fill-opacity="0.08" stroke="#5faf5f" stroke-width="1.5"/>
+<text x="570.0" y="712.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="14" fill="#5faf5f" text-anchor="middle" font-weight="600">pages</text>
+<text x="570.0" y="730.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="12.5" fill="#8a8a8a" text-anchor="middle">tool.1  tool-use.1  tool.md</text>
+<path d="M20 170 L8 170 L8 612 L18 612" fill="none" stroke="#5faf5f" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow-g)"/>
+<path d="M226 612 L260 612" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M481 642 L481 664 L210 664 L210 684" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+<path d="M400 716 L438 716" fill="none" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#arrow-n)"/>
+</svg>

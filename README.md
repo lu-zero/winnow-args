@@ -81,6 +81,8 @@ the brush and mold ports.
 - `xtask/` (unpublished): the generators for the mold port, the examples and
   the mise shadow.
 
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) shows how they fit together.
+
 ## Examples
 
 ```
@@ -101,6 +103,8 @@ what they parse, and say what to expect with `--help`. They are generated
 
 ## Documents
 
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md): an overview of the code, with a
+  diagram.
 - [`docs/DESIGN.md`](./docs/DESIGN.md): why it is built this way.
 - [`docs/CHECKLIST.md`](./docs/CHECKLIST.md): what is done, what is not, and
   where we chose a side.
