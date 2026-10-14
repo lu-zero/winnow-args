@@ -3,7 +3,8 @@
 
 Regular (non-doc) paragraphs cap at 10 lines, doc comments at 6 (they're
 user-facing rustdoc output), except Rust module docs (unlimited) and trait
-docs (relaxed). A blank comment line starts a new paragraph.
+docs (relaxed). A blank comment line starts a new paragraph, and so does
+each item of a Markdown list; the rows of a Markdown table are not counted.
 """
 import json
 import os
@@ -15,6 +16,7 @@ DOC_MAX = 6
 TRAIT_DOC_MAX = 18
 
 TRAIT_DECL_RE = re.compile(r"^(pub(\(.*?\))?\s+)?(unsafe\s+)?(auto\s+)?trait\b")
+LIST_ITEM_RE = re.compile(r"^([-*+]|\d+\.)\s")
 REFERENCE_RE = re.compile(r"(docs?/[\w./-]+\.md|\[[^\]]+\]\([^)]+\.md\))", re.IGNORECASE)
 
 RUST_EXTS = {".rs"}
@@ -26,8 +28,10 @@ PY_EXTS = {".py"}
 def split_paragraphs(contents):
     """Split comment content into paragraphs on blank lines.
 
-    ``` fenced regions are skipped entirely: not counted, don't break a
-    paragraph. Returns (start_idx, end_idx_exclusive, prose_len) tuples.
+    ``` fenced regions and table rows are skipped entirely: not counted, don't
+    break a paragraph. A list item starts a paragraph of its own, so a list is
+    judged item by item rather than as one block.
+    Returns (start_idx, end_idx_exclusive, prose_len) tuples.
     """
     paragraphs = []
     in_fence = False
@@ -45,11 +49,17 @@ def split_paragraphs(contents):
         if in_fence:
             last = idx
             continue
-        if s == "":
+        if s.startswith("|"):
+            if start is None:
+                start = idx
+            last = idx
+            continue
+        if s == "" or LIST_ITEM_RE.match(s):
             if start is not None and length > 0:
                 paragraphs.append((start, last + 1, length))
             start, length, last = None, 0, None
-            continue
+            if s == "":
+                continue
         if start is None:
             start = idx
         length += 1
