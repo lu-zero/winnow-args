@@ -20,9 +20,9 @@
 //!
 //! - `#[derive(Args)]` on a struct. A field is a flag or a positional, its type
 //!   says how many values it takes and what they convert to, and its doc comment
-//!   is its help. This is what most programs want, and the faster of the two.
-//! - By hand, with [`combinator`]. A flag is a [winnow] parser, and
-//!   `alt`, `repeat` and the rest of winnow combine flags into a command line.
+//!   is its help. Most programs use the derive.
+//! - By hand, with [`combinator`]. A flag is a [winnow] parser, combined with
+//!   `alt`, or with `dispatch!` on the flag's name.
 //!
 //! Either way the words are read where the shell left them: nothing is copied or
 //! re-split, and the bytes need not be UTF-8 until a value's type asks for text.
@@ -56,53 +56,44 @@
 //! # Ok::<(), winnow_args::Error>(())
 //! ```
 //!
-//! # Where to look
-//!
 #![cfg_attr(
     feature = "derive",
-    doc = "- [`derive@Args`], [`derive@Subcommand`], [`derive@ValueEnum`] and [`derive@Occurrence`]:
-  the derives. Each page lists every attribute it takes."
+    doc = "- [`derive@Args`], [`derive@Subcommand`], [`derive@ValueEnum`] and [`derive@Occurrence`].
+  Each page lists that derive's attributes."
 )]
-//! - [`combinator`]: the same command lines written by hand, and [`token`],
-//!   the lexer under both.
-//! - [`FromArg`]: what a value can be, and the types in [`value`] for a
-//!   `FromStr` type, a C-syntax number and `key=value`.
-//! - [`Error`] and [`report`]: what a failed parse holds, and how it is printed,
-//!   with a tip when something close to what was typed is accepted.
-//! - [`help`] and [`color`]: the help text and its theme. A description's
-//!   `` `quoted` ``, `*emphasized*` and `**strong**` spans are painted, each
-//!   by a paint of its own in [`color::Palette`].
-//! - [`complete`]: completion scripts for bash, zsh, fish, elvish and
-//!   PowerShell, for flags, subcommands and values.
-//! - [`response`]: `@file` words.
-//! - [`run`]: calling the command a line selected, with `#[arg(run)]` on the
-//!   enum of subcommands.
-//! - [`with_env`]: a test's own environment variables.
+//! - [`combinator`] is the parser written by hand. [`token`] is the lexer.
+//! - [`FromArg`] reads a value's bytes as a type. [`value`] covers a `FromStr`
+//!   type, a C-syntax number and `key=value`.
+//! - [`Error`] is a failed parse. [`report`] prints it, and names a close
+//!   spelling when there is one.
+//! - [`help`] is the help text and [`color`] its theme. A `` `quoted` ``,
+//!   `*emphasized*` or `**strong**` span is painted, each by its own paint in
+//!   [`color::Palette`], and the marks are kept.
+//! - [`complete`] writes completion scripts for bash, zsh, fish, elvish and
+//!   PowerShell.
+//! - [`response`] reads `@file` words.
+//! - [`run`] calls the command the line selected. `#[arg(run)]` is on the
+//!   subcommand enum.
+//! - [`with_env`] sets environment variables for one test.
 //!
-//! Man and markdown pages are made by `winnow-args-man` and
-//! `winnow-args-markdown`, from what the derives write when the environment
-//! variable `WINNOW_ARGS_SPEC` names a directory; the derive crate's
-//! documentation says how.
+//! `winnow-args-man` and `winnow-args-markdown` build man and markdown pages
+//! from what the derives write when `WINNOW_ARGS_SPEC` names a directory. The
+//! derive crate's documentation says how.
 //!
 //! # Entry points
 //!
-//! - [`Args::parse`] in `main`. Help, version and a failure are printed, and
-//!   the process exits.
-//! - [`Args::try_parse`] returns the [`Error`] for the caller to handle.
-//! - [`Args::parse_from`] takes the words after the program name: what a test
-//!   calls.
+//! - [`Args::parse`] prints help, version or a failure, and the process exits.
+//! - [`Args::try_parse`] returns the [`Error`].
+//! - [`Args::parse_from`] takes the words after the program name.
 //! - [`Args::parse_from_argv`] takes the whole line, program name first.
 //! - [`Args::parse_words`] takes words that are already [`BStr`]s.
-//! - [`Args::completion_request`] goes before any of them in a program that
-//!   has [`complete`] scripts.
+//! - [`Args::completion_request`] answers one completion, before [`Args::parse`].
 //!
 //! # Performance
 //!
 //! The parser is generated at compile time, so a parse costs the same however
-//! many commands the program declares; clap and bpaf build theirs at each
-//! start. A parse is a few thousand instructions and a few hundred
-//! nanoseconds. The measurements, against clap, bpaf and usage, and the
-//! method are in the repository's
+//! many commands the program declares. The measurements and the method are in
+//! the repository's
 //! [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
 //!
 //! # Cargo features

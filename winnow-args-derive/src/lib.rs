@@ -1,53 +1,50 @@
 //! The derives of winnow-args: `Args`, `Subcommand`, `ValueEnum` and `Occurrence`.
 //!
-//! Each is documented with every attribute it accepts. `#[winnow_args(...)]` is
-//! `#[arg(...)]` under another name, for a type whose other derives claim `arg`.
+//! Each page lists every attribute its derive accepts. `#[winnow_args(...)]`
+//! is `#[arg(...)]` where another derive claims `arg`.
 //!
-//! What `#[derive(Args)]` generates is one loop:
+//! `#[derive(Args)]` generates one loop:
 //!
-//! 1. read the next item of the command line (a flag, a word, `--`);
-//! 2. `match` its name against the struct's flags, and store the value in a
-//!    local variable for that field;
-//! 3. give a plain word to the next positional field, in declaration order,
-//!    unless it names a subcommand, which then parses the rest;
-//! 4. when the words run out, apply defaults, check the rules, build the struct.
+//! 1. read the next item: a flag, a word, or `--`;
+//! 2. `match` its name against the struct's flags and store the value;
+//! 3. give a plain word to the next positional, in order. A word that names a
+//!    subcommand selects it, and that variant's `Args` parses the rest;
+//! 4. apply the defaults, check the rules and build the struct.
 //!
-//! The names are patterns of a `match`, which rustc compiles: no list of
-//! parsers is walked, whatever the number of flags.
+//! The names are patterns of a `match`, which rustc compiles. No list of
+//! parsers is walked.
 //!
 //! # Documentation
 //!
-//! When the environment variable `WINNOW_ARGS_SPEC` holds the absolute path of
-//! a directory, each derive also writes `CRATE/FILE/Type.toml` under it,
-//! `FILE` being the type's source file: what help knows of the type, with a
-//! flatten or a subcommand as the other type's path, as it is written. A
-//! binary or an example writes under `CRATE-bin`, apart from the library of
-//! its package. `winnow-args-spec` reads them back, for `winnow-args-man` and
-//! `winnow-args-markdown`. `cargo check` is enough, and Cargo compiles the
-//! crate again when the variable changes.
+//! When `WINNOW_ARGS_SPEC` is the absolute path of a directory, each derive
+//! writes `CRATE/FILE/Type.toml` there. `FILE` is the type's source file. The
+//! file records what help knows. A flatten or a subcommand is the other type's
+//! path, written as the source writes it. A binary or an example writes under
+//! `CRATE-bin`.
 //!
-//! Two types of one name are told apart by their modules, which a fragment
-//! records: those of the source file, then the `mod name { }` blocks the file
-//! has around the type (the file is read for them). `add::Opts` is the `Opts`
-//! of a module `add`, and a bare `Opts` what the file's `use` lines bring in
-//! under that name, or the one the file declares. Where that
-//! does not say which, `winnow-args-spec` asks for a name:
-//! `#[arg(spec = "AddOpts")]` on the type files it under that name, and the
-//! same on a field or a variant that holds the type finds it there. Two types
-//! of one name in one file need it, and the build with the variable set
-//! says so. It also fails where the path a field writes does not lead to its
-//! type (an alias, a module under another name, a `spec` not repeated), so a
-//! page never describes another type.
+//! `winnow-args-spec` reads those files for `winnow-args-man` and
+//! `winnow-args-markdown`. `cargo check` is enough. Cargo compiles the crate
+//! again when the variable changes.
 //!
-//! Set the variable for the documentation build alone, not in a shell: a
-//! test or a doctest would write its types beside the program's.
-//! rust-analyzer's macro server writes nothing.
+//! Two types of one name are distinguished by the modules of the source file,
+//! then by the `mod name { }` blocks around the type. The file is read for
+//! those blocks. `add::Opts` is the `Opts` of a module `add`. A bare `Opts` is
+//! what a `use` in the file brings in, or the `Opts` the file declares.
 //!
-//! A value's choices are found under the name of its type. Where that name is
-//! an alias, or the type implements `FromArg` by hand, the build with the
-//! variable set fails at the field until `spec = "Name"` or `choices(...)`
-//! states them there, and fails again if the choices stated are not what the
-//! type accepts.
+//! Where the modules and `use` lines leave the type unnamed,
+//! `#[arg(spec = "AddOpts")]` files the type under that name, and the field
+//! or variant that holds it repeats it. Two types of one name in one file
+//! need this. The build fails when the path does not lead to the type: an
+//! alias, a module under another name, or a `spec` missing on one side.
+//!
+//! Set the variable for the documentation build alone. A test or a doctest
+//! would write its types next to the program's. rust-analyzer's macro server
+//! writes nothing.
+//!
+//! A value's choices are filed under its type's name. A field fails the build
+//! when that type is an alias, or implements `FromArg` by hand, until it
+//! states `spec = "Name"` or `choices(...)`. Choices the type does not accept
+//! fail the build again.
 
 use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
@@ -59,11 +56,12 @@ use syn::{
 
 mod spec;
 
-/// Derive `Args` for a struct with named fields: the generated loop parses the whole command line.
+/// Derive `Args` for a struct with named fields.
 ///
-/// Every attribute is `#[arg(...)]` (or `#[winnow_args(...)]`); a field with none is `--field-name`.
-/// Doc comments are the help text. On a terminal a `` `quoted` ``, `*emphasized*` or `**strong**` span
-/// of one is painted, marks kept.
+/// Attributes are `#[arg(...)]`, or `#[winnow_args(...)]` where another derive
+/// claims `arg`. With no `short`, `long` or `plus`, a field is `--field-name`.
+/// The doc comment is the help. A `` `quoted` ``, `*emphasized*` or
+/// `**strong**` span in it is painted, and the marks are kept.
 ///
 /// ```ignore
 /// use winnow_args::Args;
@@ -97,161 +95,214 @@ mod spec;
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
 ///
-/// What a field's type means. A repeated single-value flag keeps the last value.
-/// `values` and `delimiter` change what a `Vec` takes.
+/// The type says how many values a field takes. A repeated flag that takes one
+/// value keeps the last. `values` and `delimiter` change a `Vec`.
 ///
 /// | Type | Flag | Positional |
 /// |---|---|---|
 /// | `bool` | a switch | |
-/// | integer, with `count` | how many times it was given | |
-/// | `T` | one value; an error if absent and without `env` or `default` | a required word |
-/// | `Option<T>` | one value, or `None`; with `require_equals`, a bare flag is `None` | an optional word |
-/// | `Vec<T>` | one value per occurrence | every word left |
-/// | `Option<bool>`, with `plus` | `-x` is `Some(true)`, `+x` `Some(false)` | |
+/// | an integer, with `count` | how many times the flag was given | |
+/// | `T` | one value. Absent is an error without `env` or `default` | a required word |
+/// | `Option<T>` | one value, or absent. With `require_equals`, a bare flag is `None` | an optional word |
+/// | `Vec<T>` | one value each time the flag is given | every word left |
+/// | `Option<bool>`, `plus` equal to `short` | `-x` is `Some(true)`, `+x` is `Some(false)` | |
 ///
 /// # Struct options
 ///
-/// Naming and help:
+/// Name and help:
 ///
-/// - `name = "…"`: the program name in the usage line (`argv[0]` when empty) and in completion scripts, which need it.
-/// - `version`, `version = "…"`: supply `-V`/`--version`; bare, the crate's `CARGO_PKG_VERSION`.
-/// - `about`, `long_about`, `after_help`, `after_long_help`: help text; the first two default to the doc comment.
-/// - `disable_help_flag`, `disable_help_short` (`--help` only), `disable_version_flag`,
-///   `disable_help_subcommand`: do not supply that item.
-/// - `arg_required_else_help`: no arguments at all is a request for help.
-/// - `example = "tool build --release"`: a command line to try, in an Examples section after the lists;
-///   repeatable. `example("…", header = "…", help = "…")` says what it is an example of on the line
-///   above, and what it does on the `--help` page.
-/// - `next_help_heading = "…"`: the heading of this struct's fields that name none with `help_heading`.
-///   On a struct that is flattened, its flags are one section of the page that takes them.
-/// - `heading("Title", help = "…")`: a paragraph `--help` shows under that heading, before its entries.
-///   A flattened struct's is read unless the struct that flattens it says its own for the title.
-/// - `flatten_help`: each subcommand's usage line, description and arguments stand where the list of
-///   subcommands would; needs a `subcommand` field.
-/// - `default_subcommand_help`: the default subcommand's page follows this one; needs
-///   `default_subcommand`, which the list marks `(default)` either way.
+/// - `name = "…"`: the program name in the usage line, where an empty name
+///   means `argv[0]`. A completion script needs the name set.
+/// - `version`, or `version = "…"`: add `-V` and `--version`. With no string,
+///   the text is the crate's `CARGO_PKG_VERSION`.
+/// - `about`: the description on `-h`. It defaults to the doc comment's first
+///   paragraph.
+/// - `long_about`: the description on `--help`. It defaults to the whole doc
+///   comment, and `--help` shows `about` when this is empty.
+/// - `after_help`: text after the lists, on `-h`.
+/// - `after_long_help`: that text on `--help`. `--help` shows `after_help`
+///   when this is empty.
+/// - `disable_help_flag`, `disable_version_flag`, `disable_help_subcommand`:
+///   leave that item out. `disable_help_short` keeps `--help` and leaves `-h` out.
+/// - `arg_required_else_help`: an empty command line asks for help.
+/// - `example = "tool build --release"`: one line in an Examples section after
+///   the lists. Repeat it for another line.
+///   `example("…", header = "…", help = "…")` sets a heading above the line
+///   and the sentence `--help` shows for it. Either key may be left out.
+/// - `next_help_heading = "…"`: the heading for fields that set no
+///   `help_heading`. On a flattened struct, that heading is a section of the
+///   page that takes its flags.
+/// - `heading("Title", help = "…")`: the paragraph `--help` shows under that
+///   heading, before the entries. A flattened struct's paragraph is used for
+///   a title unless the parent gives one.
+/// - `flatten_help`: each subcommand's usage line, description and arguments
+///   replace the subcommand list. It needs a `subcommand` field.
+/// - `default_subcommand_help`: the default subcommand's page follows this
+///   one. It needs `default_subcommand`. The list marks that subcommand
+///   `(default)` whenever one is set.
 ///
-/// For the generated documentation only, read by `winnow-args-spec`:
+/// For the pages `winnow-args-spec` builds. Parsing ignores them:
 ///
-/// - `effect = "read"`, `"write"` or `"destructive"`: what running it does to what it works on.
-/// - `output("json", default, framing = "json", help = "…")`: a form its output takes; repeatable.
-///   A flattened struct's are the command's too.
-/// - `exit_code(2, "invalid atom")`: what an exit status means; repeatable, and flattened likewise.
+/// - `effect = "read"`, `"write"` or `"destructive"`: what the command does.
+/// - `output("json", default, framing = "json", help = "…")`: one form of the
+///   output. Repeat it for another. A flattened struct's forms are included.
+/// - `exit_code(2, "invalid atom")`: what an exit status means. Repeat it.
+///   A flattened struct's codes are included.
 ///
-/// Grammar:
+/// The command line:
 ///
-/// - `unknown_flags = "value"`: a flag-like word naming no flag is a positional value; `"error"` is the default.
-/// - `long_only`: a long name may be spelled with one dash (GNU `getopt_long_only`).
+/// - `unknown_flags = "value"`: a flag-like word that names no flag is a
+///   positional value. `"error"` is the default.
+/// - `long_only`: a long name may be written with one dash (`getopt_long_only`).
 /// - `plus_options`: `+abc` is a bundle of `+` options, for fields with `plus`.
-/// - `restart_token = "…"`: a word that starts a new run of positionals; flags resume and keep their values.
-/// - `default_subcommand = "…"`: the subcommand for a line whose first word names none; needs a `subcommand` field.
-/// - `default_subcommand_flags`: a flag this struct does not take selects the default subcommand too, which
-///   reads it as its own (`tool -p pkg` is `tool run -p pkg`). Every later word is then the subcommand's,
-///   one that names another subcommand included, and so is every later flag: one of this struct's that is
-///   not `global` goes before (`tool -qp pkg`, not `tool -pq pkg`).
-/// - `group("name", required, multiple)`: declare a group; fields join it with `group = "name"`.
-///   `required` means at least one member. Without `multiple`, a second member conflicts.
-/// - `spec = "…"`: the name the documentation files the type under, in place of its own. A field or a variant
-///   that holds the type states it too. See [Documentation](crate#documentation).
+/// - `restart_token = "…"`: that word starts the positionals again. Flags
+///   resume and keep their values.
+/// - `default_subcommand = "…"`: the subcommand used when the first word names
+///   none. It needs a `subcommand` field.
+/// - `default_subcommand_flags`: with `default_subcommand`, a flag this struct
+///   does not take selects it, and it reads that flag (`tool -p pkg` is
+///   `tool run -p pkg`). The words and flags after that one are the
+///   subcommand's, and a word that names another subcommand is one of those
+///   words. A flag of this struct without `global` comes first (`tool -qp pkg`).
+/// - `group("name", required, multiple)`: a group. A field joins it with
+///   `group = "name"`. `required` means at least one member is present.
+///   Without `multiple`, a second member conflicts with the first.
+/// - `spec = "…"`: the name the pages file this type under, instead of its own.
+///   A field or a variant that holds the type states the same name. See
+///   [Documentation](crate#documentation).
 ///
 /// # Field roles
 ///
-/// A field is a flag unless it is one of these. Most programs need `positional`, `subcommand` and
-/// `flatten`. `sequence` and `unknown` are for tools whose flags mean something by their order
-/// (see `Occurrence`). `flatten`, `sequence`, `unknown` and `skip` take no other option, except
-/// `sequence, unknown`.
+/// A field is a flag unless it has one of these roles. `flatten`, `sequence`,
+/// `unknown` and `skip` take no other option. `sequence` may add `unknown`.
+/// `flatten` and `sequence` may add `spec`.
 ///
-/// - `positional`: a plain word. Required `T`, then `Option<T>`, then one `Vec<T>` last (it takes
-///   every word left). Any other order is a compile error.
-/// - `subcommand`: a `Subcommand` enum, `E` or `Option<E>`; takes no other option.
-/// - `flatten`: another flags-only `Args` struct, parsed as if declared here (nested too). A flag spelled in
-///   both is a compile error. The flattened struct has no positionals, subcommand, `sequence`, `unknown`,
-///   `keywords` or generics, nor `unknown_flags = "value"`; the parent no generics. A `global` flag of
-///   the flattened struct is global from the struct that flattens it.
-/// - `sequence`: a `Vec` of an `Occurrence` enum: its flags and words, kept in order, its flags in help.
-///   One per struct; a spelling it shares with the struct is a compile error.
-/// - `sequence, unknown`: the same, with unknown flags offered to the enum's `unknown` variant.
-/// - `unknown`: a `Vec<T>` of the flag-like words no flag takes, whole. One per struct.
-/// - `skip`: left at `Default`, never parsed.
+/// - `positional`: a plain word. The fields run required `T`, then `Option<T>`,
+///   then one `Vec<T>` last. Another order is a compile error.
+/// - `subcommand`: an enum that derives `Subcommand`, as `E` or `Option<E>`.
+///   It takes no other option.
+/// - `flatten`: another `Args` struct's flags, parsed in this loop, including
+///   a struct it flattens. A shared spelling is a compile error. A `global`
+///   flag there is global here. That struct is flags only: no positional,
+///   subcommand, `sequence`, `unknown`, `keywords`, generic or
+///   `unknown_flags = "value"`. This struct has no generic either.
+/// - `sequence`: a `Vec` of an `Occurrence` enum. Its flags and words stay in
+///   order, and its flags appear in this help. One per struct. A spelling
+///   shared with this struct is a compile error.
+/// - `sequence, unknown`: as `sequence`, and an unknown flag goes to the
+///   enum's `unknown` variant.
+/// - `unknown`: a `Vec<T>` of the flag-like words no flag takes, each word
+///   whole. One per struct.
+/// - `skip`: holds `Default::default()`. The command line does not set it.
 ///
 /// # Flag names
 ///
-/// - `short`, `short = 'x'`: `-x`; bare, the field name's first letter. A second `short` is another letter.
-/// - `long`, `long = "name"`: `--name`, matched in full; bare, the field name in kebab-case. A second `long` is another name.
-/// - `alias = "…"`, `alias("…", …)`: more long names, not shown in help.
-/// - `negate`, `negate = "no-name"`: `--no-name` sets a `bool` false; bare, `--no-<long>`.
-/// - `two_dashes`: under `long_only`, the long name is never spelled with one dash (`--omagic`).
-/// - `prefix`: an ASCII `short` that always takes the rest of its word (`-lfoo`); a value flag.
-/// - `plus = 'c'`: also spelled `+c` in a `plus_options` struct; on an `Option<bool>` with `short = 'c'`,
-///   `-c` is `Some(true)` and `+c` `Some(false)`.
-/// - `global`: also accepted after a subcommand word, at any depth.
+/// - `short`, or `short = 'x'`: `-x`. With no letter, the field name's first
+///   character. A second `short` is another letter, and help lists both.
+/// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
+///   `_` in the field name is written `-`. Help lists the first `long` only.
+/// - `alias = "…"`, or `alias("…", …)`: further long names. Help leaves them out.
+/// - `negate`, or `negate = "no-name"`: `--no-name` sets the `bool` false.
+///   With no string, the name is `no-` plus the long name. A leading `--` on
+///   the string is dropped.
+/// - `two_dashes`: with `long_only`, this long name keeps both dashes (`--omagic`).
+/// - `prefix`: an ASCII `short` takes the rest of its word (`-lfoo`). The flag
+///   takes a value.
+/// - `plus = 'c'`: also `+c`, on a struct with `plus_options`. On `Option<bool>`
+///   whose `short` is the same letter, `-c` is `Some(true)` and `+c` is
+///   `Some(false)`.
+/// - `global`: accepted after a subcommand word, at any depth.
 ///
 /// # Values
 ///
-/// A value is any `T: FromArg`; the field's type says how many, as the table above has it.
+/// A value is any `T: FromArg`. The table says how many the type takes.
 ///
-/// - `from_str`: the value's type is not `FromArg` but `FromStr`, and is parsed with that: a type of
-///   another crate (`camino::Utf8PathBuf`, a `url::Url`) with no wrapper in the field. Its error is the
-///   message. The type says nothing of its choices or of what a shell completes: state `choices` or `hint`.
-///
-/// - `count`: an integer counting occurrences.
-/// - `value_name = "…"`: the placeholder in help.
-/// - `delimiter = ','`: split each value of a `Vec` field.
-/// - `values = N`: each occurrence of a `Vec` flag takes `N` words, whatever they look like.
-/// - `values = 1..`, `values = 2..=3`: at least and at most that many words an occurrence; those after
-///   the first are taken while they are not flag-like. Positionals after such a flag need a flag or `--`
-///   before them.
-/// - `value_terminator = ";"`: the word that ends such a run, itself dropped.
+/// - `from_str`: parse with `FromStr` instead of `FromArg`, for a type from
+///   another crate (`camino::Utf8PathBuf`, `url::Url`). The error text is that
+///   parse error. The type brings no choices and no completion hint: set
+///   `choices` or `hint`.
+/// - `count`: an integer. Each time the flag is given adds one.
+/// - `value_name = "…"`: the placeholder in help. With none, the field name
+///   in capitals.
+/// - `delimiter = ','`: split one value of a `Vec` on this ASCII character.
+/// - `values = N`: each time a `Vec` flag is given, it takes `N` words,
+///   whatever they look like.
+/// - `values = 1..`, or `values = 2..=3`: at least, and at most, that many
+///   words each time. After the first, a word is taken while it does not look
+///   like a flag. A positional after this flag needs a flag, or `--`, before it.
+/// - `value_terminator = ";"`: the word that ends a `values` range. The word
+///   is dropped.
 /// - `choices("a", "b")`: the only values accepted.
-/// - `env = "VAR"`, `default = "…"`: fallbacks after the command line, in that order; an `Option<T>`
-///   field then holds `Some`. A switch's variable is true unless empty, `0`, `false`, `no` or `off`.
-///   An unparseable `count` variable is left unset, not an error.
-/// - `default_fn = path`: a function returning the field's value (for a `Vec`, the list), called when
-///   nothing else gave one; `default_note = "…"` is what help shows for it.
-/// - `default_if("--flag", "v")`: the default when `--flag` was given; `default_if("--flag", "x", "v")`
-///   when its value is `x`, whose type must be `PartialEq`. Tried after `env` and before `default`,
-///   in order; the selector is as for the rules below.
-/// - `default_missing = "…"`: the value of a flag given without one, which makes its value optional.
-/// - `require_equals`: the value only attached (`--name=v`, `-nv`); with `default_missing`, a bare flag
-///   leaves the next word alone, and on an `Option` field a bare flag is `None`.
-/// - `keep_equals`: a short flag's attached value keeps a leading `=` (`-L=dir`).
-/// - `allow_hyphen_values`: the next word is the value, flag-like or `--` included.
-/// - `allow_negative_numbers`: a negative number is a value, for a flag or a positional.
-/// - `keywords`: on a flag of a type deriving `Args`, each value is `--value` of that type (`-z now`).
-/// - `spec = "…"`: the name the documentation finds the field's type under, when it is not the type's own:
-///   the type states a `spec`, or is named here through an alias. Also on a `flatten` or `sequence` field.
+/// - `env = "VAR"`: used when the command line left the field unset. On
+///   `Option<T>` the field is then `Some`. A switch is true unless the
+///   variable is empty, `0`, `false`, `no` or `off`. A `count` variable that
+///   does not parse is left unset.
+/// - `default = "…"`: parsed as the field's value when the command line, `env`
+///   and `default_if` left it unset. On `Option<T>` the field is then `Some`.
+/// - `default_fn = path`: a function returning the field's value, or the whole
+///   list for a `Vec`, called at the same point as `default`. Setting both is
+///   a compile error. `default_note = "…"` is the text help shows for it.
+/// - `default_if("--flag", "v")`: this default when `--flag` was given.
+///   `default_if("--flag", "x", "v")` when that field's value equals `x`
+///   (`PartialEq`). Tried after `env` and before `default`, in the order
+///   written. The first string names a field, as under [Rules](#rules).
+/// - `default_missing = "…"`: the value when the flag was given without one.
+///   The value is then optional.
+/// - `require_equals`: the value is attached (`--name=v`, `-nv`). With
+///   `default_missing`, a bare flag leaves the next word alone. On `Option<T>`,
+///   a bare flag is `None`.
+/// - `keep_equals`: an attached short value keeps a leading `=` (`-L=dir`).
+/// - `allow_hyphen_values`: the next word is the value when it looks like a
+///   flag, and when it is `--`.
+/// - `allow_negative_numbers`: a negative number is a value, on a flag or a
+///   positional.
+/// - `keywords`: the flag's type derives `Args`, and each value is a flag of
+///   that type (`-z now`).
+/// - `spec = "…"`: the name the pages find this field's type under, when that
+///   is not the type's own name. The type has `spec`, or this field names it
+///   through an alias. `flatten` and `sequence` take it too.
 ///
 /// # Positionals
 ///
-/// - `double_dash = "…"`: how `--` treats it: `"optional"` (default), `"required"` (only words after it),
-///   `"automatic"` (flags stop once it has a value), `"preserve"` (a `--` reaching it is a value).
-/// - `stop_flags`: once it has a value, flags stop, whatever its `double_dash`.
+/// - `double_dash = "…"`: `"optional"` (default) takes a word on either side
+///   of `--`. `"required"` takes every word after `--` and none before: at
+///   most one, outside the order in [Field roles](#field-roles).
+///   `"automatic"` stops flags once the field has a value. `"preserve"` takes
+///   a `--` that reaches it as a value, and that `--` stops nothing.
+/// - `stop_flags`: once it has a value, flags stop, for any `double_dash`.
 ///
 /// # Rules
 ///
-/// Selectors name another field: `"--long"`, `"-s"`, a positional's name or the field's name.
+/// A string here names another field: `"--long"`, `"-s"`, a positional's
+/// placeholder, or the field's name.
 ///
-/// - `required`: the field must hold a value once defaults are applied. A bare `Vec` may be empty without it.
+/// - `required`: after `env` and the defaults, the field holds a value. A
+///   `Vec` without `required` may be empty.
 /// - `required_unless("…", …)`: required unless one of them has a value.
-/// - `conflicts("…", …)`: not supplied together with these.
-/// - `overrides("…", …)`: the last of this and these supplied wins.
-/// - `requires("…", …)`: these must have a value when this is supplied.
-/// - `group = "name"`: a member of a struct-level group.
+/// - `conflicts("…", …)`: the parse fails when this field and any of those are
+///   both supplied.
+/// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
+/// - `requires("…", …)`: when this field is supplied, each of those has a value.
+/// - `group = "name"`: this field is a member of that group.
 ///
 /// # Help
 ///
-/// - `help = "…"`, `long_help = "…"`: replace the doc comment's first paragraph and whole text.
-/// - `help_heading = "…"`: list it under that heading instead of "Options".
-/// - `warning = "…"`: what to know before using it, shown by `--help` as `Warning: …`.
-/// - `effect = "destructive"`: what giving it does (`"read"`, `"write"`, `"destructive"`), for the
-///   generated documentation.
-/// - `hint = "dir"`: what the value is, for the shell that completes it: `"file"`, `"dir"`, `"command"`,
-///   or `"none"` for one no shell can know. Unstated, the type says (`FromArg::HINT`): a file for a
-///   `PathBuf`, a `String` or an `OsString`, nothing for any other.
-/// - `complete = path::to::function`: a `fn(&str) -> Vec<winnow_args::complete::Candidate>` that answers
-///   what the value can be, given what is typed of it, when a shell completes it. It answers alone, so
-///   not beside `hint`, and each candidate is one plain word: the scripts quote nothing for the shell.
-/// - `hide`: leave it out of help and completion.
+/// - `help = "…"`: replaces the first paragraph of the doc comment, and the
+///   whole text when `long_help` is absent.
+/// - `long_help = "…"`: replaces the whole text.
+/// - `help_heading = "…"`: list the field under this heading. Fields with none
+///   are listed under "Options", or under the struct's `next_help_heading`.
+/// - `warning = "…"`: `--help` shows it as `Warning: …`.
+/// - `effect = "read"`, `"write"` or `"destructive"`: what giving the flag
+///   does, for the pages.
+/// - `hint = "file"`, `"dir"`, `"command"` or `"none"`: what a completing
+///   shell offers for the value. With no hint, `FromArg::HINT` decides: a
+///   file for `PathBuf`, `String` and `OsString`, and nothing for any other type.
+/// - `complete = path`: `fn(&str) -> Vec<winnow_args::complete::Candidate>`,
+///   called with the text typed so far. It is the value's only completion, so
+///   the field has no `hint`. Each candidate is one word, and the script
+///   inserts it as it is.
+/// - `hide`: left out of help and of completion.
 #[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -269,11 +320,13 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
     .into()
 }
 
-/// Derive `Subcommand` (and `Args`, so the enum can be the whole command line) for an enum of subcommands.
+/// Derive `Subcommand` for an enum of subcommands. The enum also implements
+/// `Args`, so it can be a whole command line.
 ///
-/// A variant is a unit, or holds one `Args` type, which may be `Box`ed; a parent struct holds the enum in
-/// a `subcommand` field. The doc comments are the help text. As a whole command line the enum has no
-/// name, version or about: wrap it in a struct for those, and for completion scripts.
+/// A variant is a unit, holds one `Args` type (which may be `Box`ed), or has
+/// named fields. A parent struct holds the enum in a `subcommand` field. The
+/// doc comment is the help. Used as the whole command line, the enum has no
+/// program name and no version. A completion script needs a struct with `name`.
 ///
 /// ```ignore
 /// use winnow_args::{Args, Subcommand};
@@ -314,23 +367,36 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
 ///
-/// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
-///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
-/// - Enum: `spec = "…"`: the name the documentation files the enum under, in place of its own.
-/// - Enum: `run`, `run_async`: implement [`Run`](https://docs.rs/winnow-args/latest/winnow_args/run/trait.Run.html)
-///   or `RunAsync` for the enum, by calling it on the type the selected variant holds. Every variant holds
-///   a type, each implements the trait, and all produce the same `Output`; two variants may hold one type.
-///   The enum then implements it for every context, so it takes no implementation of its own.
-/// - Variant: `name = "…"`: the word that selects it.
-/// - Variant: `spec = "…"`: the name the documentation finds the variant's type under, when it is not the type's own.
-/// - Variant: `alias = "…"`, `alias("…", …)`: other words, shown in help; `alias_hidden` is the same, not shown.
-/// - Variant: `hide`: leave it out of the list in help and completion.
-/// - Variant: `help = "…"`: the one-line description; `long_help = "…"` is accepted and unused in the list.
+/// # Enum
 ///
-/// A variant with named fields is a command that takes them: the fields are declared as a struct's are,
-/// and the variant's doc comment and its other options (`example`, `flatten_help`, `group(…)`, …) are that
-/// command's. `help` and `long_help` are then its `about` and `long_about`. An enum with `run` holds
-/// types, and has no such variant.
+/// - `rename_all = "kebab-case"` (default), `"lowercase"`, `"UPPERCASE"`,
+///   `"snake_case"` or `"verbatim"`. `DryRun` is then `dry-run`, `dryrun`,
+///   `DRYRUN`, `dry_run` or `DryRun`. A variant's `name` replaces this.
+/// - `spec = "…"`: the name the pages file this enum under, instead of its own.
+/// - `run` or `run_async`, once. The enum implements `Run` or `RunAsync` by
+///   calling that method on the held type. Every variant holds a type that
+///   implements the trait, two may hold the same type, and all share one
+///   `Output`. The enum implements it for every context those types take.
+///
+/// # Variants
+///
+/// - `name = "…"`: the word that selects it, instead of `rename_all`.
+/// - `alias = "…"`, or `alias("…", …)`: other words, shown in the list.
+///   `alias_hidden` is not shown.
+/// - `hide`: left out of help and of completion.
+/// - `spec = "…"`: the name the pages find this variant's type under. A unit
+///   holds nothing, and `spec` there is an error.
+/// - `help = "…"`: the one line the list shows. It replaces the first
+///   paragraph of the doc comment. A unit's `--help` shows the whole doc
+///   comment when this is absent, and this line when it is set.
+/// - `long_help = "…"`: on a variant with named fields, that command's
+///   `long_about`. The command list still shows one line. On a unit, or a
+///   variant that holds a type, `long_help` is unused.
+///
+/// A variant with named fields is a command. Its fields are declared as a
+/// struct's are, and its doc comment and other options (`example`,
+/// `flatten_help`, `group`, …) are that command's. An enum with `run` has no
+/// such variant. A generic enum holds a struct that derives `Args`.
 ///
 /// ```ignore
 /// #[derive(Subcommand, Debug, PartialEq)]
@@ -782,12 +848,14 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
     }
 }
 
-/// Derive `Occurrence` for an enum: one variant per flag or positional, kept
-/// in command-line order by an `#[arg(sequence)]` field of an `Args` struct.
+/// Derive `Occurrence` for an enum of flags and positionals. An
+/// `#[arg(sequence)]` field of an `Args` struct keeps them in command-line order.
 ///
-/// A variant is a unit (a switch) or holds one value type; a `Spanned<T>` also records the offset and
-/// whether the value was attached. A variant with no `short` or `long` is `--variant-name`. Doc comments
-/// are the help text. A spelling used twice, here or in the parent, is a compile error.
+/// A variant is a unit (a switch) or holds one value. `Spanned<T>` records the
+/// offset and whether the value was attached. With no `short`, `long` or
+/// `alias`, the name is kebab case (`AsNeeded` is `--as-needed`). The doc
+/// comment is the help. A spelling used twice, here or on the parent, is a
+/// compile error.
 ///
 /// ```ignore
 /// use winnow_args::{Args, Occurrence};
@@ -826,34 +894,62 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
 ///
-/// Enum options, the default of every value variant:
+/// # Enum
 ///
-/// - `allow_hyphen_values`, `keep_equals`: as for a field.
+/// - `spec = "…"`: the name the pages file this enum under, instead of its own.
 ///
-/// Variant names:
+/// The default for every variant that holds a value:
 ///
-/// - `short = 'x'`, `long`, `long = "name"`: as for a field; a second `long` is another name.
-/// - `alias = "…"`, `alias("…", …)`: more long names.
-/// - `two_dashes`, `prefix`: as for a field.
+/// - `allow_hyphen_values`: the next word is the value when it looks like a
+///   flag, and when it is `--`.
+/// - `keep_equals`: an attached short value keeps a leading `=`.
 ///
-/// Variant values, as for a field:
+/// # Names
 ///
-/// - `value_name = "…"`, `require_equals`, `keep_equals`, `allow_hyphen_values`, `allow_negative_numbers`,
-///   `default_missing = "…"`.
+/// - `short = 'x'`: `-x`. One letter.
+/// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
+///   the variant's name in kebab case. A second `long` is another name, and
+///   help lists the first.
+/// - `alias = "…"`, or `alias("…", …)`: more long names. Help lists an alias
+///   only when it is the first long name.
+/// - `two_dashes`: with the parent's `long_only`, this name keeps both dashes.
+/// - `prefix`: an ASCII `short` takes the rest of its word (`-lfoo`). The
+///   variant holds a value.
 ///
-/// Variant roles, at most one of each in an enum:
+/// # Values
 ///
-/// - `positional`: each plain word is that variant; its `value_name` defaults to the variant's name.
-/// - `unknown`: takes a flag no variant names, whole, for a parent with `sequence, unknown`.
-/// - `bundle`: takes a word of several short flags (`-sS`), whole, ahead of its letters.
-/// - `skip`: built by the program, never parsed.
+/// - `value_name = "…"`: the placeholder in help. With none, a flag's is
+///   `VALUE` and a positional's is the variant's name in capitals.
+/// - `require_equals`: the value is attached (`--name=v`, `-nv`). On
+///   `Option<T>`, a bare flag is `None`.
+/// - `default_missing = "…"`: the value when the flag was given without one.
+/// - `allow_negative_numbers`: a negative number is a value.
+/// - `spec = "…"`: the name the pages find this value's type under, when that
+///   is not the type's own name.
+///
+/// A variant may also set `allow_hyphen_values` or `keep_equals`.
+///
+/// # Roles
+///
+/// At most one `positional`, one `unknown` and one `bundle`. Each holds its value.
+///
+/// - `positional`: each plain word is this variant. The parent then has no
+///   positional of its own.
+/// - `unknown`: a flag that no variant names, kept whole. The parent's field
+///   is `sequence, unknown`.
+/// - `bundle`: a word of several short flags (`-sS`), the whole word, ahead of
+///   its letters.
+/// - `skip`: the program builds it. It is never parsed and is left out of help.
 #[proc_macro_derive(Occurrence, attributes(arg, winnow_args))]
 pub fn derive_occurrence(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     finish(expand_occurrence(&input))
 }
 
-/// Derive `FromArg` for an enum of unit variants, matched on the value's bytes; help lists them as possible values.
+/// Derive `FromArg` for an enum of unit variants. The value's bytes select a
+/// variant. Help lists each visible variant's name as a possible value.
+///
+/// A variant holds no data.
 ///
 /// ```ignore
 /// use winnow_args::{Args, ErrorKind, ValueEnum};
@@ -880,13 +976,16 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 /// # Ok::<(), winnow_args::Error>(())
 /// ```
 ///
-/// - Enum: `rename_all = "…"`: the case of variant names, one of `"kebab-case"` (default), `"lowercase"`,
-///   `"UPPERCASE"`, `"snake_case"` and `"verbatim"`.
-/// - Enum: `spec = "…"`: the name the documentation files the choices under, in place of the enum's own.
-/// - Variant: `name = "…"`: the value that selects it.
-/// - Variant: `alias = "…"`, `alias("…", …)`: other accepted values; `alias_hidden` is the same, not listed.
-/// - Variant: `hide`: accepted, but named neither in help nor in errors.
-/// - Variant: `help = "…"`, `long_help = "…"`: accepted and unused.
+/// - `rename_all = "kebab-case"` (default), `"lowercase"`, `"UPPERCASE"`,
+///   `"snake_case"` or `"verbatim"`. `DryRun` is then `dry-run`, `dryrun`,
+///   `DRYRUN`, `dry_run` or `DryRun`. A variant's `name` replaces this.
+/// - `spec = "…"`: the name the pages file the choices under, instead of the
+///   enum's own.
+/// - `name = "…"`: the value that selects this variant.
+/// - `alias = "…"`, `alias("…", …)` or `alias_hidden`: other values that
+///   select it. Help and errors list the primary name only.
+/// - `hide`: the value is accepted. Help and errors omit its name.
+/// - `help = "…"` and `long_help = "…"`: accepted, and unused.
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

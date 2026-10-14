@@ -27,9 +27,9 @@ There are two ways to say which of these a program takes:
 
 - `#[derive(Args)]` on a struct. A field is a flag or a positional, its type
   says how many values it takes and what they convert to, and its doc comment
-  is its help. This is what most programs want, and the faster of the two.
-- By hand, with `winnow_args::combinator`. A flag is a winnow parser, and
-  `alt`, `repeat` and the rest of winnow combine flags into a command line.
+  is its help. Most programs use the derive.
+- By hand, with `winnow_args::combinator`. A flag is a winnow parser, combined
+  with `alt`, or with `dispatch!` on the flag's name.
 
 Either way the words are read where the shell left them: nothing is copied or
 re-split, and the bytes need not be UTF-8 until a value's type asks for text.
@@ -63,9 +63,9 @@ fn main() {
 ```
 
 A test calls `Cli::parse_from(["-v", "a"])`, without the program name, and
-gets a `Result`. The same command line written by hand, with
-`winnow_args::combinator`, is next to this derive in
-[`examples/example.rs`](https://github.com/lu-zero/winnow-args/blob/HEAD/examples/example.rs).
+gets a `Result`.
+[`examples/example.rs`](https://github.com/lu-zero/winnow-args/blob/HEAD/examples/example.rs)
+writes that command line by hand as well, with `alt` and with `dispatch!`.
 The [crate docs](https://docs.rs/winnow-args) list the entry points, and each
 derive's page lists every attribute it takes.
 
@@ -99,7 +99,7 @@ Man and Markdown pages are made by
 ## Performance
 
 The parser is generated at compile time, so a parse costs the same however
-many commands the program declares; clap and bpaf build theirs at each start.
+many commands the program declares. clap and bpaf build a parser at each start.
 
 ![Time per parse for two command lines, log scale: winnow-args against usage, clap and bpaf](https://raw.githubusercontent.com/lu-zero/winnow-args/HEAD/docs/performance.svg)
 

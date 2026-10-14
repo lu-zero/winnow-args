@@ -1,12 +1,11 @@
-//! Running the command a line selected.
+//! Running the selected command.
 //!
-//! Parsing gives a tree of types: a struct of the program's flags, holding an
-//! enum of its subcommands, each holding a struct of its own. What the
-//! program does next is nearly always the same: find the variant that was
-//! selected and call the code that carries it out. [`Run`] is that call, and
-//! `#[arg(run)]` on a `Subcommand` enum writes the `match` that makes it.
+//! Parsing gives a tree of types: a struct of the program's flags, an enum of
+//! its subcommands, and a struct for each of those. The program finds the
+//! selected variant and calls the code that carries it out. [`Run`] is that
+//! call. `#[arg(run)]` on a `Subcommand` enum writes the `match`.
 //!
-//! Each command implements the trait, in a file of its own if it likes:
+//! Each command implements the trait:
 //!
 #![cfg_attr(feature = "derive", doc = "```")]
 #![cfg_attr(not(feature = "derive"), doc = "```ignore")]

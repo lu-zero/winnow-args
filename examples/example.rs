@@ -1,5 +1,6 @@
-//! `example -v/--verbose -p/--path=PATH`, written twice: once with the
-//! combinators and once with the derive. Both print what they parsed.
+//! `example -v/--verbose -p/--path=PATH`, written three ways: `alt`,
+//! `dispatch!` on the flag name, and the derive. All three print what they
+//! parsed.
 //!
 //!     cargo run --example example -- -v --path=/tmp
 //!     cargo run --example example -- -vp /tmp
@@ -7,9 +8,10 @@
 
 use std::path::PathBuf;
 
-use winnow::combinator::alt;
+use winnow::combinator::{alt, dispatch, fail};
 use winnow::prelude::*;
 use winnow_args::combinator::{Named, args, short};
+use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
 use winnow_args::{Args, Argv, Error, report, words};
 
 #[derive(Debug, PartialEq)]
@@ -21,7 +23,7 @@ struct Example {
 const VERBOSE: Named = short('v').long("verbose");
 const PATH: Named = short('p').long("path");
 
-/// The combinator version: an `alt` of occurrence parsers, each folded into a local.
+/// An `alt` of occurrence parsers, each folded into a local.
 fn example(input: &mut Argv<'_>) -> Result<Example, Error> {
     let mut verbose = false;
     let mut path = None;
@@ -29,6 +31,23 @@ fn example(input: &mut Argv<'_>) -> Result<Example, Error> {
         VERBOSE.switch().map(|()| verbose = true),
         PATH.argument_as::<PathBuf>().map(|p| path = Some(p)),
     )))
+    .parse_next(input)?;
+    Ok(Example { verbose, path })
+}
+
+/// The same flags, matched once by name.
+fn example_dispatch(input: &mut Argv<'_>) -> Result<Example, Error> {
+    let (mut verbose, mut path) = (false, None);
+    let (v, p) = (&mut verbose, &mut path);
+    args(dispatch! {arg;
+        a @ (Arg::Long(LongFlag { name: b"verbose", .. }) | Arg::Short(ShortFlag { letter: 'v', .. })) => {
+            a.switch().map(|()| *v = true)
+        },
+        a @ (Arg::Long(LongFlag { name: b"path", .. }) | Arg::Short(ShortFlag { letter: 'p', .. })) => {
+            a.value_as().map(|x| *p = Some(x))
+        },
+        _ => fail,
+    })
     .parse_next(input)?;
     Ok(Example { verbose, path })
 }
@@ -50,6 +69,10 @@ fn main() {
     match example.parse_next(&mut Argv::new(&words)) {
         Ok(parsed) => println!("combinator: {parsed:?}"),
         Err(e) => eprintln!("combinator: error: {e}"),
+    }
+    match example_dispatch.parse_next(&mut Argv::new(&words)) {
+        Ok(parsed) => println!("dispatch:   {parsed:?}"),
+        Err(e) => eprintln!("dispatch:   error: {e}"),
     }
     match Derived::parse_words(&words) {
         Ok(parsed) => println!("derive:     {parsed:?}"),

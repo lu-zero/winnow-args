@@ -32,6 +32,39 @@
 //! What a missing or repeated flag means is up to those closures: here a
 //! repeated `--path` keeps the last one, and a missing one leaves `None`. The
 //! derive makes the same decisions from each field's type.
+//!
+//! `alt` tries each parser until one matches, so a flag that does not match
+//! is lexed and rewound. `dispatch!` on [`crate::token::arg`] matches each
+//! flag's name once. It is a `move` closure, so the arms take `&mut`
+//! references.
+//!
+//! ```
+//! use winnow::combinator::{dispatch, fail};
+//! use winnow::prelude::*;
+//! use winnow_args::BStr;
+//! use winnow_args::combinator::args;
+//! use winnow_args::token::{Arg, LongFlag, ShortFlag, arg};
+//! use winnow_args::{Argv, Error};
+//!
+//! let words = [BStr::new("-v"), BStr::new("--path=/tmp")];
+//! let (mut verbose, mut path) = (false, None);
+//! let (v, p) = (&mut verbose, &mut path);
+//! args(dispatch! {arg;
+//!     a @ (Arg::Long(LongFlag { name: b"verbose", .. })
+//!         | Arg::Short(ShortFlag { letter: 'v', .. })) => {
+//!         a.switch().map(|()| *v = true)
+//!     },
+//!     a @ (Arg::Long(LongFlag { name: b"path", .. })
+//!         | Arg::Short(ShortFlag { letter: 'p', .. })) => {
+//!         a.value().map(|x| *p = Some(x))
+//!     },
+//!     _ => fail,
+//! })
+//! .parse_next(&mut Argv::new(&words))?;
+//! assert!(verbose);
+//! assert_eq!(path.map(|x| &**x), Some(&b"/tmp"[..]));
+//! # Ok::<(), Error>(())
+//! ```
 
 use winnow::combinator::{alt, repeat, trace};
 use winnow::error::{ModalError as _, ParserError as _};
