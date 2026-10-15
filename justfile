@@ -72,6 +72,7 @@ gen *args:
 #
 #   just perf -vp/tmp/x                # any argv; every binary gets the same one
 #   SUITE=mise just perf               # mise's full CLI: benchmarks/mise-argv.txt
+#   SUITE=rules just perf              # conditional requirements and a check: benchmarks/rules-argv.txt
 #   PROFILE=release-lto just perf      # one codegen unit and fat LTO: stable sizes
 #   BPAF010=1 just perf                # with the unreleased bpaf 0.10, from git
 [doc("Cold and warm parse cost, in each framework, of an argv or every bench line")]
@@ -85,6 +86,11 @@ perf *argv:
       PREFIX=parse-n-mise-
       SWEEP=time-sweep-mise
       LINES=benchmarks/mise-argv.txt
+    elif [ "$SUITE" = rules ]; then
+      FRAMEWORKS=(usage wa clap)
+      PREFIX=parse-n-rules-
+      SWEEP=time-sweep-rules
+      LINES=benchmarks/rules-argv.txt
     else
       FRAMEWORKS=(usage wa wa-disp wa-comb bpaf clap)
       PREFIX=parse-n-

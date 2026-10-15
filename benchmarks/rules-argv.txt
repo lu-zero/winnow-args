@@ -1,0 +1,5 @@
+--target t
+--format json --schema s.json --target t
+--upload --endpoint https://x.example --target t
+--from 1 --to 5 --target t
+--format text --level 3 --dir d --name n

@@ -1,5 +1,7 @@
 //! The bench CLI. Its flags are the lines in `argv.txt`, compared by `just perf`.
 
+pub mod rules;
+
 /// winnow-args, derived.
 pub mod wa_derive {
     use std::path::PathBuf;

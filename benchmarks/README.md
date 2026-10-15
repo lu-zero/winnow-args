@@ -16,6 +16,11 @@ unpublished.
   each framework (`shadows/`, vendored from usage with its license; ours,
   `mise-wa`, is translated from usage's by `just gen mise-shadow`). The lines
   are `mise-argv.txt`.
+- **A CLI with rules**, `export`: requirements that depend on another flag
+  (`required_if`), one that depends on two (`required_unless_all`), a default
+  chosen by another flag (`default_if`), and a check of the parsed values
+  (`validate`). It is `src/rules.rs`, in winnow-args, usage and clap; bpaf has
+  none of these rules built in. The lines are `rules-argv.txt`.
 
 `tests/` holds every framework to the same answer on every line, so the
 numbers compare parsers that do the same thing. Where one cannot (bpaf has no
@@ -45,6 +50,7 @@ Instruction counts are the stable measure; times move with the machine.
 just perf                           # every line of argv.txt, one table each
 just perf -v --path /tmp/x a b c    # one line
 SUITE=mise just perf                # mise's CLI, every line of mise-argv.txt
+SUITE=rules just perf               # the CLI with rules, every line of rules-argv.txt
 PROFILE=release-lto just perf       # one codegen unit and fat LTO
 BPAF010=1 just perf                 # with the unreleased bpaf 0.10 as well
 numactl -N 3 -m 3 taskset -c 96 just perf   # pinned, as the results below
@@ -89,6 +95,15 @@ usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which is what grows with the number of commands.
 winnow-args' binary is larger than usage's at mise's scale because each
 struct's loop is its own code.
+
+`export --format json --schema s.json --target t`, the rules CLI, on the same
+host without pinning:
+
+| framework | instructions | × usage | warm | size |
+|---|---:|---:|---:|---:|
+| winnow-args, derive | 1 393 | 0.3 | 134 ns | 362 KB |
+| usage | 4 522 | 1 | 372 ns | 370 KB |
+| clap 4 | 75 932 | 17 | 8.44 µs | 708 KB |
 
 [`docs/PERF.md`](../docs/PERF.md) has every line, and what each feature cost
 when it was added.
