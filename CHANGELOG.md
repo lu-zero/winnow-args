@@ -4,31 +4,31 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.3.1 (2026-10-17)
 
 - **Added**: `validate = function` on a struct, called with the struct once
   it is built: the program's own check of what the rules do not say. A
   variant with fields takes it too, and its function is given the enum.
   `Error::invalid` is the error for a fault that is not one value's, of the
   new kind `ErrorKind::Invalid`.
-- **Added**: `default_from(field, …, function)` on a field: a default made
-  from other fields' values by a function or a closure, after their own
-  defaults. The field keeps its type, and help says what it is made from.
 - **Added**: `required_if("--flag")` and `required_if("--flag", "value")` on
   a field: required when that flag was given, or given that value; repeated,
   any one condition is enough. `required_unless_all(…)`: required unless all
   of those have a value.
-- **Changed**: help paints the flag named in the help flag's own description
-  (`see a summary with '-h'`) as a flag.
-- **Added**: `hide_default_value` and `hide_env` on a field leave its default
-  or its environment variable out of help and the pages; `display_order = n`
-  moves a flag in help.
-- **Added**: `default_subcommand_on_empty` on a struct: a line that names no
-  subcommand and gives no positional and no `--`, its own flags aside, runs
-  the default subcommand, as in usage.
 - **Added**: `requires_if("x", "--other")` on a field: when its value is `x`,
   `--other` needs one. `exclusive`: no other field of the struct is given
   with it.
+- **Added**: `default_from(field, …, function)` on a field: a default made
+  from other fields' values by a function or a closure, after their own
+  defaults. The field keeps its type, and help says what it is made from.
+- **Added**: `default_subcommand_on_empty` on a struct: a line that names no
+  subcommand and gives no positional and no `--`, its own flags aside, runs
+  the default subcommand, as in usage.
+- **Added**: `hide_default_value` and `hide_env` on a field leave its default
+  or its environment variable out of help and the pages; `display_order = n`
+  moves a flag in help.
+- **Changed**: help paints the flag named in the help flag's own description
+  (`see a summary with '-h'`) as a flag.
 
 ## 0.3.0 (2026-10-12)
 
