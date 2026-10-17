@@ -826,10 +826,28 @@ impl Item {
 /// takes it on a line of its own, as `--help` does, so that a list or a code
 /// fence that ends the description stays closed.
 fn append_note(text: &mut String, note: &str) {
-    if !text.is_empty() {
+    if note.starts_with('[') {
+        if !text.is_empty() {
+            text.push(if text.contains('\n') { '\n' } else { ' ' });
+        }
+        text.push_str(note);
+    } else {
+        append_sentence(text, note);
+    }
+}
+
+/// Append `sentence` to `text`, with a period first when `text` ends in
+/// none: a description is often written without one, as help shows it, and
+/// a page that runs the next sentence on would read as one. A text of
+/// several lines takes the sentence on a line of its own.
+pub fn append_sentence(text: &mut String, sentence: &str) {
+    if let Some(last) = text.chars().next_back() {
+        if !matches!(last, '.' | '!' | '?' | ':' | ']') {
+            text.push('.');
+        }
         text.push(if text.contains('\n') { '\n' } else { ' ' });
     }
-    text.push_str(note);
+    text.push_str(sentence);
 }
 
 impl Page<'_> {
@@ -2091,6 +2109,20 @@ mod tests {
             error.to_string().contains("no fragment named `Missing`"),
             "{error}"
         );
+    }
+
+    #[test]
+    fn a_sentence_after_a_description_follows_a_period() {
+        let after = |text: &str| {
+            let mut text = text.to_owned();
+            super::append_sentence(&mut text, "The default.");
+            text
+        };
+        assert_eq!(after("For people"), "For people. The default.");
+        assert_eq!(after("For people."), "For people. The default.");
+        assert_eq!(after("[default: 4]"), "[default: 4] The default.");
+        assert_eq!(after("One.\n\nTwo"), "One.\n\nTwo.\nThe default.");
+        assert_eq!(after(""), "The default.");
     }
 
     #[test]

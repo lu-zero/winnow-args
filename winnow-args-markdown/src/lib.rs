@@ -2,7 +2,7 @@
 #![warn(missing_docs)]
 
 use winnow_args_spec::marks::{Mark, pieces};
-use winnow_args_spec::{Command, Item, Page, Sub, pages};
+use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, pages};
 
 /// The root page and one page per visible subcommand.
 ///
@@ -95,10 +95,10 @@ pub fn render(page: &Page<'_>) -> String {
         for output in &command.outputs {
             let mut what = escape(&output.help);
             if output.default {
-                append(&mut what, "The default.");
+                append_sentence(&mut what, "The default.");
             }
             if !output.framing.is_empty() {
-                append(&mut what, &format!("Framing: {}.", code(&output.framing)));
+                append_sentence(&mut what, &format!("Framing: {}.", code(&output.framing)));
             }
             push_term(&mut out, &output.name, &what, "");
         }
@@ -138,14 +138,6 @@ fn heading(out: &mut String, title: &str) {
     out.push_str("## ");
     out.push_str(&escape(title));
     out.push_str("\n\n");
-}
-
-/// `more` after `text`, a space between them when there is text.
-fn append(text: &mut String, more: &str) {
-    if !text.is_empty() {
-        text.push(' ');
-    }
-    text.push_str(more);
 }
 
 fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) {

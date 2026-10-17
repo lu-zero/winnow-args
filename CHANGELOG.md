@@ -20,6 +20,9 @@ released together. Versions follow [semver](https://semver.org).
   keeps what the description says beyond that line.
 - **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
   in help and the pages, not with a second `...`.
+- **Fixed**: on a man or Markdown page, a sentence the page adds after a
+  description (`Warning: …`, `The default.`) follows a period when the
+  description ends in none, as help's descriptions often do.
 - **Added**: `examples/gallery.rs` uses every item help renders.
 
 ## 0.3.1 (2026-10-17)

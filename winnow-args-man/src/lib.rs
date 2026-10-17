@@ -3,7 +3,7 @@
 
 use roff::{Inline, Roff};
 use winnow_args_spec::marks::{Mark, pieces};
-use winnow_args_spec::{Command, Item, Page, Sub, pages};
+use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, pages};
 
 /// Header fields of a manual page. They are not part of the command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,10 +182,7 @@ impl Manual {
                 .into_iter()
                 .flatten()
                 {
-                    if !what.is_empty() {
-                        what.push(' ');
-                    }
-                    what.push_str(&more);
+                    append_sentence(&mut what, &more);
                 }
                 term(&mut doc, vec![bold(&output.name)], &what);
             }
