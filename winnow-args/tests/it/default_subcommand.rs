@@ -377,3 +377,49 @@ fn a_plus_option_selects_it_and_the_root_s_own_flags_go_first() {
     let shell: Shell = parse(&["+x", "-q"]).unwrap();
     assert_eq!((shell.quiet, shell.command), (true, set(Some(false))));
 }
+
+/// `default_subcommand_on_empty`: a line with no subcommand, positional or `--`
+/// runs the default subcommand.
+mod on_empty {
+    use winnow_args::{Args, Subcommand};
+
+    #[derive(Args, Debug)]
+    #[arg(default_subcommand = "status", default_subcommand_on_empty)]
+    struct Git {
+        #[arg(short, long, global)]
+        verbose: bool,
+        #[arg(subcommand)]
+        command: Option<Command>,
+    }
+
+    #[derive(Subcommand, Debug, PartialEq)]
+    enum Command {
+        Status {
+            #[arg(short, long)]
+            short: bool,
+        },
+        Log,
+    }
+
+    #[test]
+    fn an_empty_line_runs_it() {
+        let git = Git::parse_from::<[&str; 0], &str>([]).unwrap();
+        assert_eq!(git.command, Some(Command::Status { short: false }));
+        assert_eq!(
+            Git::parse_from(["log"]).unwrap().command,
+            Some(Command::Log)
+        );
+    }
+
+    #[test]
+    fn a_line_with_only_root_flags_runs_it_too() {
+        let git = Git::parse_from(["-v"]).unwrap();
+        assert!(git.verbose);
+        assert_eq!(git.command, Some(Command::Status { short: false }));
+    }
+
+    #[test]
+    fn a_separator_leaves_it_unset() {
+        assert_eq!(Git::parse_from(["--"]).unwrap().command, None);
+    }
+}

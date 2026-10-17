@@ -21,6 +21,9 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `hide_default_value` and `hide_env` on a field leave its default
   or its environment variable out of help and the pages; `display_order = n`
   moves a flag in help.
+- **Added**: `default_subcommand_on_empty` on a struct: a line that names no
+  subcommand and gives no positional and no `--`, its own flags aside, runs
+  the default subcommand, as in usage.
 - **Added**: `requires_if("x", "--other")` on a field: when its value is `x`,
   `--other` needs one. `exclusive`: no other field of the struct is given
   with it.

@@ -159,6 +159,10 @@ mod spec;
 ///   resume and keep their values.
 /// - `default_subcommand = "…"`: the subcommand used when the first word names
 ///   none. It needs a `subcommand` field.
+/// - `default_subcommand_on_empty`: a line that names no subcommand and gives
+///   no positional and no `--` runs the default subcommand too, with no words
+///   of its own: `tool` and `tool -v` both run it. Not beside
+///   `arg_required_else_help`.
 /// - `default_subcommand_flags`: with `default_subcommand`, a flag this struct
 ///   does not take selects it, and it reads that flag (`tool -p pkg` is
 ///   `tool run -p pkg`). The words and flags after that one are the
@@ -2852,6 +2856,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         default_subcommand,
         default_subcommand_flags,
         default_subcommand_help,
+        default_subcommand_on_empty,
         flatten_help,
         next_help_heading,
         headings,
@@ -3416,11 +3421,32 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #fallback
             }
         };
-        (route, flag_fallback)
+        // A line that took no subcommand, no positional and no `--` runs the
+        // default subcommand, with no words: usage's rule.
+        let on_empty = default_subcommand
+            .as_ref()
+            .filter(|_| default_subcommand_on_empty)
+            .map(|name| {
+                let name = LitByteStr::new(name.as_bytes(), Span::call_site());
+                let no_positional = track_filled.then(|| quote!(&&!__filled));
+                quote! {
+                    if #ident.is_none()
+                        #no_positional
+                        && __input.mode() != ::winnow_args::stream::Mode::Stopped
+                    {
+                        let __sub = {
+                            #inherit
+                            <#ty as __wa::Subcommand>::parse_subcommand(#name, __input, #handler)?
+                        };
+                        #ident = ::core::option::Option::Some(__sub);
+                    }
+                }
+            });
+        (route, flag_fallback, on_empty)
     });
-    let (route, flag_fallback) = match routes {
-        Some((route, flag_fallback)) => (Some(route), flag_fallback),
-        None => (None, None),
+    let (route, flag_fallback, on_empty) = match routes {
+        Some((route, flag_fallback, on_empty)) => (Some(route), flag_fallback, on_empty),
+        None => (None, None, None),
     };
     // A new invocation of the same command: positionals start over, flags keep theirs.
     let restart = restart_token.map(|token| {
@@ -3669,6 +3695,18 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new(
             input.ident.span(),
             "`default_subcommand_flags` needs `default_subcommand`",
+        ));
+    }
+    if default_subcommand_on_empty && default_subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`default_subcommand_on_empty` needs `default_subcommand`",
+        ));
+    }
+    if default_subcommand_on_empty && arg_required_else_help {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "an empty command line either asks for help or runs the default subcommand, not both",
         ));
     }
     if default_subcommand_help && default_subcommand.is_none() {
@@ -4395,6 +4433,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                     #bundle_end
                 }
+                #on_empty
                 #(#env_fallbacks)*
                 #exclusive
                 #supplied
@@ -4438,6 +4477,8 @@ struct StructOptions {
     default_subcommand_flags: bool,
     /// Its page follows this struct's.
     default_subcommand_help: bool,
+    /// An empty command line runs it.
+    default_subcommand_on_empty: bool,
     /// Each subcommand's usage, description and arguments replace the list.
     flatten_help: bool,
     /// The heading of the fields that name none.
@@ -4495,6 +4536,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("default_subcommand_flags") {
                 options.default_subcommand_flags = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("default_subcommand_on_empty") {
+                options.default_subcommand_on_empty = true;
                 return Ok(());
             }
             if meta.path.is_ident("default_subcommand_help") {
@@ -4656,7 +4701,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `default_subcommand_flags`, `default_subcommand_help`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
+                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
                      `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",

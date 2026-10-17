@@ -203,7 +203,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `dont_delimit_trailing_values`
 - [x] `default_subcommand_help`; completion of the default subcommand's flags
       before it is named
-- [ ] `default_subcommand_on_empty`
+- [x] `default_subcommand_on_empty`
 - [ ] External subcommands (`cargo foo`), multicall (`argv[0]` selects),
       executable views
 - [ ] Sigil arguments (`+node@22`), clauses (repeated groups split by `:::`)
