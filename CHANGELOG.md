@@ -4,8 +4,9 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.3.2 (2026-10-17)
 
+- **Added**: `examples/gallery.rs` uses every item help renders.
 - **Changed**: help paints an example's line word by word: the program, its
   subcommands, its flags, `<NAME>` placeholders and a `# comment`. The text
   is unchanged.
@@ -27,7 +28,6 @@ released together. Versions follow [semver](https://semver.org).
 - **Fixed**: on a man or Markdown page, a sentence the page adds after a
   description (`Warning: …`, `The default.`) follows a period when the
   description ends in none, as help's descriptions often do.
-- **Added**: `examples/gallery.rs` uses every item help renders.
 
 ## 0.3.1 (2026-10-17)
 
