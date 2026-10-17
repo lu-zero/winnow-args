@@ -398,6 +398,53 @@ fn color_defaults_to_greens_and_cyans() {
 }
 
 #[test]
+fn an_example_is_painted_word_by_word() {
+    #[derive(Args, Debug)]
+    #[arg(
+        name = "t",
+        example = "t -vj 2 --cd=src run <FILE>... -- 'a b' | wc # count",
+        example = "t run -x -9"
+    )]
+    struct Painted {
+        #[arg(short, long, count, global)]
+        verbose: u8,
+        #[arg(short, long)]
+        jobs: Option<u32>,
+        #[arg(long)]
+        cd: Option<String>,
+        #[arg(subcommand)]
+        command: Option<Run>,
+    }
+    #[derive(Subcommand, Debug)]
+    enum Run {
+        Run,
+    }
+    let e = parse::<Painted>(&["-h"]).unwrap_err();
+    let text = with_env(&[], || e.render_help_styled("t", Style::COLORED).unwrap());
+    let (flag, code) = (|t| sgr("1;32", t), |t| sgr("1", t));
+    let line = [
+        code("t"),
+        flag("-vj"),
+        code("2"),
+        flag("--cd") + &code("=src"),
+        flag("run"),
+        sgr("36", "<FILE>..."),
+        flag("--"),
+        code("'a b'"),
+        sgr("2", "|"),
+        code("wc"),
+        sgr("2", "# count"),
+    ]
+    .join(" ");
+    assert!(text.contains(&line), "{text:?}");
+    // `-x` names no flag of `run`, and `-9` is a number.
+    let line = [code("t"), flag("run"), code("-x"), code("-9")].join(" ");
+    assert!(text.contains(&line), "{text:?}");
+    let plain = with_env(&[], || e.render_help("t").unwrap());
+    assert!(plain.contains("  $ t -vj 2 --cd=src run <FILE>... -- 'a b' | wc # count\n"));
+}
+
+#[test]
 fn quoted_spans_in_descriptions_are_code() {
     let text = styled_as(Style::COLORED, &["use", "-h"], &[]);
     // "Installs a tool and adds the version to mise.toml." has none; the

@@ -815,7 +815,7 @@ fn page(out: &mut String, command: &Command, path: &[&str], layout: Layout, inhe
         .collect();
     section(out, "Global options", None, &rows, layout);
 
-    examples(out, command.examples, layout);
+    examples(out, command, path, inherited, layout);
 
     let after = if long && !command.after_long_help.is_empty() {
         command.after_long_help
@@ -877,8 +877,15 @@ fn flat_commands(out: &mut String, command: &Command, path: &[&str], layout: Lay
 
 /// The Examples section: each line after `$`, under its header if it has
 /// one, and after what it does on the long page.
-fn examples(out: &mut String, examples: &[Example], layout: Layout) {
+fn examples(
+    out: &mut String,
+    command: &Command,
+    path: &[&str],
+    inherited: &[&Item],
+    layout: Layout,
+) {
     let Layout { long, style, .. } = layout;
+    let examples = command.examples;
     if examples.is_empty() {
         return;
     }
@@ -902,10 +909,175 @@ fn examples(out: &mut String, examples: &[Example], layout: Layout) {
         out.push_str(if said { "    " } else { "  " });
         push_painted(out, style.dim(), "$");
         out.push(' ');
-        push_painted(out, style.code(), example.code);
+        push_example_line(out, example.code, command, path, inherited, style);
         out.push('\n');
     }
     out.push('\n');
+}
+
+/// An example's line as typed, each word painted by what it is: the program,
+/// the subcommands that lead from `path` on, flags, `<NAME>` and `[NAME]`, and
+/// a `# comment`. The values of flags, the positionals and what follows `--`
+/// or a shell operator stay in the `code` ink. A quoted or escaped space does
+/// not end a word, and the spacing is kept.
+fn push_example_line(
+    out: &mut String,
+    line: &str,
+    command: &Command,
+    path: &[&str],
+    inherited: &[&Item],
+    style: Style,
+) {
+    let mut command = Some(command);
+    let mut ahead = path.get(1..).unwrap_or_default();
+    let (mut program, mut flags, mut values) = (true, true, 0usize);
+    let mut at = 0;
+    for (start, end) in shell_words(line) {
+        out.push_str(&line[at..start]);
+        at = end;
+        let word = &line[start..end];
+        let items = || {
+            let own = command.map_or(&[][..], |c| c.items).iter();
+            own.chain(inherited.iter().copied())
+                .filter(|i| !i.positional)
+        };
+        if word.starts_with('#') {
+            push_painted(out, style.dim(), &line[start..]);
+            return;
+        }
+        if word.bytes().all(|b| b"|&;<>()".contains(&b)) {
+            push_painted(out, style.dim(), word);
+            (command, program, flags, values) = (None, true, true, 0);
+            continue;
+        }
+        let bare = word.strip_suffix("...").unwrap_or(word);
+        let placeholder = (bare.starts_with('<') && bare.ends_with('>'))
+            || (bare.starts_with('[') && bare.ends_with(']'));
+        if placeholder && bare.len() > 2 {
+            push_painted(out, style.placeholder(), word);
+            values = values.saturating_sub(1);
+            continue;
+        }
+        if values > 0 || program {
+            push_painted(out, style.code(), word);
+            values = values.saturating_sub(1);
+            program = false;
+            continue;
+        }
+        if flags && word == "--" {
+            push_painted(out, style.flag(), word);
+            (command, flags) = (None, false);
+            continue;
+        }
+        if flags && let Some(taken) = flag_word(word, items()) {
+            let name = word.find('=').map_or(word, |eq| &word[..eq]);
+            push_painted(out, style.flag(), name);
+            if name.len() < word.len() {
+                push_painted(out, style.code(), &word[name.len()..]);
+            }
+            values = taken;
+            continue;
+        }
+        let sub = match ahead.split_first() {
+            Some((next, rest)) => (*next == word).then(|| {
+                ahead = rest;
+                None
+            }),
+            None => command
+                .and_then(|c| c.subcommands.iter().find(|s| s.names.contains(&word)))
+                .map(|s| Some(s.command)),
+        };
+        match sub {
+            Some(next) => {
+                push_painted(out, style.command(), word);
+                if let Some(next) = next {
+                    command = Some(next);
+                }
+            }
+            None => {
+                push_painted(out, style.code(), word);
+                (command, ahead) = (None, &[]);
+            }
+        }
+    }
+    out.push_str(&line[at..]);
+}
+
+/// The words of a shell line, as byte ranges: a space inside quotes or after
+/// `\` is part of its word.
+fn shell_words(line: &str) -> Vec<(usize, usize)> {
+    let bytes = line.as_bytes();
+    let mut words = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at].is_ascii_whitespace() {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        let mut quote = None;
+        while at < bytes.len() {
+            let byte = bytes[at];
+            match quote {
+                Some(open) if byte == open => quote = None,
+                Some(b'"' | b'`') if byte == b'\\' => at += 1,
+                Some(_) => {}
+                None if byte.is_ascii_whitespace() => break,
+                None if byte == b'\\' => at += 1,
+                None if matches!(byte, b'\'' | b'"' | b'`') => quote = Some(byte),
+                None => {}
+            }
+            at += 1;
+        }
+        words.push((start, at.min(bytes.len())));
+    }
+    words
+}
+
+/// Whether `word` is a flag that one of `items` spells, and if so how many of
+/// the next words are its values: none when it takes no value or has it
+/// attached (`--jobs=4`, `-j4`). A negative number is not a flag.
+fn flag_word<'a>(word: &str, mut items: impl Iterator<Item = &'a Item> + Clone) -> Option<usize> {
+    let takes = |item: &Item| {
+        if item.value_name.is_some() && !item.optional_value && !item.require_equals {
+            item.values.max(1)
+        } else {
+            0
+        }
+    };
+    if let Some(long) = word.strip_prefix("--") {
+        let (name, attached) = long
+            .split_once('=')
+            .map_or((long, false), |(n, _)| (n, true));
+        let item = items.find(|i| {
+            i.long == Some(name) || i.aliases.contains(&name) || i.negate == Some(name)
+        })?;
+        return Some(if attached || item.negate == Some(name) {
+            0
+        } else {
+            takes(item)
+        });
+    }
+    let (sign, shorts) = word.split_at(word.len().min(1));
+    if shorts.is_empty() || shorts.parse::<f64>().is_ok() {
+        return None;
+    }
+    for (i, c) in shorts.char_indices() {
+        let item = items.clone().find(|item| match sign {
+            "-" => item.short == Some(c) || item.more_shorts.contains(&c),
+            "+" => item.plus == Some(c),
+            _ => false,
+        })?;
+        let taken = takes(item);
+        if taken > 0 {
+            return Some(if i + c.len_utf8() == shorts.len() {
+                taken
+            } else {
+                0
+            });
+        }
+    }
+    Some(0)
 }
 
 /// `prog [OPTIONS] <A> [B]... [COMMAND]`.

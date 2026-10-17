@@ -6,6 +6,9 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Changed**: help paints an example's line word by word: the program, its
+  subcommands, its flags, `<NAME>` placeholders and a `# comment`. The text
+  is unchanged.
 - **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
   in help and the pages, not with a second `...`.
 

@@ -126,7 +126,8 @@ mod spec;
 ///   leave that item out. `disable_help_short` keeps `--help` and leaves `-h` out.
 /// - `arg_required_else_help`: an empty command line asks for help.
 /// - `example = "tool build --release"`: one line in an Examples section after
-///   the lists. Repeat it for another line.
+///   the lists, shown as written. Help paints its subcommands, flags,
+///   `<NAME>` placeholders and `# comment`. Repeat it for another line.
 ///   `example("…", header = "…", help = "…")` sets a heading above the line
 ///   and the sentence `--help` shows for it. Either key may be left out.
 /// - `next_help_heading = "…"`: the heading for fields that set no
