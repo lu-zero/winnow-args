@@ -1,7 +1,9 @@
 //! What derived help looks like: a small mise-like CLI whose help covers
 //! subcommands (one of them the default, one a variant with fields), aliases,
 //! value names, defaults, environment variables, possible values, a heading
-//! with a paragraph, a warning, examples, and long help.
+//! with a paragraph, a warning, examples, and long help. Its descriptions
+//! use each mark help paints: `` `code` ``, `*emphasis*` and `**strong**`. An
+//! example's command line is shown as typed, marks and all.
 //!
 //!     cargo run --example help -- -h            # short help
 //!     cargo run --example help -- --help        # long help
@@ -40,8 +42,13 @@ const THEME: Theme = Theme {
     name = "tool",
     version = "0.1.0",
     default_subcommand = "use",
-    heading("Performance", help = "How much is done at once."),
-    example("tool use -g node@20", header = "Install a tool for every project"),
+    heading("Performance", help = "How *much* is done at once."),
+    example("tool use -g node@20", header = "Install a tool for **every** project"),
+    example(
+        "tool use \"node@`cat .nvmrc`\"",
+        header = "Install the version in `.nvmrc`",
+        help = "The shell runs what is between the backticks: *not* a mark here."
+    ),
     example = "tool ls --json"
 )]
 struct Cli {
@@ -53,7 +60,7 @@ struct Cli {
     cd: Option<String>,
     /// Number of jobs to run in parallel
     ///
-    /// Defaults to four; more jobs install faster but print interleaved
+    /// Defaults to four; more jobs install *faster* but print **interleaved**
     /// output.
     #[arg(short, long, default = "4", help_heading = "Performance")]
     jobs: Option<u32>,
