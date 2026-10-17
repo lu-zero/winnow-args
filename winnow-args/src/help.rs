@@ -774,10 +774,17 @@ fn page(out: &mut String, command: &Command, path: &[&str], layout: Layout, inhe
             .collect();
         if title.is_none() {
             if command.help_flag {
+                // The other spelling, painted as a flag is.
                 let what = if long {
-                    "Print help (see a summary with '-h')"
+                    format!(
+                        "Print help (see a summary with '{}')",
+                        Style::paint(style.flag(), "-h")
+                    )
                 } else {
-                    "Print help (see more with '--help')"
+                    format!(
+                        "Print help (see more with '{}')",
+                        Style::paint(style.flag(), "--help")
+                    )
                 };
                 let cell = if command.help_short {
                     builtin("-h", "--help")
@@ -790,9 +797,9 @@ fn page(out: &mut String, command: &Command, path: &[&str], layout: Layout, inhe
                 let what = if command.help_short {
                     what
                 } else {
-                    "Print help"
+                    "Print help".to_owned()
                 };
-                rows.push((cell, what.into()));
+                rows.push((cell, what));
             }
             if command.version.is_some() {
                 rows.push((builtin("-V", "--version"), "Print version".into()));

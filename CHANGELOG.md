@@ -18,6 +18,8 @@ released together. Versions follow [semver](https://semver.org).
   a field: required when that flag was given, or given that value; repeated,
   any one condition is enough. `required_unless_all(…)`: required unless all
   of those have a value.
+- **Changed**: help paints the flag named in the help flag's own description
+  (`see a summary with '-h'`) as a flag.
 - **Added**: `hide_default_value` and `hide_env` on a field leave its default
   or its environment variable out of help and the pages; `display_order = n`
   moves a flag in help.

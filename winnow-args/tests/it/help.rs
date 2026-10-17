@@ -720,3 +720,10 @@ fn the_program_is_the_declared_name_or_the_one_it_runs_as() {
     let file_name = std::path::Path::new(&running).file_name().unwrap();
     assert_eq!(Unnamed::program(), file_name.to_string_lossy());
 }
+
+#[test]
+fn the_help_flag_names_the_other_spelling_as_a_flag() {
+    let page = styled_as(Style::COLORED, &["--help"], &[]);
+    assert!(page.contains("see a summary with '\u{1b}["), "{page:?}");
+    assert!(strip(&page).contains("see a summary with '-h'"), "{page:?}");
+}
