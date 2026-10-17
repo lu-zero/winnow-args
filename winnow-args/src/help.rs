@@ -991,7 +991,8 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
         spec.push(style.placeholder(), &value);
         spec.push(Ink::NONE, close);
     }
-    if item.multiple {
+    // `<V>...` already says the flag takes more words.
+    if item.multiple && !item.more_values {
         spec.push(style.dim(), "...");
     }
     spec

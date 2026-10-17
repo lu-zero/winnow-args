@@ -4,6 +4,11 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
+  in help and the pages, not with a second `...`.
+
 ## 0.3.1 (2026-10-17)
 
 - **Added**: `validate = function` on a struct, called with the struct once

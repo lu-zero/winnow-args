@@ -28,6 +28,8 @@ struct Texts {
     flag: bool,
     #[arg(long, values = 2, value_name = "V")]
     pair: Vec<String>,
+    #[arg(long, values = 1.., value_name = "V")]
+    some: Vec<String>,
     #[arg(subcommand)]
     command: Option<Command>,
 }
@@ -67,6 +69,14 @@ fn a_hidden_alias_names_the_command_but_is_not_listed() {
         .map(|line| line.trim().to_owned())
         .collect();
     assert_eq!(commands, ["list"]);
+}
+
+#[test]
+fn a_value_range_is_marked_once() {
+    let short = help::<Texts>(&["-h"]);
+    let lines: Vec<&str> = short.lines().map(str::trim).collect();
+    assert!(lines.contains(&"--pair <V> <V>..."), "{short}");
+    assert!(lines.contains(&"--some <V>..."), "{short}");
 }
 
 #[test]

@@ -727,7 +727,8 @@ impl Item {
             (false, true) => format!(" [{value}]"),
             (false, false) => format!(" {value}"),
         };
-        if self.multiple {
+        // `<V>...` already says the flag takes more words.
+        if self.multiple && !self.more_values {
             format!("{wrapped}...")
         } else {
             wrapped
@@ -2118,6 +2119,12 @@ mod tests {
             required = true
             multiple = true
             value_name = "FILE"
+
+            [[item]]
+            long = "tag"
+            multiple = true
+            more_values = true
+            value_name = "TAG"
             "#,
         )])
         .unwrap()
@@ -2130,6 +2137,7 @@ mod tests {
         );
         assert!(command.items[0].choices.is_empty());
         assert_eq!(command.items[1].synopsis(), "<FILE>...");
+        assert_eq!(command.items[2].synopsis(), "--tag <TAG>...");
         assert_eq!(
             command.notes(),
             ["A long option may also be spelled with one dash."]
