@@ -34,7 +34,7 @@ error: `default_fn` is for a field that takes a value, or `negate`, without `def
 40 |     #[arg(long, default = "1", default_fn = four)]
    |     ^
 
-error: `default_note` describes a `default_fn`
+error: `default_note` describes a `default_fn` or a `default_from`
   --> tests/ui/values.rs:46:5
    |
 46 |     #[arg(long, default_note = "one per core")]

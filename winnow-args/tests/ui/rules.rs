@@ -90,4 +90,26 @@ fn check(_: &ValidateTwice) -> Result<(), winnow_args::Error> {
     Ok(())
 }
 
+#[derive(Args)]
+struct DefaultFromNothing {
+    #[arg(long, default_from(nope, |n: &String| n.clone()))]
+    out: String,
+}
+
+#[derive(Args)]
+struct DefaultFromEachOther {
+    #[arg(long, default_from(b, |b: &String| b.clone()))]
+    a: String,
+    #[arg(long, default_from(a, |a: &String| a.clone()))]
+    b: String,
+}
+
+#[derive(Args)]
+struct DefaultFromAndDefault {
+    #[arg(long)]
+    a: String,
+    #[arg(long, default = "x", default_from(a, |a: &String| a.clone()))]
+    b: String,
+}
+
 fn main() {}

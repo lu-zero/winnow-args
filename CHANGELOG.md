@@ -11,6 +11,9 @@ released together. Versions follow [semver](https://semver.org).
   variant with fields takes it too, and its function is given the enum.
   `Error::invalid` is the error for a fault that is not one value's, of the
   new kind `ErrorKind::Invalid`.
+- **Added**: `default_from(field, …, function)` on a field: a default made
+  from other fields' values by a function or a closure, after their own
+  defaults. The field keeps its type, and help says what it is made from.
 - **Added**: `required_if("--flag")` and `required_if("--flag", "value")` on
   a field: required when that flag was given, or given that value; repeated,
   any one condition is enough. `required_unless_all(…)`: required unless all

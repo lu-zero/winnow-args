@@ -69,3 +69,21 @@ error: `validate` is given twice
    |
 83 | #[arg(validate = check, validate = check)]
    |                         ^^^^^^^^
+
+error: `nope` is not a field of this struct
+  --> tests/ui/rules.rs:95:30
+   |
+95 |     #[arg(long, default_from(nope, |n: &String| n.clone()))]
+   |                              ^^^^
+
+error: these `default_from` fields are made from each other
+   --> tests/ui/rules.rs:102:5
+    |
+102 |     a: String,
+    |     ^
+
+error: `default_from` is for a field that takes a value, a switch or a count, without `default` or `default_fn`
+   --> tests/ui/rules.rs:111:5
+    |
+111 |     #[arg(long, default = "x", default_from(a, |a: &String| a.clone()))]
+    |     ^

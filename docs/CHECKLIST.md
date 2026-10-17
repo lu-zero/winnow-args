@@ -79,6 +79,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `conflicts`, `overrides`, `requires`, `required`, `required_unless`,
       struct-level `group("name", required, multiple)`
 - [x] `validate = function`: the program's own check of the built struct
+- [x] `default_from(field, …, function)`: a default made from other fields
 - [x] `required_if("--flag")`, `required_if("--flag", "value")`, repeatable;
       `required_unless_all`
 

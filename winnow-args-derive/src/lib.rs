@@ -246,6 +246,13 @@ mod spec;
 /// - `default_fn = path`: a function returning the field's value, or the whole
 ///   list for a `Vec`, called at the same point as `default`. Setting both is
 ///   a compile error. `default_note = "…"` is the text help shows for it.
+/// - `default_from(input, |input: &PathBuf| input.with_extension("out"))`: a default
+///   made from the fields named, by the function or closure last, called with
+///   a reference to each as declared. On a struct without generics a closure
+///   needs no types: `|input| input.with_extension("out")`. It is computed after `env`, `default_if`
+///   and the other defaults, a field after those it is made from; one that is
+///   required and still unset leaves it unset. Help shows "from `input`", or
+///   its `default_note`.
 /// - `default_if("--flag", "v")`: this default when `--flag` was given.
 ///   `default_if("--flag", "x", "v")` when that field's value equals `x`
 ///   (`PartialEq`). Tried after `env` and before `default`, in the order
@@ -1723,6 +1730,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         && field.default.is_none()
         && field.default_fn.is_none()
         && field.env.is_none()
+        && field.default_from.is_none()
         && !field.keywords)
         || field.required;
     Ok(spec::ItemDoc {
@@ -1749,7 +1757,11 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         required,
         multiple: matches!(field.kind, Kind::Many(_) | Kind::Count(_)),
         trailing: field.double_dash() == DoubleDash::Required,
-        default: field.default.clone().or_else(|| field.default_note.clone()),
+        default: field
+            .default
+            .clone()
+            .or_else(|| field.default_note.clone())
+            .or_else(|| field.computed_default()),
         env: field.env.clone(),
         choices: field.choices.clone().unwrap_or_default(),
         choices_ty: choices_link(field),
@@ -2320,6 +2332,9 @@ struct Field {
     value_terminator: Option<String>,
     /// A function giving the value when nothing else did.
     default_fn: Option<syn::ExprPath>,
+    /// The fields a computed default is made from, and the function or
+    /// closure that makes it from them.
+    default_from: Option<(Vec<Ident>, syn::Expr)>,
     /// What help says of `default_fn`'s value.
     default_note: Option<String>,
     /// `(selector, the value it must have, this field's default then)`.
@@ -2388,10 +2403,17 @@ impl Field {
             && self.default.is_none()
             && self.default_fn.is_none()
             && self.env.is_none()
+            && self.default_from.is_none()
             && !self.keywords
             || self.required;
         let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
-        let default = opt_str(self.default.as_deref().or(self.default_note.as_deref()));
+        let computed = self.computed_default();
+        let default = opt_str(
+            self.default
+                .as_deref()
+                .or(self.default_note.as_deref())
+                .or(computed.as_deref()),
+        );
         let env = opt_str(self.env.as_deref());
         // Declared `choices`, else whatever fixed set the value type has.
         let choices = match (&self.choices, &self.kind, &self.role) {
@@ -2570,6 +2592,33 @@ impl Field {
             },
             Kind::Switch | Kind::Count(_) => unreachable!("a switch or a count takes no value"),
         }
+    }
+
+    /// The type of the value a `default_from` is given for this field.
+    fn given_type(&self) -> TokenStream2 {
+        match &self.kind {
+            Kind::Switch => quote!(bool),
+            Kind::Count(ty) | Kind::Required(ty) => quote!(#ty),
+            Kind::Optional(ty) => quote!(::core::option::Option<#ty>),
+            Kind::Many(ty) => quote!(::std::vec::Vec<#ty>),
+        }
+    }
+
+    /// The type of the value a `default_from` makes for this field.
+    fn made_type(&self) -> TokenStream2 {
+        match &self.kind {
+            Kind::Switch => quote!(bool),
+            Kind::Count(ty) | Kind::Required(ty) | Kind::Optional(ty) => quote!(#ty),
+            Kind::Many(ty) => quote!(::std::vec::Vec<#ty>),
+        }
+    }
+
+    /// What help says of a `default_from` with no `default_note`: the fields
+    /// it is made from.
+    fn computed_default(&self) -> Option<String> {
+        let (names, _) = self.default_from.as_ref()?;
+        let names: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
+        Some(format!("from {}", names.join(", ")))
     }
 
     /// Whether the field was not given, for a fallback to fill it.
@@ -3838,6 +3887,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let exclusive = rules.exclusive(&fields, &groups);
     let supplied = rules.supplied(&fields);
     let default_ifs = rules.default_ifs(&fields);
+    let default_froms = default_froms(&fields, &rules, !input.generics.params.is_empty())?;
     let required = rules.required(&fields, &groups);
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
@@ -4096,6 +4146,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #supplied
                     #default_ifs
                     #(#default_fallbacks)*
+                    #default_froms
                     #required
                     let __built = Self {
                         #(#build,)*
@@ -4325,6 +4376,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #supplied
                 #default_ifs
                 #(#default_fallbacks)*
+                #default_froms
                 #required
                 let __built = Self {
                     #(#build,)*
@@ -5050,6 +5102,123 @@ impl Rules {
     }
 }
 
+/// The `default_from` fields, each computed once the fields it is made from
+/// have their values, computed ones included: a field comes after those it
+/// is made from, and a cycle is a compile error.
+fn default_froms(fields: &[Field], rules: &Rules, generic: bool) -> syn::Result<TokenStream2> {
+    let index = |f: &Field, name: &Ident| -> syn::Result<usize> {
+        let i = fields
+            .iter()
+            .position(|other| other.ident == *name)
+            .ok_or_else(|| {
+                syn::Error::new(
+                    name.span(),
+                    format!("`{name}` is not a field of this struct"),
+                )
+            })?;
+        let other = &fields[i];
+        if other.ident == f.ident {
+            return Err(syn::Error::new(
+                name.span(),
+                "a default cannot be made from its own field",
+            ));
+        }
+        if other.keywords || matches!(other.role, Role::Subcommand) {
+            return Err(syn::Error::new(
+                name.span(),
+                format!("`{name}` is a subcommand or `keywords`: a default is made from values"),
+            ));
+        }
+        Ok(i)
+    };
+    let mut order: Vec<usize> = Vec::new();
+    let mut visiting: Vec<usize> = Vec::new();
+    fn visit(
+        i: usize,
+        fields: &[Field],
+        index: &dyn Fn(&Field, &Ident) -> syn::Result<usize>,
+        order: &mut Vec<usize>,
+        visiting: &mut Vec<usize>,
+    ) -> syn::Result<()> {
+        let Some((names, _)) = &fields[i].default_from else {
+            return Ok(());
+        };
+        if order.contains(&i) {
+            return Ok(());
+        }
+        if visiting.contains(&i) {
+            return Err(syn::Error::new(
+                fields[i].ident.span(),
+                "these `default_from` fields are made from each other",
+            ));
+        }
+        visiting.push(i);
+        for name in names {
+            visit(index(&fields[i], name)?, fields, index, order, visiting)?;
+        }
+        visiting.pop();
+        order.push(i);
+        Ok(())
+    }
+    for i in 0..fields.len() {
+        visit(i, fields, &index, &mut order, &mut visiting)?;
+    }
+    let mut out = Vec::new();
+    for i in order {
+        let f = &fields[i];
+        let (names, function) = f.default_from.as_ref().expect("in the order only with one");
+        let target = slot(&f.ident);
+        let args: Vec<Ident> = (0..names.len())
+            .map(|n| format_ident!("__from_{n}"))
+            .collect();
+        // Called through a function that states the types, so a closure needs
+        // none of its own: `|input| input.with_extension("out")`. A generic
+        // struct's types cannot be named there, and its closures state theirs.
+        let value = if generic {
+            quote!((#function)(#(#args),*))
+        } else {
+            let mut taken = Vec::new();
+            for name in names {
+                taken.push(fields[index(f, name)?].given_type());
+            }
+            let made = f.made_type();
+            quote!({
+                fn __typed<__F: ::core::ops::FnOnce(#(&#taken),*) -> #made>(f: __F) -> __F {
+                    f
+                }
+                __typed(#function)(#(#args),*)
+            })
+        };
+        let mut body = match &f.kind {
+            Kind::Optional(_) | Kind::Required(_) => {
+                quote!(#target = ::core::option::Option::Some(#value);)
+            }
+            Kind::Switch if f.negate.is_some() => {
+                quote!(#target = ::core::option::Option::Some(#value);)
+            }
+            _ => quote!(#target = #value;),
+        };
+        // Each field as declared. A required one still without a value leaves
+        // this one unset, and the requirements then report it.
+        for (name, arg) in names.iter().zip(&args).rev() {
+            let other = &fields[index(f, name)?];
+            let source = slot(&other.ident);
+            body = match &other.kind {
+                Kind::Required(_) => {
+                    quote!(if let ::core::option::Option::Some(#arg) = #source.as_ref() { #body })
+                }
+                Kind::Switch if other.negate.is_some() => {
+                    quote!({ let #arg = &#source.unwrap_or(false); #body })
+                }
+                _ => quote!({ let #arg = &#source; #body }),
+            };
+        }
+        let unset = f.unset(rules.is_displaced(fields, f));
+        out.push(quote!(if #unset { #body }));
+    }
+    Ok(quote!(#(#out)*))
+}
+
 /// Whether `other` has a value, or `equals` when it is given: the condition
 /// of a `default_if` or a `required_if`, judged before the defaults.
 fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
@@ -5143,6 +5312,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut values = 1;
     let (mut values_max, mut value_terminator) = (None, None);
     let (mut default_fn, mut default_note, mut default_ifs) = (None, None, Vec::new());
+    let mut default_from = None;
     let mut stop_flags = false;
     let mut plus: Option<char> = None;
     let mut keywords = false;
@@ -5245,6 +5415,28 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 (values, values_max) = value_count(&count)?;
             } else if meta.path.is_ident("value_terminator") {
                 value_terminator = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("default_from") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let mut list: Vec<syn::Expr> =
+                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated(&content)?
+                        .into_iter()
+                        .collect();
+                let (Some(function), false) = (list.pop(), list.is_empty()) else {
+                    return Err(meta.error(
+                        "expected `default_from(field, …, function)`: the fields it is made from, then a function or a closure",
+                    ));
+                };
+                let names = list
+                    .iter()
+                    .map(|name| match name {
+                        syn::Expr::Path(path) if path.path.get_ident().is_some() => {
+                            Ok(path.path.get_ident().expect("checked").clone())
+                        }
+                        other => Err(syn::Error::new(other.span(), "expected the name of a field")),
+                    })
+                    .collect::<syn::Result<Vec<_>>>()?;
+                default_from = Some((names, function));
             } else if meta.path.is_ident("default_fn") {
                 default_fn = Some(meta.value()?.parse::<syn::ExprPath>()?);
             } else if meta.path.is_ident("default_note") {
@@ -5355,7 +5547,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
-                     `value_terminator`, `default_fn`, `default_note`, `default_if`, `from_str`, \
+                     `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, \
                      `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
                 ));
@@ -5442,8 +5634,16 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             "`default_fn` is for a field that takes a value, or `negate`, without `default`".into(),
         );
     }
-    if default_note.is_some() && default_fn.is_none() {
-        return error("`default_note` describes a `default_fn`".into());
+    if default_from.is_some()
+        && (default.is_some() || default_fn.is_some() || subcommand || keywords || tristate)
+    {
+        return error(
+            "`default_from` is for a field that takes a value, a switch or a count, without `default` or `default_fn`"
+                .into(),
+        );
+    }
+    if default_note.is_some() && default_fn.is_none() && default_from.is_none() {
+        return error("`default_note` describes a `default_fn` or a `default_from`".into());
     }
     if !default_ifs.is_empty() && (subcommand || keywords || matches!(kind, Kind::Count(_))) {
         return error("`default_if` is for a switch or a field that takes a value".into());
@@ -5597,6 +5797,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         values_max,
         value_terminator,
         default_fn,
+        default_from,
         default_note,
         default_ifs,
         stop_flags,
