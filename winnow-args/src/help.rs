@@ -639,8 +639,9 @@ pub(crate) fn render_page(
 ) -> String {
     let mut out = String::new();
     let layout = Layout { long, width, style };
-    page(&mut out, command, path, layout, inherited);
-    // The default subcommand's own page. A flattened page has it already.
+    page(&mut out, command, path, layout, inherited, true);
+    // The default subcommand's own page. A flattened page has it already. Its
+    // line in the list describes it, unless `--help` has more to say.
     if let Some(sub) = command.default_sub()
         && command.default_subcommand_help
         && !command.flatten_help
@@ -650,11 +651,20 @@ pub(crate) fn render_page(
         heading(&mut out, "Default command:", style);
         out.push(' ');
         push_painted(&mut out, style.command(), sub.name);
-        out.push_str("\n  It runs when no command is named.\n\n");
+        out.push('\n');
+        // What the long text says beyond its first paragraph, the list's line.
+        let long_about = sub.command.long_about;
+        let more = long_about
+            .strip_prefix(sub.command.about)
+            .map_or(long_about, str::trim_start);
+        if long && !more.is_empty() && more != sub.about {
+            indented(&mut out, more, 2, layout);
+        }
+        out.push('\n');
         let mut path = path.to_vec();
         path.push(sub.name);
         // What it inherits is this command's, listed above.
-        page(&mut out, sub.command, &path, layout, &[]);
+        page(&mut out, sub.command, &path, layout, &[], false);
     }
     trim_blank_lines(&mut out);
     out
@@ -675,15 +685,23 @@ struct Layout {
     style: Style,
 }
 
-/// One command's page, appended to `out`.
-fn page(out: &mut String, command: &Command, path: &[&str], layout: Layout, inherited: &[&Item]) {
+/// One command's page, appended to `out`, from its description on when
+/// `described`, else from its usage line.
+fn page(
+    out: &mut String,
+    command: &Command,
+    path: &[&str],
+    layout: Layout,
+    inherited: &[&Item],
+    described: bool,
+) {
     let Layout { long, width, style } = layout;
     let about = if long && !command.long_about.is_empty() {
         command.long_about
     } else {
         command.about
     };
-    if !about.is_empty() {
+    if described && !about.is_empty() {
         let about = painted_marks(about, style);
         let _ = writeln!(out, "{}\n", wrap_text(&about, width));
     }

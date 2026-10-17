@@ -14,6 +14,10 @@ released together. Versions follow [semver](https://semver.org).
   in a man page, now in italic or bold; and in Markdown, where it was
   escaped and is now Markdown's own. A `` `code` `` span keeps its
   backticks, in bold on a man page. Unpainted help is unchanged.
+- **Changed**: with `default_subcommand_help`, the default subcommand's page
+  follows a `Default command: name` line, without the sentence that
+  explained it or the description its line in the list gives. `--help`
+  keeps what the description says beyond that line.
 - **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
   in help and the pages, not with a second `...`.
 - **Added**: `examples/gallery.rs` uses every item help renders.

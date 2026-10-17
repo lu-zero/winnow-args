@@ -52,6 +52,9 @@ enum Applet {
     Version,
 }
 
+/// Merge packages
+///
+/// Resolves the atoms and builds what is missing.
 #[derive(Args, Debug)]
 #[arg(example = "em emerge firefox")]
 struct Emerge {
@@ -134,7 +137,7 @@ fn the_default_subcommand_is_marked_and_its_page_follows() {
         "{page}"
     );
     let (root, default) = page
-        .split_once("\nDefault command: emerge\n  It runs when no command is named.\n\n")
+        .split_once("\nDefault command: emerge\n\n")
         .expect("the default command's page");
     assert!(root.contains("--color <WHEN>"), "{root}");
     assert!(
@@ -145,6 +148,14 @@ fn the_default_subcommand_is_marked_and_its_page_follows() {
     // What it inherits is the root's, listed above.
     assert!(!default.contains("--color"), "{default}");
     assert!(!default.contains("Global options"), "{default}");
+    // `--help` adds what the list's line does not say.
+    let page = help(&["--help"]);
+    assert!(
+        page.contains(
+            "\nDefault command: emerge\n  Resolves the atoms and builds what is missing.\n\nUsage: em emerge"
+        ),
+        "{page}"
+    );
 }
 
 #[test]

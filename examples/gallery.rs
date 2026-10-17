@@ -131,6 +131,9 @@ enum Command {
 }
 
 /// The default subcommand's page.
+///
+/// What its description adds to its line in the list, under the default
+/// command's heading on `--help`.
 #[derive(Args, Debug)]
 struct Run {
     /// A required positional
