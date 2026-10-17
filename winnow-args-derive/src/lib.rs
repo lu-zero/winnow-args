@@ -173,8 +173,9 @@ mod spec;
 /// - `group("name", required, multiple)`: a group. A field joins it with
 ///   `group = "name"`. `required` means at least one member is present.
 ///   Without `multiple`, a second member conflicts with the first.
-/// - `validate = path`: a `fn(&Self) -> Result<(), winnow_args::Error>`,
-///   called once the struct is built and its rules hold. It returns
+/// - `validate = path`: a function such as
+///   `fn check(cli: &Cli) -> Result<(), winnow_args::Error>`, called with the
+///   struct once it is built and its rules hold. It returns
 ///   `Error::invalid` for a fault of several fields, or `Error::invalid_value`
 ///   for one value. A flattened struct's runs when that struct is built.
 /// - `spec = "…"`: the name the pages file this type under, instead of its own.
