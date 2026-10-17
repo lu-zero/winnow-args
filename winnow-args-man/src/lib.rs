@@ -3,6 +3,7 @@
 
 use roff::{Inline, Roff};
 use winnow_args_spec::marks::{Mark, pieces};
+use winnow_args_spec::words::{Word, example_words};
 use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, pages};
 
 /// Header fields of a manual page. They are not part of the command.
@@ -205,7 +206,7 @@ impl Manual {
                     doc.text(prose(&example.help));
                     doc.control("br", std::iter::empty::<&str>());
                 }
-                doc.text([bold(format!("$ {}", example.code))]);
+                doc.text(example_line(&example.code, page));
             }
         }
         let after = command.after();
@@ -257,6 +258,22 @@ fn prose(text: &str) -> Vec<Inline> {
             Some(Mark::Strong) => bold(piece.text),
         })
         .collect()
+}
+
+/// An example's line after `$ `, in a synopsis's fonts: the program, its
+/// subcommands and flags in bold, a placeholder in italic, the rest roman.
+fn example_line(line: &str, page: &Page<'_>) -> Vec<Inline> {
+    let mut out = vec![roman("$ ")];
+    out.extend(
+        example_words(line, page)
+            .into_iter()
+            .map(|(word, text)| match word {
+                Word::Program | Word::Command | Word::Flag => bold(text),
+                Word::Placeholder => italic(text),
+                Word::Operator | Word::Comment | Word::Plain => roman(text),
+            }),
+    );
+    out
 }
 
 fn roman(text: impl AsRef<str>) -> Inline {
@@ -429,7 +446,7 @@ mod tests {
             effect: Some(Effect::Write),
             examples: vec![
                 Example {
-                    code: "em -ua @world".to_owned(),
+                    code: "em --wipe <ROOT> @world".to_owned(),
                     header: "Update".to_owned(),
                     help: "Rebuilds what changed.".to_owned(),
                 },
@@ -500,7 +517,7 @@ mod tests {
             "Warning: Not for use.",
             ".SH \"OUTPUT FORMATS\"\n.TP\n\\fBpretty\\fR\nFor people. The default.\n.TP\n\\fBjson\\fR\nFraming: json.\n",
             ".SH \"EXIT STATUS\"\n.TP\n\\fB64\\fR\nNo such root.\n",
-            ".SH EXAMPLES\n.PP\nUpdate:\n.br\nRebuilds what changed.\n.br\n\\fB$ em \\-ua @world\\fR\n.PP\n\\fB$ em query\\fR\n",
+            ".SH EXAMPLES\n.PP\nUpdate:\n.br\nRebuilds what changed.\n.br\n$ \\fBem\\fR \\fB\\-\\-wipe\\fR \\fI<ROOT>\\fR @world\n.PP\n$ \\fBem\\fR \\fBquery\\fR\n",
         ] {
             assert!(root.contains(expected), "{expected:?} in\n{root}");
         }

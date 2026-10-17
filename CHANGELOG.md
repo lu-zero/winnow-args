@@ -9,6 +9,10 @@ released together. Versions follow [semver](https://semver.org).
 - **Changed**: help paints an example's line word by word: the program, its
   subcommands, its flags, `<NAME>` placeholders and a `# comment`. The text
   is unchanged.
+- **Changed**: a man page sets an example's line as a synopsis: the
+  program, its subcommands and flags in bold, `<NAME>` in italic, the rest
+  roman, where the whole line was bold. `winnow_args_spec::words` reads the
+  line as help does.
 - **Changed**: a `*emphasized*` or `**strong**` span loses its stars where
   it is rendered: in painted help, where it was painted with its stars kept;
   in a man page, now in italic or bold; and in Markdown, where it was

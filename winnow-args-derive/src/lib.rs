@@ -128,7 +128,9 @@ mod spec;
 /// - `arg_required_else_help`: an empty command line asks for help.
 /// - `example = "tool build --release"`: one line in an Examples section after
 ///   the lists, shown as written. Help paints its subcommands, flags,
-///   `<NAME>` placeholders and `# comment`. Repeat it for another line.
+///   `<NAME>` placeholders and `# comment`; a man page sets the program,
+///   subcommands and flags in bold and placeholders in italic. Repeat it for
+///   another line.
 ///   `example("…", header = "…", help = "…")` sets a heading above the line
 ///   and the sentence `--help` shows for it. Either key may be left out.
 /// - `next_help_heading = "…"`: the heading for fields that set no

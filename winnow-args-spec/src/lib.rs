@@ -11,6 +11,7 @@ use toml::Table;
 use toml::Value;
 
 pub mod marks;
+pub mod words;
 
 /// A failure while reading or stitching fragments, or naming their pages.
 #[derive(Debug)]
