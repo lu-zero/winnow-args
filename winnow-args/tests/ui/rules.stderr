@@ -87,3 +87,9 @@ error: `default_from` is for a field that takes a value, a switch or a count, wi
     |
 111 |     #[arg(long, default = "x", default_from(a, |a: &String| a.clone()))]
     |     ^
+
+error: a switch's value is `true` or `false`, not `yes`
+   --> tests/ui/rules.rs:118:5
+    |
+118 |     verbose: bool,
+    |     ^^^^^^^

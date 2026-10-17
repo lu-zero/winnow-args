@@ -112,4 +112,12 @@ struct DefaultFromAndDefault {
     b: String,
 }
 
+#[derive(Args)]
+struct RequiresIfSwitch {
+    #[arg(long, requires_if("yes", "--log"))]
+    verbose: bool,
+    #[arg(long)]
+    log: Option<String>,
+}
+
 fn main() {}

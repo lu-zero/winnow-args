@@ -18,6 +18,9 @@ released together. Versions follow [semver](https://semver.org).
   a field: required when that flag was given, or given that value; repeated,
   any one condition is enough. `required_unless_all(…)`: required unless all
   of those have a value.
+- **Added**: `requires_if("x", "--other")` on a field: when its value is `x`,
+  `--other` needs one. `exclusive`: no other field of the struct is given
+  with it.
 
 ## 0.3.0 (2026-10-12)
 

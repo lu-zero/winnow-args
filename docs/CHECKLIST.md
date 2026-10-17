@@ -80,6 +80,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       struct-level `group("name", required, multiple)`
 - [x] `validate = function`: the program's own check of the built struct
 - [x] `default_from(field, …, function)`: a default made from other fields
+- [x] `requires_if("value", "--flag")`, `exclusive`
 - [x] `required_if("--flag")`, `required_if("--flag", "value")`, repeatable;
       `required_unless_all`
 
@@ -189,7 +190,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 - [ ] Bare `env`, `env_fallback`, `deprecated_env`
 - [ ] Repeated `default` for a `Vec`
-- [ ] `required_if_eq_all` (every condition), `requires_if`, `exclusive`
+- [ ] `required_if_eq_all` (every condition)
 - [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime

@@ -251,3 +251,51 @@ mod conditional {
         assert!(parse(&["--target", "t"]).is_ok());
     }
 }
+
+/// `requires_if` and `exclusive`.
+mod requires_if_exclusive {
+    use winnow_args::{Args, ErrorKind, ValueEnum};
+
+    #[derive(ValueEnum, Debug, Clone, Copy, PartialEq)]
+    enum Mode {
+        Local,
+        Remote,
+    }
+
+    #[derive(Args, Debug)]
+    struct Sync {
+        /// A remote sync needs a host.
+        #[arg(long, requires_if("remote", "--host"))]
+        mode: Option<Mode>,
+        #[arg(long)]
+        host: Option<String>,
+        #[arg(long, default = "4")]
+        jobs: u32,
+        /// Only by itself.
+        #[arg(long, exclusive)]
+        list: bool,
+    }
+
+    fn parse(line: &[&str]) -> Result<Sync, winnow_args::Error> {
+        Sync::parse_from(line)
+    }
+
+    #[test]
+    fn a_value_requires_another_field() {
+        let error = parse(&["--mode", "remote"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingRequired);
+        assert_eq!(error.to_string(), "`--host` is required by `--mode=remote`");
+        assert!(parse(&["--mode", "local"]).is_ok());
+        assert!(parse(&["--mode", "remote", "--host", "h"]).is_ok());
+    }
+
+    #[test]
+    fn an_exclusive_flag_is_given_alone() {
+        assert!(parse(&["--list"]).unwrap().list);
+        let error = parse(&["--list", "--jobs", "2"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Conflict);
+        assert_eq!(error.to_string(), "`--list` cannot be used with `--jobs`");
+        // A default is not something given.
+        assert_eq!(parse(&["--list"]).unwrap().jobs, 4);
+    }
+}

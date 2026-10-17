@@ -295,6 +295,11 @@ mod spec;
 ///   `required_if("--flag", "x")`: when its value equals `x` (`PartialEq`).
 ///   Judged on the command line and `env`, before the defaults. Repeat it for
 ///   another condition: any one makes the field required.
+/// - `requires_if("x", "--other")`: when this field's value equals `x`,
+///   `--other` must have one too.
+/// - `exclusive`: given on the command line or by `env`, no other field of
+///   this struct may be given with it. Defaults do not count, and neither do
+///   the flags of a flattened struct, of a `sequence` or of an `unknown` field.
 /// - `conflicts("…", …)`: the parse fails when this field and any of those are
 ///   both supplied.
 /// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
@@ -2287,6 +2292,10 @@ struct Field {
     required_unless_all: Vec<String>,
     /// Required when a field was given, or given this value.
     required_ifs: Vec<(String, Option<String>)>,
+    /// When this field has the value, the field named needs one.
+    requires_ifs: Vec<(String, String)>,
+    /// Given only alone.
+    exclusive: bool,
     /// The struct-level group this field belongs to.
     group: Option<String>,
     /// The value of a flag given without one.
@@ -4719,6 +4728,10 @@ struct Rules {
     required_unless_all: Vec<(usize, Vec<usize>)>,
     /// `(field, other, the value `other` must have)`: `field` needs a value when it holds.
     required_ifs: Vec<(usize, usize, Option<String>)>,
+    /// `(field, its value, target)`: `target` needs a value when `field` was given that one.
+    requires_ifs: Vec<(usize, String, usize)>,
+    /// Fields given only alone.
+    exclusives: Vec<usize>,
     /// Members of each struct-level group, in `groups` order.
     members: Vec<Vec<usize>>,
     /// `(field, other, the value `other` must have, the field's default then)`.
@@ -4767,6 +4780,8 @@ impl Rules {
             required_unless: Vec::new(),
             required_unless_all: Vec::new(),
             required_ifs: Vec::new(),
+            requires_ifs: Vec::new(),
+            exclusives: Vec::new(),
             members: vec![Vec::new(); groups.len()],
             default_ifs: Vec::new(),
         };
@@ -4829,6 +4844,29 @@ impl Rules {
                 let instead = format!("required_if(\"{selector}\")");
                 let other = condition(selector, equals, &instead)?;
                 rules.required_ifs.push((i, other, equals.clone()));
+            }
+            for (equals, selector) in &f.requires_ifs {
+                let target = other_than_self(selector)?;
+                let comparable = match &f.kind {
+                    Kind::Count(_) => false,
+                    Kind::Switch => is_bool_word(equals),
+                    _ => !f.keywords,
+                };
+                if !comparable {
+                    let message = match &f.kind {
+                        Kind::Switch => {
+                            format!("a switch's value is `true` or `false`, not `{equals}`")
+                        }
+                        _ => format!(
+                            "this field has no value to compare: use `requires = \"{selector}\"`"
+                        ),
+                    };
+                    return Err(syn::Error::new(f.ident.span(), message));
+                }
+                rules.requires_ifs.push((i, equals.clone(), target));
+            }
+            if f.exclusive {
+                rules.exclusives.push(i);
             }
             if !f.required_unless_all.is_empty() {
                 let others = f
@@ -4966,6 +5004,30 @@ impl Rules {
             let condition = condition(&fields[*other], equals.as_deref());
             conditions.push(quote!(let #holds = #condition;));
         }
+        for (n, (field, equals, _)) in self.requires_ifs.iter().enumerate() {
+            let holds = format_ident!("__requires_if_{n}");
+            let condition = condition(&fields[*field], Some(equals));
+            conditions.push(quote!(let #holds = #condition;));
+        }
+        // An `exclusive` field given with any other, before defaults fill them.
+        for &i in &self.exclusives {
+            let (has, name) = (fields[i].has(), fields[i].display());
+            let others = fields
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, other)| {
+                    let (other_has, other_name) = (other.has(), other.display());
+                    quote! {
+                        if #other_has {
+                            return ::core::result::Result::Err(
+                                __wa::Error::conflict(__input.offset(), #name, #other_name),
+                            );
+                        }
+                    }
+                });
+            conditions.push(quote!(if #has { #(#others)* }));
+        }
         for (n, (field, other, equals, value)) in self.default_ifs.iter().enumerate() {
             let f = &fields[*field];
             let holds = format_ident!("__default_if_{n}");
@@ -5098,7 +5160,24 @@ impl Rules {
                     }
                 }
             });
-        quote!(#(#plain)* #(#unless)* #(#unless_all)* #(#required_ifs)* #(#one_of)* #(#requires)*)
+        let requires_ifs = self
+            .requires_ifs
+            .iter()
+            .enumerate()
+            .map(|(n, (i, equals, j))| {
+                let holds = format_ident!("__requires_if_{n}");
+                let has = fields[*j].has();
+                let target = fields[*j].display();
+                let by = format!("{}={equals}", fields[*i].display());
+                quote! {
+                    if #holds && !#has {
+                        return ::core::result::Result::Err(
+                            __wa::Error::required_by(__input.offset(), #target, #by),
+                        );
+                    }
+                }
+            });
+        quote!(#(#plain)* #(#unless)* #(#unless_all)* #(#required_ifs)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
     }
 }
 
@@ -5326,6 +5405,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let (mut required_unless_all, mut required_ifs) = (Vec::new(), Vec::new());
+    let (mut requires_ifs, mut exclusive) = (Vec::new(), false);
     let mut value_name = None;
     let (mut hint, mut complete) = (None, None);
     for attr in f.attrs.iter().filter(|a| is_ours(a)) {
@@ -5519,6 +5599,22 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                         ));
                     }
                 });
+            } else if meta.path.is_ident("requires_if") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let list =
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                let mut words = list.iter().map(LitStr::value);
+                requires_ifs.push(match (words.next(), words.next(), words.next()) {
+                    (Some(equals), Some(selector), None) => (equals, selector),
+                    _ => {
+                        return Err(meta.error(
+                            "expected `requires_if(\"this field's value\", \"--flag\")`",
+                        ));
+                    }
+                });
+            } else if meta.path.is_ident("exclusive") {
+                exclusive = true;
             } else if meta.path.is_ident("required") {
                 required = true;
             } else if meta.path.is_ident("group") {
@@ -5548,7 +5644,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
-                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, \
+                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
                 ));
             }
@@ -5774,6 +5870,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         required_unless,
         required_unless_all,
         required_ifs,
+        requires_ifs,
+        exclusive,
         group,
         default_missing,
         long_help: long_help.or_else(|| help.clone()).unwrap_or(doc_long_help),
