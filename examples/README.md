@@ -14,6 +14,7 @@ that package.
 |---|---|
 | [`example.rs`](example.rs) | `cargo run --example example -- -vp /tmp` |
 | [`help.rs`](help.rs) | `cargo run --example help -- --help` |
+| [`gallery.rs`](gallery.rs) | `cargo run --example gallery -- --help` |
 | [`brush_builtins.rs`](brush_builtins.rs) | `cargo run --example brush_builtins -- set -eu +x -o pipefail a b` |
 | [`ld.rs`](ld.rs) | `cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now` |
 

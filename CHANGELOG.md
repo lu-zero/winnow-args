@@ -11,6 +11,7 @@ released together. Versions follow [semver](https://semver.org).
   is unchanged.
 - **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
   in help and the pages, not with a second `...`.
+- **Added**: `examples/gallery.rs` uses every item help renders.
 
 ## 0.3.1 (2026-10-17)
 
