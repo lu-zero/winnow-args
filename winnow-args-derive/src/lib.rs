@@ -167,6 +167,10 @@ mod spec;
 /// - `group("name", required, multiple)`: a group. A field joins it with
 ///   `group = "name"`. `required` means at least one member is present.
 ///   Without `multiple`, a second member conflicts with the first.
+/// - `validate = path`: a `fn(&Self) -> Result<(), winnow_args::Error>`,
+///   called once the struct is built and its rules hold. It returns
+///   `Error::invalid` for a fault of several fields, or `Error::invalid_value`
+///   for one value. A flattened struct's runs when that struct is built.
 /// - `spec = "…"`: the name the pages file this type under, instead of its own.
 ///   A field or a variant that holds the type states the same name. See
 ///   [Documentation](crate#documentation).
@@ -279,6 +283,11 @@ mod spec;
 /// - `required`: after `env` and the defaults, the field holds a value. A
 ///   `Vec` without `required` may be empty.
 /// - `required_unless("…", …)`: required unless one of them has a value.
+/// - `required_unless_all("…", …)`: required unless all of them have a value.
+/// - `required_if("--flag")`: required when `--flag` was given.
+///   `required_if("--flag", "x")`: when its value equals `x` (`PartialEq`).
+///   Judged on the command line and `env`, before the defaults. Repeat it for
+///   another condition: any one makes the field required.
 /// - `conflicts("…", …)`: the parse fails when this field and any of those are
 ///   both supplied.
 /// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
@@ -395,8 +404,9 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 ///
 /// A variant with named fields is a command. Its fields are declared as a
 /// struct's are, and its doc comment and other options (`example`,
-/// `flatten_help`, `group`, …) are that command's. An enum with `run` has no
-/// such variant. A generic enum holds a struct that derives `Args`.
+/// `flatten_help`, `group`, …) are that command's. Its `validate` function
+/// takes the enum. An enum with `run` has no such variant. A generic enum
+/// holds a struct that derives `Args`.
 ///
 /// ```ignore
 /// #[derive(Subcommand, Debug, PartialEq)]
@@ -462,9 +472,11 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         // The name a variant with fields is filed under, when it is not its
         // struct's own.
         let mut filed_as = None;
-        if let Some((_, tokens, stated)) = fields_of {
+        let mut validate = None;
+        if let Some((_, tokens, stated, check)) = fields_of {
             structs.push(tokens);
             filed_as = stated;
+            validate = check;
             if runs.is_some() {
                 return Err(syn::Error::new(
                     ident.span(),
@@ -587,9 +599,18 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 let ty = inner.as_ref().expect("a struct for the fields");
                 let names = fields.named.iter().map(|field| &field.ident);
                 let names: Vec<_> = names.collect();
+                let check = validate.as_ref().map(|path| {
+                    quote! {
+                        .and_then(|__built| {
+                            #path(&__built)?;
+                            ::core::result::Result::Ok(__built)
+                        })
+                    }
+                });
                 quote! {
                     <#ty as ::winnow_args::Args>::parse_argv_with(__input, __globals)
                         .map(|#ty { #(#names),* }| Self::#ident { #(#names),* })
+                        #check
                 }
             }
             _ => {
@@ -716,7 +737,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 fn variant_struct(
     input: &DeriveInput,
     variant: &syn::Variant,
-) -> syn::Result<(Ident, TokenStream2, Option<String>)> {
+) -> syn::Result<(Ident, TokenStream2, Option<String>, Option<syn::Expr>)> {
     let Fields::Named(fields) = &variant.fields else {
         unreachable!("called for a variant with named fields");
     };
@@ -728,6 +749,8 @@ fn variant_struct(
     }
     let name = quote::format_ident!("__{}_{}", input.ident, variant.ident);
     let mut options: Vec<syn::Meta> = Vec::new();
+    // The enum calls it with the variant built, not the struct.
+    let mut validate = None;
     for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
         let metas = attr.parse_args_with(
             syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
@@ -737,6 +760,15 @@ fn variant_struct(
             match (key.as_deref(), &meta) {
                 // Its name among the subcommands, which the enum reads.
                 (Some("name" | "alias" | "alias_hidden" | "hide"), _) => {}
+                (Some("validate"), syn::Meta::NameValue(pair)) => {
+                    if validate.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            &pair.path,
+                            "`validate` is given twice",
+                        ));
+                    }
+                    validate = Some(pair.value.clone());
+                }
                 (Some("help"), syn::Meta::NameValue(pair)) => {
                     let text = &pair.value;
                     options.push(syn::parse_quote!(about = #text));
@@ -780,7 +812,7 @@ fn variant_struct(
         struct #name { #(#plain),* }
         #args
     };
-    Ok((name, tokens, stated))
+    Ok((name, tokens, stated, validate))
 }
 
 /// `Run` or `RunAsync` for a `Subcommand` enum: the command it holds is run,
@@ -1956,7 +1988,8 @@ fn variant_names<'a>(
                 }
             } else {
                 return Err(meta.error(
-                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`",
+                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`; \
+                     a command's options, such as `validate`, go on a variant with fields or on the struct it holds",
                 ));
             }
             Ok(())
@@ -2238,6 +2271,10 @@ struct Field {
     required: bool,
     /// Required unless one of these selectors has a value.
     required_unless: Vec<String>,
+    /// Required unless every one of these has a value.
+    required_unless_all: Vec<String>,
+    /// Required when a field was given, or given this value.
+    required_ifs: Vec<(String, Option<String>)>,
     /// The struct-level group this field belongs to.
     group: Option<String>,
     /// The value of a flag given without one.
@@ -2750,6 +2787,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         outputs,
         exit_codes,
         arg_required_else_help,
+        validate,
         name: program_name,
         version,
         about,
@@ -2862,6 +2900,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (about, long_about) = (text(&about_text), text(&long_about_text));
     let (after_help, after_long_help) = (text(&after_text), text(&after_long_text));
     let rules = Rules::new(&fields, &groups)?;
+    // The program's own check of the built struct.
+    let validate = validate.map(|path| quote!(#path(&__built)?;));
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -4063,6 +4103,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #(#flatten_build)*
                     };
                     #(#field_reads)*
+                    #validate
                     ::core::result::Result::Ok(__built)
                 }
             }
@@ -4293,6 +4334,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #(#flatten_build)*
                 };
                 #(#field_reads)*
+                #validate
                 ::core::result::Result::Ok(__built)
             }
         }
@@ -4336,6 +4378,8 @@ struct StructOptions {
     exit_codes: Vec<(u8, String)>,
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
+    /// Called with the built struct, before it is returned.
+    validate: Option<syn::Path>,
     /// The program name for the usage line; `argv[0]` when empty.
     name: String,
     /// `-V`/`--version` text: a literal, or `CARGO_PKG_VERSION`.
@@ -4452,6 +4496,13 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.examples.push(example);
                 return Ok(());
             }
+            if meta.path.is_ident("validate") {
+                if options.validate.is_some() {
+                    return Err(meta.error("`validate` is given twice"));
+                }
+                options.validate = Some(meta.value()?.parse::<syn::Path>()?);
+                return Ok(());
+            }
             if meta.path.is_ident("arg_required_else_help") {
                 options.arg_required_else_help = true;
                 return Ok(());
@@ -4530,7 +4581,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
-                     `plus_options`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, \
+                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));
@@ -4612,6 +4663,10 @@ struct Rules {
     requires: Vec<(usize, usize)>,
     /// `(field, others)`: `field` needs a value unless one of `others` has one.
     required_unless: Vec<(usize, Vec<usize>)>,
+    /// `(field, others)`: `field` needs a value unless every one of `others` has one.
+    required_unless_all: Vec<(usize, Vec<usize>)>,
+    /// `(field, other, the value `other` must have)`: `field` needs a value when it holds.
+    required_ifs: Vec<(usize, usize, Option<String>)>,
     /// Members of each struct-level group, in `groups` order.
     members: Vec<Vec<usize>>,
     /// `(field, other, the value `other` must have, the field's default then)`.
@@ -4658,6 +4713,8 @@ impl Rules {
             beats: vec![Vec::new(); fields.len()],
             requires: Vec::new(),
             required_unless: Vec::new(),
+            required_unless_all: Vec::new(),
+            required_ifs: Vec::new(),
             members: vec![Vec::new(); groups.len()],
             default_ifs: Vec::new(),
         };
@@ -4681,8 +4738,21 @@ impl Rules {
             for selector in &f.requires {
                 rules.requires.push((i, resolve(f, selector)?));
             }
-            for (selector, equals, value) in &f.default_ifs {
+            // A condition on another field: given, or given a value it can compare.
+            // `instead` is the spelling without the comparison.
+            // A condition, or what a requirement depends on, is another field.
+            let other_than_self = |selector: &str| {
                 let other = resolve(f, selector)?;
+                if other == i {
+                    return Err(syn::Error::new(
+                        f.ident.span(),
+                        format!("`{selector}` is this field: name another one"),
+                    ));
+                }
+                Ok(other)
+            };
+            let condition = |selector: &str, equals: &Option<String>, instead: &str| {
+                let other = other_than_self(selector)?;
                 let comparable = match &fields[other].kind {
                     Kind::Count(_) => false,
                     Kind::Switch => equals.as_deref().is_none_or(is_bool_word),
@@ -4691,20 +4761,36 @@ impl Rules {
                 if equals.is_some() && !comparable {
                     return Err(syn::Error::new(
                         f.ident.span(),
-                        format!(
-                            "`{selector}` has no value to compare: use `default_if(\"{selector}\", \"…\")`"
-                        ),
+                        format!("`{selector}` has no value to compare: use `{instead}`"),
                     ));
                 }
+                Ok(other)
+            };
+            for (selector, equals, value) in &f.default_ifs {
+                let instead = format!("default_if(\"{selector}\", \"…\")");
+                let other = condition(selector, equals, &instead)?;
                 rules
                     .default_ifs
                     .push((i, other, equals.clone(), value.clone()));
+            }
+            for (selector, equals) in &f.required_ifs {
+                let instead = format!("required_if(\"{selector}\")");
+                let other = condition(selector, equals, &instead)?;
+                rules.required_ifs.push((i, other, equals.clone()));
+            }
+            if !f.required_unless_all.is_empty() {
+                let others = f
+                    .required_unless_all
+                    .iter()
+                    .map(|selector| other_than_self(selector))
+                    .collect::<syn::Result<_>>()?;
+                rules.required_unless_all.push((i, others));
             }
             if !f.required_unless.is_empty() {
                 let others = f
                     .required_unless
                     .iter()
-                    .map(|selector| resolve(f, selector))
+                    .map(|selector| other_than_self(selector))
                     .collect::<syn::Result<_>>()?;
                 rules.required_unless.push((i, others));
             }
@@ -4821,37 +4907,17 @@ impl Rules {
     /// that holds for a field still without a value gives it one.
     fn default_ifs(&self, fields: &[Field]) -> TokenStream2 {
         let (mut conditions, mut fills) = (Vec::new(), Vec::new());
+        // `required_if` is judged on the same snapshot, and checked with the
+        // other requirements.
+        for (n, (_, other, equals)) in self.required_ifs.iter().enumerate() {
+            let holds = format_ident!("__required_if_{n}");
+            let condition = condition(&fields[*other], equals.as_deref());
+            conditions.push(quote!(let #holds = #condition;));
+        }
         for (n, (field, other, equals, value)) in self.default_ifs.iter().enumerate() {
-            let (f, other) = (&fields[*field], &fields[*other]);
+            let f = &fields[*field];
             let holds = format_ident!("__default_if_{n}");
-            let other_slot = slot(&other.ident);
-            let is = |ty: &Type, equals: &str| {
-                let literal = LitByteStr::new(equals.as_bytes(), Span::call_site());
-                let (ty, unwrap) = other.parsed(ty);
-                quote! {
-                    |__v| <#ty as ::winnow_args::FromArg>::from_arg(__wa::BStr::new(#literal))
-                        .is_ok_and(|__literal| __literal #unwrap == *__v)
-                }
-            };
-            let condition = match (equals, &other.kind) {
-                (None, _) => other.has(),
-                (Some(equals), Kind::Switch) => {
-                    let equals = equals == "true";
-                    match other.negate {
-                        Some(_) => quote!((#other_slot == ::core::option::Option::Some(#equals))),
-                        None => quote!((#other_slot == #equals)),
-                    }
-                }
-                (Some(equals), Kind::Optional(ty) | Kind::Required(ty)) => {
-                    let is = is(ty, equals);
-                    quote!(#other_slot.as_ref().is_some_and(#is))
-                }
-                (Some(equals), Kind::Many(ty)) => {
-                    let is = is(ty, equals);
-                    quote!(#other_slot.iter().any(#is))
-                }
-                (Some(_), Kind::Count(_)) => unreachable!("refused when the rules were read"),
-            };
+            let condition = condition(&fields[*other], equals.as_deref());
             conditions.push(quote!(let #holds = #condition;));
             let unset = f.unset(self.is_displaced(fields, f));
             let slot = slot(&f.ident);
@@ -4950,7 +5016,70 @@ impl Rules {
                 }
             }
         });
-        quote!(#(#plain)* #(#unless)* #(#one_of)* #(#requires)*)
+        let unless_all = self.required_unless_all.iter().map(|(i, others)| {
+            let (has, displaced) = (fields[*i].has(), displaced(&fields[*i]));
+            let others = others.iter().map(|&j| fields[j].has());
+            let error = missing(&fields[*i]);
+            quote! {
+                if !#has #displaced && !(#(#others)&&*) {
+                    return ::core::result::Result::Err(#error);
+                }
+            }
+        });
+        let required_ifs = self
+            .required_ifs
+            .iter()
+            .enumerate()
+            .map(|(n, (i, j, equals))| {
+                let holds = format_ident!("__required_if_{n}");
+                let (has, displaced) = (fields[*i].has(), displaced(&fields[*i]));
+                let target = fields[*i].display();
+                let by = match equals {
+                    Some(equals) => format!("{}={equals}", fields[*j].display()),
+                    None => fields[*j].display(),
+                };
+                quote! {
+                    if #holds && !#has #displaced {
+                        return ::core::result::Result::Err(
+                            __wa::Error::required_by(__input.offset(), #target, #by),
+                        );
+                    }
+                }
+            });
+        quote!(#(#plain)* #(#unless)* #(#unless_all)* #(#required_ifs)* #(#one_of)* #(#requires)*)
+    }
+}
+
+/// Whether `other` has a value, or `equals` when it is given: the condition
+/// of a `default_if` or a `required_if`, judged before the defaults.
+fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
+    let other_slot = slot(&other.ident);
+    let is = |ty: &Type, equals: &str| {
+        let literal = LitByteStr::new(equals.as_bytes(), Span::call_site());
+        let (ty, unwrap) = other.parsed(ty);
+        quote! {
+            |__v| <#ty as ::winnow_args::FromArg>::from_arg(__wa::BStr::new(#literal))
+                .is_ok_and(|__literal| __literal #unwrap == *__v)
+        }
+    };
+    match (equals, &other.kind) {
+        (None, _) => other.has(),
+        (Some(equals), Kind::Switch) => {
+            let equals = equals == "true";
+            match other.negate {
+                Some(_) => quote!((#other_slot == ::core::option::Option::Some(#equals))),
+                None => quote!((#other_slot == #equals)),
+            }
+        }
+        (Some(equals), Kind::Optional(ty) | Kind::Required(ty)) => {
+            let is = is(ty, equals);
+            quote!(#other_slot.as_ref().is_some_and(#is))
+        }
+        (Some(equals), Kind::Many(ty)) => {
+            let is = is(ty, equals);
+            quote!(#other_slot.iter().any(#is))
+        }
+        (Some(_), Kind::Count(_)) => unreachable!("refused when the rules were read"),
     }
 }
 
@@ -5026,6 +5155,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
+    let (mut required_unless_all, mut required_ifs) = (Vec::new(), Vec::new());
     let mut value_name = None;
     let (mut hint, mut complete) = (None, None);
     for attr in f.attrs.iter().filter(|a| is_ours(a)) {
@@ -5171,8 +5301,32 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 overrides.extend(aliases(&meta)?);
             } else if meta.path.is_ident("requires") {
                 requires.extend(aliases(&meta)?);
-            } else if meta.path.is_ident("required_unless") {
-                required_unless.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("required_unless")
+                || meta.path.is_ident("required_unless_all")
+            {
+                let others = aliases(&meta)?;
+                if others.is_empty() {
+                    return Err(meta.error("name the fields it depends on"));
+                }
+                if meta.path.is_ident("required_unless") {
+                    required_unless.extend(others);
+                } else {
+                    required_unless_all.extend(others);
+                }
+            } else if meta.path.is_ident("required_if") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                let list =
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                let mut words = list.iter().map(LitStr::value);
+                required_ifs.push(match (words.next(), words.next(), words.next()) {
+                    (Some(selector), equals, None) => (selector, equals),
+                    _ => {
+                        return Err(meta.error(
+                            "expected `required_if(\"--flag\")` or `required_if(\"--flag\", \"its value\")`",
+                        ));
+                    }
+                });
             } else if meta.path.is_ident("required") {
                 required = true;
             } else if meta.path.is_ident("group") {
@@ -5202,7 +5356,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_note`, `default_if`, `from_str`, \
-                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, \
+                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, \
                      `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
                 ));
             }
@@ -5418,6 +5572,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         requires,
         required,
         required_unless,
+        required_unless_all,
+        required_ifs,
         group,
         default_missing,
         long_help: long_help.or_else(|| help.clone()).unwrap_or(doc_long_help),

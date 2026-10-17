@@ -4,6 +4,18 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: `validate = function` on a struct, called with the struct once
+  it is built: the program's own check of what the rules do not say. A
+  variant with fields takes it too, and its function is given the enum.
+  `Error::invalid` is the error for a fault that is not one value's, of the
+  new kind `ErrorKind::Invalid`.
+- **Added**: `required_if("--flag")` and `required_if("--flag", "value")` on
+  a field: required when that flag was given, or given that value; repeated,
+  any one condition is enough. `required_unless_all(…)`: required unless all
+  of those have a value.
+
 ## 0.3.0 (2026-10-12)
 
 - **Added**: a subcommand's help lists the global flags it inherits, under

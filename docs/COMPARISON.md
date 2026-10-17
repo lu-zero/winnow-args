@@ -67,9 +67,9 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | | winnow-args | usage | bpaf | clap |
 |---|:-:|:-:|:-:|:-:|
 | Conflicts, requirements, groups | ✓ | ✓ | ~ by composition | ✓ |
-| Conditional requirements (`required_if`) | – | ✓ | ~ | ✓ |
+| Conditional requirements (`required_if`) | ✓ | ✓ | ~ | ✓ |
 | Flag constraints checked at compile time | ✓ | – | ~ types | – |
-| Cross-field validation hook | – | ✓ | ✓ `guard` | ~ |
+| Cross-field validation hook | ✓ `validate` | ✓ | ✓ `guard` | ~ |
 
 ## Help, errors, completion
 

@@ -48,6 +48,7 @@ mod sequence;
 mod subcommand;
 mod suggest;
 mod unknown_flags;
+mod validate;
 mod value_ranges;
 
 /// A line's words, as a parser takes them.

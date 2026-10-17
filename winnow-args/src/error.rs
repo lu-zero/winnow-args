@@ -58,6 +58,9 @@ pub enum ErrorKind {
     InvalidValue,
     /// A value outside a fixed set.
     InvalidChoice,
+    /// The parsed values failed the program's own check: a struct's
+    /// `validate` function returned [`Error::invalid`].
+    Invalid,
 }
 
 /// What `--help` or `--version` asked for, and where.
@@ -313,6 +316,23 @@ impl Error {
         error
     }
 
+    /// The parsed values are refused for `reason`: what a struct's `validate`
+    /// function returns when the fault is not one value's, as
+    /// [`Error::invalid_value`] is for one value.
+    ///
+    /// ```
+    /// use winnow_args::{Error, ErrorKind};
+    ///
+    /// let error = Error::invalid("`--root` cannot be used with `crossdev`");
+    /// assert_eq!(error.kind(), ErrorKind::Invalid);
+    /// assert_eq!(error.to_string(), "`--root` cannot be used with `crossdev`");
+    /// ```
+    pub fn invalid(reason: impl Into<BoxError>) -> Self {
+        let mut error = Self::with_token(ErrorKind::Invalid, 0, String::new());
+        error.detail_mut().cause = Some(reason.into());
+        error
+    }
+
     fn detail_mut(&mut self) -> &mut Detail {
         self.detail.get_or_insert_with(Default::default)
     }
@@ -390,6 +410,11 @@ impl Error {
             ErrorKind::MissingOneOf => format!("one of {} is required ({token})", good(value)),
             ErrorKind::MissingArgument => format!("missing argument `{}`", good(token)),
             ErrorKind::MissingSubcommand => "a subcommand is required".to_owned(),
+            ErrorKind::Invalid => self
+                .detail
+                .as_deref()
+                .and_then(|d| d.cause.as_ref())
+                .map_or_else(|| "invalid command line".to_owned(), ToString::to_string),
             ErrorKind::InvalidValue | ErrorKind::InvalidChoice => {
                 let mut text = format!("invalid value `{}` for `{token}`", bad(value));
                 if let Some(cause) = self.detail.as_deref().and_then(|d| d.cause.as_ref()) {

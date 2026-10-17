@@ -39,3 +39,33 @@ error: a switch's `default_if` value is `true` or `false`, not `yes`
    |
 50 |     #[arg(long, default_if("--json", "yes"))]
    |     ^
+
+error: `-v` has no value to compare: use `required_if("-v")`
+  --> tests/ui/rules.rs:61:5
+   |
+61 |     log: Option<String>,
+   |     ^^^
+
+error: `--nope` names no flag or positional of this struct
+  --> tests/ui/rules.rs:67:5
+   |
+67 |     log: Option<String>,
+   |     ^^^
+
+error: `--log` is this field: name another one
+  --> tests/ui/rules.rs:73:5
+   |
+73 |     log: Option<String>,
+   |     ^^^
+
+error: name the fields it depends on
+  --> tests/ui/rules.rs:78:17
+   |
+78 |     #[arg(long, required_unless_all())]
+   |                 ^^^^^^^^^^^^^^^^^^^^^
+
+error: `validate` is given twice
+  --> tests/ui/rules.rs:83:25
+   |
+83 | #[arg(validate = check, validate = check)]
+   |                         ^^^^^^^^

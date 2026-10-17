@@ -182,3 +182,72 @@ fn a_required_switch_must_be_given() {
     );
     assert!(parse::<RequiredSwitch>(&["--brew"], &[]).unwrap().brew);
 }
+
+/// `required_if` and `required_unless_all`.
+mod conditional {
+    use winnow_args::{Args, ErrorKind, ValueEnum, with_env};
+
+    #[derive(ValueEnum, Debug, Clone, Copy, PartialEq)]
+    enum Format {
+        Text,
+        Json,
+    }
+
+    #[derive(Args, Debug)]
+    struct Export {
+        #[arg(long, env = "EXPORT_FORMAT")]
+        format: Option<Format>,
+        #[arg(long)]
+        upload: bool,
+        /// Required for JSON, and for an upload.
+        #[arg(long, required_if("--format", "json"), required_if("--upload"))]
+        schema: Option<String>,
+        #[arg(long, default = "out")]
+        dir: String,
+        #[arg(long)]
+        name: Option<String>,
+        /// Not needed when both of the others are given.
+        #[arg(long, required_unless_all("--dir", "--name"))]
+        target: Option<String>,
+    }
+
+    fn parse(line: &[&str]) -> Result<Export, winnow_args::Error> {
+        Export::parse_from(line)
+    }
+
+    #[test]
+    fn a_value_of_another_field_makes_it_required() {
+        let error = parse(&["--format", "json", "--name", "n"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingRequired);
+        assert_eq!(
+            error.to_string(),
+            "`--schema` is required by `--format=json`"
+        );
+        assert!(parse(&["--format", "text", "--name", "n"]).is_ok());
+        assert!(parse(&["--format=json", "--schema", "s", "--name", "n"]).is_ok());
+    }
+
+    #[test]
+    fn another_field_given_makes_it_required() {
+        let error = parse(&["--upload", "--name", "n"]).unwrap_err();
+        assert_eq!(error.to_string(), "`--schema` is required by `--upload`");
+    }
+
+    #[test]
+    fn the_environment_counts_as_given() {
+        let error = with_env(&[("EXPORT_FORMAT", "json")], || parse(&["--name", "n"])).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "`--schema` is required by `--format=json`"
+        );
+    }
+
+    #[test]
+    fn required_unless_all_needs_every_one() {
+        // `--dir` has a default, so with `--name` both have a value.
+        assert!(parse(&["--name", "n"]).unwrap().target.is_none());
+        let error = parse(&[]).unwrap_err();
+        assert_eq!(error.to_string(), "`--target` is required");
+        assert!(parse(&["--target", "t"]).is_ok());
+    }
+}

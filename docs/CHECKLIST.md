@@ -78,6 +78,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 - [x] `conflicts`, `overrides`, `requires`, `required`, `required_unless`,
       struct-level `group("name", required, multiple)`
+- [x] `validate = function`: the program's own check of the built struct
+- [x] `required_if("--flag")`, `required_if("--flag", "value")`, repeatable;
+      `required_unless_all`
 
 ### Help, errors, completion
 
@@ -185,10 +188,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 - [ ] Bare `env`, `env_fallback`, `deprecated_env`
 - [ ] Repeated `default` for a `Vec`
-- [ ] `required_if`, `required_if_eq(_any/_all)`, `required_unless_all`,
-      `requires_if`, `exclusive`
-- [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions; a hook
-      on the built struct
+- [ ] `required_if_eq_all` (every condition), `requires_if`, `exclusive`
+- [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime
 - [ ] Relations on positionals and across `flatten`

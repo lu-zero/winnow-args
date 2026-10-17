@@ -811,6 +811,10 @@ pub mod __private {
             .collect();
         let words: Vec<&BStr> = spelled.iter().map(|w| BStr::new(w.as_slice())).collect();
         T::parse_words(&words).map_err(|e| {
+            // The vocabulary's own check speaks for itself.
+            if e.kind() == crate::ErrorKind::Invalid {
+                return e;
+            }
             let keyword = e.token().map_or_else(String::new, |t| {
                 t.strip_prefix("--").unwrap_or(t).to_owned()
             });

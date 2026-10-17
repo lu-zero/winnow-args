@@ -53,4 +53,41 @@ struct SwitchDefaultIf {
     json: bool,
 }
 
+#[derive(Args)]
+struct RequiredIfCount {
+    #[arg(short, count)]
+    verbose: u8,
+    #[arg(long, required_if("-v", "2"))]
+    log: Option<String>,
+}
+
+#[derive(Args)]
+struct RequiredIfNothing {
+    #[arg(long, required_if("--nope"))]
+    log: Option<String>,
+}
+
+#[derive(Args)]
+struct RequiredIfItself {
+    #[arg(long, required_if("--log", "x"))]
+    log: Option<String>,
+}
+
+#[derive(Args)]
+struct RequiredUnlessNothing {
+    #[arg(long, required_unless_all())]
+    log: Option<String>,
+}
+
+#[derive(Args)]
+#[arg(validate = check, validate = check)]
+struct ValidateTwice {
+    #[arg(long)]
+    log: Option<String>,
+}
+
+fn check(_: &ValidateTwice) -> Result<(), winnow_args::Error> {
+    Ok(())
+}
+
 fn main() {}
