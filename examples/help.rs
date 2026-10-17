@@ -3,7 +3,7 @@
 //! value names, defaults, environment variables, possible values, a heading
 //! with a paragraph, a warning, examples, and long help. Its descriptions
 //! use each mark help paints: `` `code` ``, `*emphasis*` and `**strong**`. An
-//! example's command line is shown as typed, marks and all.
+//! example's command line is shown as typed.
 //!
 //!     cargo run --example help -- -h            # short help
 //!     cargo run --example help -- --help        # long help

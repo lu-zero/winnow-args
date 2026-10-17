@@ -19,7 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 A page is named after its command, `tool-use-add.md`, and a subcommand is a
-link to its own page.
+link to its own page. A description's `` `code` ``, `*emphasized*` and `**strong**`
+spans are written as Markdown's own, and other Markdown in it is escaped.
 
 The repository's
 [examples](https://github.com/lu-zero/winnow-args/tree/HEAD/examples) have a

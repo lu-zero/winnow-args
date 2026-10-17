@@ -20,8 +20,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 A page is named after its command, `tool-use-add.1`. `Manual` holds the
 header's date, source and title; `Manual::date_of` turns
-`SOURCE_DATE_EPOCH` into the date. A description's backticks and stars are
-printed as written.
+`SOURCE_DATE_EPOCH` into the date. A description's `` `code` `` and `**strong**`
+spans are bold, its `*emphasized*` ones italic; the backticks are kept and
+the stars dropped.
 
 The repository's
 [examples](https://github.com/lu-zero/winnow-args/tree/HEAD/examples) have a

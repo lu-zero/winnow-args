@@ -94,8 +94,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Colour: `help::Style`, `color::Theme` per depth (16, 256, 24-bit),
       chosen by `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE` and the stream
 - [x] `` `quoted` ``, `*emphasized*` and `**strong**` spans of a description
-      painted, marks kept; stars that wrap nothing (`*.rs`, `2*3*4`, a
-      bullet) are text; in a heading, over the heading's own paint
+      painted, backticks kept and stars dropped; stars that wrap nothing
+      (`*.rs`, `2*3*4`, a bullet) are text; in a heading, over the heading's
+      own paint
 - [x] `help-text` feature: help keeps its structure without the prose
 - [x] Error kinds after usage's codes, with the offending word's offset;
       `report` maps them to output and exit status
@@ -125,8 +126,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       accounts for is refused where a `ValueEnum` of another file has it,
       rather than given that enum's choices
 - [ ] In those pages: a `use` inside a function is read as its module's
-- [ ] In a man page: a description's backticks and stars are printed as
-      written, not turned into fonts
+- [x] In a man page: a description's code and strong spans are bold, its
+      emphasized ones italic, without their stars; in Markdown, they are
+      Markdown's own spans
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate

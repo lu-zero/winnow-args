@@ -61,7 +61,8 @@ mod spec;
 /// Attributes are `#[arg(...)]`, or `#[winnow_args(...)]` where another derive
 /// claims `arg`. With no `short`, `long` or `plus`, a field is `--field-name`.
 /// The doc comment is the help. A `` `quoted` ``, `*emphasized*` or
-/// `**strong**` span in it is painted, and the marks are kept.
+/// `**strong**` span in it is painted. Backticks are kept, and stars are
+/// dropped where the span is painted.
 ///
 /// ```ignore
 /// use winnow_args::Args;

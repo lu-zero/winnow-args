@@ -9,6 +9,11 @@ released together. Versions follow [semver](https://semver.org).
 - **Changed**: help paints an example's line word by word: the program, its
   subcommands, its flags, `<NAME>` placeholders and a `# comment`. The text
   is unchanged.
+- **Changed**: a `*emphasized*` or `**strong**` span loses its stars where
+  it is rendered: in painted help, where it was painted with its stars kept;
+  in a man page, now in italic or bold; and in Markdown, where it was
+  escaped and is now Markdown's own. A `` `code` `` span keeps its
+  backticks, in bold on a man page. Unpainted help is unchanged.
 - **Fixed**: a `Vec` flag with `values = 1..` is shown as `--tag <TAG>...`
   in help and the pages, not with a second `...`.
 - **Added**: `examples/gallery.rs` uses every item help renders.

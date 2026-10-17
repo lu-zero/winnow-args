@@ -1224,7 +1224,7 @@ fn heading(out: &mut String, title: &str, style: Style) {
     let inks = [style.code(), style.emphasis(), style.strong()];
     let mut at = 0;
     if style.depth != Depth::None {
-        while let Some((open, end, ink)) = marked(title, at, inks) {
+        while let Some((open, end, ink, stars)) = marked(title, at, inks) {
             if at < open {
                 push_painted(out, header, &title[at..open]);
             }
@@ -1235,7 +1235,7 @@ fn heading(out: &mut String, title: &str, style: Style) {
                 italic: header.paint.italic || ink.paint.italic,
                 underline: header.paint.underline || ink.paint.underline,
             };
-            push_painted(out, style.ink(both), &title[open..end]);
+            push_painted(out, style.ink(both), &title[open + stars..end - stars]);
             at = end;
         }
     }
@@ -1243,7 +1243,9 @@ fn heading(out: &mut String, title: &str, style: Style) {
 }
 
 /// `text` with each `` `quoted` ``, `*emphasized*` and `**strong**` span
-/// painted, marks kept (so the painted page is the plain one plus escapes).
+/// painted. A quoted span keeps its backticks, which say what to type; the
+/// stars go, since the paint says what they did. Where nothing is painted
+/// the text is as written.
 /// Each word of a span is painted on its own, so wrapping never breaks inside
 /// a painted run; a mark with no pair on its line is left alone.
 fn painted_marks(text: &str, style: Style) -> String {
@@ -1260,9 +1262,9 @@ fn painted_marks(text: &str, style: Style) -> String {
             out.push('\n');
         }
         let mut at = 0;
-        while let Some((open, end, ink)) = marked(line, at, inks) {
+        while let Some((open, end, ink, stars)) = marked(line, at, inks) {
             out.push_str(&line[at..open]);
-            for (i, word) in line[open..end].split(' ').enumerate() {
+            for (i, word) in line[open + stars..end - stars].split(' ').enumerate() {
                 if i > 0 {
                     out.push(' ');
                 }
@@ -1277,8 +1279,9 @@ fn painted_marks(text: &str, style: Style) -> String {
     out
 }
 
-/// The first marked span of `line` at or after `from`, marks included, and
-/// its ink among those of a quoted, an emphasized and a strong one.
+/// The first marked span of `line` at or after `from`, marks included, its
+/// ink among those of a quoted, an emphasized and a strong one, and how many
+/// stars it has on each side: a quoted span keeps its backticks.
 ///
 /// Stars whose ink paints nothing mark no span, so a quoted span between
 /// them is still painted.
@@ -1291,14 +1294,14 @@ fn marked(
     line: &str,
     from: usize,
     [code, emphasis, strong]: [Ink; 3],
-) -> Option<(usize, usize, Ink)> {
+) -> Option<(usize, usize, Ink, usize)> {
     let bytes = line.as_bytes();
     let mut at = from;
     while at < bytes.len() {
         match bytes[at] {
             b'`' => {
                 if let Some(len) = line[at + 1..].find('`') {
-                    return Some((at, at + len + 2, code));
+                    return Some((at, at + len + 2, code, 0));
                 }
                 at += 1;
             }
@@ -1313,7 +1316,7 @@ fn marked(
                     && after.is_some_and(|c| !c.is_whitespace())
                     && let Some(end) = closing(line, at + stars, stars)
                 {
-                    return Some((at, end, ink));
+                    return Some((at, end, ink, stars));
                 }
                 at += stars;
             }

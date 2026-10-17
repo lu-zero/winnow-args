@@ -2,6 +2,7 @@
 #![warn(missing_docs)]
 
 use roff::{Inline, Roff};
+use winnow_args_spec::marks::{Mark, pieces};
 use winnow_args_spec::{Command, Item, Page, Sub, pages};
 
 /// Header fields of a manual page. They are not part of the command.
@@ -87,7 +88,9 @@ impl Manual {
         if about.is_empty() {
             doc.text([bold(&name)]);
         } else {
-            doc.text([bold(&name), roman(" - "), roman(&about)]);
+            let mut line = vec![bold(&name), roman(" - ")];
+            line.extend(prose(&about));
+            doc.text(line);
         }
 
         doc.control("SH", ["SYNOPSIS"]);
@@ -102,7 +105,7 @@ impl Manual {
         if !body.is_empty() || !notes.is_empty() {
             doc.control("SH", ["DESCRIPTION"]);
             if !body.is_empty() {
-                doc.text([roman(body)]);
+                doc.text(prose(body));
             }
             for (index, note) in notes.into_iter().enumerate() {
                 if index > 0 || !body.is_empty() {
@@ -154,7 +157,7 @@ impl Manual {
         for (title, items) in grouped.headings {
             doc.control("SH", [arg(title).as_str()]);
             if let Some(help) = command.heading_help(title) {
-                doc.text([roman(help)]);
+                doc.text(prose(help));
             }
             for item in items {
                 item_tp(&mut doc, item);
@@ -198,11 +201,11 @@ impl Manual {
             for example in &command.examples {
                 doc.control("PP", std::iter::empty::<&str>());
                 if !example.header.is_empty() {
-                    doc.text([roman(format!("{}:", example.header))]);
+                    doc.text(prose(&format!("{}:", example.header)));
                     doc.control("br", std::iter::empty::<&str>());
                 }
                 if !example.help.is_empty() {
-                    doc.text([roman(&example.help)]);
+                    doc.text(prose(&example.help));
                     doc.control("br", std::iter::empty::<&str>());
                 }
                 doc.text([bold(format!("$ {}", example.code))]);
@@ -212,7 +215,7 @@ impl Manual {
         // A .TP keeps following lines in that tagged paragraph until a paragraph macro.
         if !after.is_empty() {
             doc.control("PP", std::iter::empty::<&str>());
-            doc.text([roman(after)]);
+            doc.text(prose(after));
         }
         doc.render()
     }
@@ -244,6 +247,21 @@ fn printable(text: &str) -> String {
         .collect()
 }
 
+/// Text with its `` `code` `` spans in bold, backticks kept, its `**strong**`
+/// ones in bold and its `*emphasized*` ones in italic, without their stars:
+/// the font says what the stars did. A mark that opens no span is plain text.
+fn prose(text: &str) -> Vec<Inline> {
+    pieces(text)
+        .into_iter()
+        .map(|piece| match piece.mark {
+            None => roman(piece.text),
+            Some(Mark::Code) => bold(format!("`{}`", piece.text)),
+            Some(Mark::Emphasis) => italic(piece.text),
+            Some(Mark::Strong) => bold(piece.text),
+        })
+        .collect()
+}
+
 fn roman(text: impl AsRef<str>) -> Inline {
     roff::roman(printable(text.as_ref()))
 }
@@ -264,7 +282,7 @@ fn term(doc: &mut Roff, tag: Vec<Inline>, body: &str) {
     doc.control("TP", std::iter::empty::<&str>());
     doc.text(tag);
     if !body.is_empty() {
-        doc.text([roman(body)]);
+        doc.text(prose(body));
     }
 }
 
@@ -446,6 +464,32 @@ mod tests {
             }],
             ..Command::default()
         }
+    }
+
+    #[test]
+    fn marked_spans_are_bold_and_italic() {
+        let mut command = telling();
+        command.about = "Use `--force` to *really* do it, **now**; 2*3*4 and * stays.".to_owned();
+        let pages = Manual::default().render_pages(&command, "em").unwrap();
+        let root = &pages[0].1;
+        assert!(
+            root.contains(
+                "Use \\fB`\\-\\-force`\\fR to \\fIreally\\fR do it, \\fBnow\\fR; 2*3*4 and * stays."
+            ),
+            "{root}"
+        );
+        // As help reads them: the first closer only, a quoted span skipped.
+        let man = |text: &str| {
+            let mut command = telling();
+            command.about = text.to_owned();
+            Manual::default().render_pages(&command, "em").unwrap()[0]
+                .1
+                .clone()
+        };
+        assert!(man("*.rs is *never* read").contains("*.rs is \\fInever\\fR read"));
+        assert!(man("*a `b*` c*").contains("\\fIa `b*` c\\fR"));
+        let plain = prose("no marks");
+        assert_eq!(plain.len(), 1);
     }
 
     #[test]

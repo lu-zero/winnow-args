@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
+use winnow_args_spec::marks::{Mark, pieces};
 use winnow_args_spec::{Command, Item, Page, Sub, pages};
 
 /// The root page and one page per visible subcommand.
@@ -114,7 +115,7 @@ pub fn render(page: &Page<'_>) -> String {
         heading(&mut out, "Examples");
         for example in &command.examples {
             if !example.header.is_empty() {
-                out.push_str(&format!("**{}**\n\n", escape(&example.header)));
+                out.push_str(&format!("**{}**\n\n", escape_marked(&example.header, "")));
             }
             if !example.help.is_empty() {
                 out.push_str(&blocks(&example.help));
@@ -246,22 +247,34 @@ fn blocks(text: &str) -> String {
     out
 }
 
-/// Escape Markdown outside paired backtick spans, and a `#` that would start
-/// a heading.
+/// Escape Markdown outside the spans that help reads, and a `#` that would
+/// start a heading. A `` `code` `` span is kept, and an `*emphasized*` or
+/// `**strong**` one is written as Markdown's own.
 fn escape(text: &str) -> String {
+    escape_marked(text, "**")
+}
+
+/// [`escape`], with `strong` around a strong span: empty where the text is
+/// bold already.
+fn escape_marked(text: &str, strong: &str) -> String {
     let text = &text.replace("\n#", "\n\\#");
     let mut out = String::from(if text.starts_with('#') { "\\" } else { "" });
-    let mut rest = text.as_str();
-    while let Some(open) = rest.find('`') {
-        let Some(len) = rest[open + 1..].find('`') else {
-            break;
+    for piece in pieces(text) {
+        let mark = match piece.mark {
+            None => "",
+            Some(Mark::Code) => {
+                out.push('`');
+                out.push_str(piece.text);
+                out.push('`');
+                continue;
+            }
+            Some(Mark::Emphasis) => "*",
+            Some(Mark::Strong) => strong,
         };
-        let close = open + 1 + len;
-        push_escaped(&mut out, &rest[..open]);
-        out.push_str(&rest[open..=close]);
-        rest = &rest[close + 1..];
+        out.push_str(mark);
+        push_escaped(&mut out, piece.text);
+        out.push_str(mark);
     }
-    push_escaped(&mut out, rest);
     out
 }
 
@@ -311,7 +324,7 @@ mod tests {
         };
         Command {
             name: "tool".to_owned(),
-            about: "Use *wild* and `a<b>` for <FILE> & co.".to_owned(),
+            about: "Use *wild* and `a<b>` for <FILE> & 2*3 co.".to_owned(),
             after_help: "Examples:\n    $ tool use <x>\n# not a heading".to_owned(),
             items: vec![verbose, file],
             subcommands: vec![winnow_args_spec::Sub {
@@ -341,11 +354,11 @@ mod tests {
         );
         let root = &pages[0].1;
         assert!(
-            root.contains("Use \\*wild\\* and `a<b>` for \\<FILE\\> \\& co."),
+            root.contains("Use *wild* and `a<b>` for \\<FILE\\> \\& 2\\*3 co."),
             "{root}"
         );
         assert!(
-            root.contains("[`use`](tool-use.md), `u` — Install \\*now\\*."),
+            root.contains("[`use`](tool-use.md), `u` — Install *now*."),
             "{root}"
         );
         assert!(
@@ -406,7 +419,7 @@ mod tests {
             examples: vec![
                 Example {
                     code: "em -ua @world".to_owned(),
-                    header: "Update".to_owned(),
+                    header: "Update **all**".to_owned(),
                     help: "Rebuilds what changed.".to_owned(),
                 },
                 Example {
@@ -491,7 +504,7 @@ mod tests {
         );
         assert!(
             root.ends_with(
-                "## Examples\n\n**Update**\n\nRebuilds what changed.\n\n```\n$ em -ua @world\n```\n\n```\n$ em query\n```\n"
+                "## Examples\n\n**Update all**\n\nRebuilds what changed.\n\n```\n$ em -ua @world\n```\n\n```\n$ em query\n```\n"
             ),
             "{root}"
         );

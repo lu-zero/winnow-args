@@ -585,31 +585,32 @@ fn starred_spans_in_descriptions_are_emphasis() {
     let text = with_env(&[], || e.render_help_styled("s", Style::COLORED).unwrap());
     let about = format!(
         "Copies {} {}, {}.",
-        sgr("1", "**every"),
-        sgr("1", "file**"),
-        sgr("3", "*slowly*")
+        sgr("1", "every"),
+        sgr("1", "file"),
+        sgr("3", "slowly")
     );
     assert!(text.starts_with(&about), "{text:?}");
     let globs = format!(
         "A glob as *.rs or *.toml, 2*3*4, a*b*, {} {} {} {} \\*not* ***no*** *open",
-        sgr("1", "**never**"),
-        sgr("3", "*a"),
+        sgr("1", "never"),
+        sgr("3", "a"),
         sgr("3", "`*`"),
-        sgr("3", "b*")
+        sgr("3", "b")
     );
     assert!(text.contains(&globs), "{text:?}");
     let bullet = format!(
         "* a bullet, ** two, and ({}), {}.",
-        sgr("3", "*this*"),
-        sgr("1", "**that**")
+        sgr("3", "this"),
+        sgr("1", "that")
     );
     assert!(text.contains(&bullet), "{text:?}");
     // In a heading a span is the heading's paint and its own.
-    let heading = format!("{}{}", sgr("1;3;36", "*Rarely*"), sgr("1;36", " needed:"));
+    let heading = format!("{}{}", sgr("1;3;36", "Rarely"), sgr("1;36", " needed:"));
     assert!(text.contains(&heading), "{text:?}");
-    // The painted page is the plain one plus escapes.
+    // The painted stars go; unpainted, the text is as written.
     let plain = with_env(&[], || e.render_help("s").unwrap());
-    assert_eq!(strip(&text), plain);
+    assert!(strip(&text).starts_with("Copies every file, slowly.\n"));
+    assert!(plain.starts_with("Copies **every file**, *slowly*.\n"));
     // A palette paints each on its own, or not at all.
     let own = Palette {
         emphasis: Paint::ansi(Ansi::Cyan),
@@ -618,7 +619,7 @@ fn starred_spans_in_descriptions_are_emphasis() {
     };
     let style = Style::at(own, Depth::Ansi16);
     let text = with_env(&[], || e.render_help_styled("s", style).unwrap());
-    assert!(text.contains(&sgr("36", "*slowly*")), "{text:?}");
+    assert!(text.contains(&sgr("36", "slowly")), "{text:?}");
     assert!(text.contains("**every file**"), "{text:?}");
     let text = with_env(&[], || e.render_help_styled("s", Style::CLAP).unwrap());
     assert!(text.contains("**every file**, *slowly*"), "{text:?}");

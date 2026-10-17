@@ -68,7 +68,8 @@
 //!   spelling when there is one.
 //! - [`help`] is the help text and [`color`] its theme. A `` `quoted` ``,
 //!   `*emphasized*` or `**strong**` span is painted, each by its own paint in
-//!   [`color::Palette`], and the marks are kept.
+//!   [`color::Palette`]. Backticks are kept, and stars are dropped where the
+//!   span is painted.
 //! - [`complete`] writes completion scripts for bash, zsh, fish, elvish and
 //!   PowerShell.
 //! - [`response`] reads `@file` words.
