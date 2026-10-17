@@ -419,3 +419,62 @@ mod nested {
         }
     }
 }
+
+/// `hide_default_value`, `hide_env` and `display_order`.
+mod hidden_and_ordered {
+    use winnow_args::{Args, with_env};
+
+    #[derive(Args, Debug)]
+    #[arg(name = "deploy")]
+    struct Deploy {
+        /// The region
+        #[arg(long, default = "eu-west-1", env = "DEPLOY_REGION")]
+        region: String,
+        /// The token
+        #[arg(
+            long,
+            env = "DEPLOY_TOKEN",
+            hide_env,
+            default = "dev",
+            hide_default_value
+        )]
+        token: String,
+        /// Listed first
+        #[arg(long, display_order = 0)]
+        yes: bool,
+    }
+
+    fn help() -> String {
+        let error = Deploy::parse_from(["-h"]).unwrap_err();
+        with_env(&[("COLUMNS", "100")], || error.render_help("deploy")).unwrap()
+    }
+
+    #[test]
+    fn hidden_details_stay_out_of_help_and_still_work() {
+        let page = help();
+        assert!(
+            page.contains("[env: DEPLOY_REGION] [default: eu-west-1]"),
+            "{page}"
+        );
+        assert!(!page.contains("DEPLOY_TOKEN"), "{page}");
+        assert!(!page.contains("dev"), "{page}");
+        let deploy = with_env(&[("DEPLOY_TOKEN", "t")], || {
+            Deploy::parse_from::<[&str; 0], &str>([])
+        })
+        .unwrap();
+        assert_eq!(deploy.token, "t");
+        assert_eq!(
+            Deploy::parse_from::<[&str; 0], &str>([]).unwrap().token,
+            "dev"
+        );
+    }
+
+    #[test]
+    fn display_order_moves_an_entry() {
+        let page = help();
+        let yes = page.find("--yes").unwrap();
+        assert!(yes < page.find("--region").unwrap(), "{page}");
+        // Parsing is unchanged.
+        assert!(Deploy::parse_from(["--yes"]).unwrap().yes);
+    }
+}

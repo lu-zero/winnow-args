@@ -217,9 +217,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Examples, a paragraph under a heading, `next_help_heading`,
       `flatten_help`, `warning`
 - [x] `effect`, output formats and exit codes in the man and markdown pages
-- [ ] `long_version`, `usage = "…"`, `before_help`, `display_order`,
+- [x] `hide_default_value`, `hide_env`, `display_order`
+- [ ] `long_version`, `usage = "…"`, `before_help`,
       `verbatim_doc_comment`, `note`, a logo, `help <topic>`
-- [ ] `hide_default_value`, `hide_env`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
 - [ ] Help width counts characters, not terminal columns

@@ -18,6 +18,9 @@ released together. Versions follow [semver](https://semver.org).
   a field: required when that flag was given, or given that value; repeated,
   any one condition is enough. `required_unless_all(…)`: required unless all
   of those have a value.
+- **Added**: `hide_default_value` and `hide_env` on a field leave its default
+  or its environment variable out of help and the pages; `display_order = n`
+  moves a flag in help.
 - **Added**: `requires_if("x", "--other")` on a field: when its value is `x`,
   `--other` needs one. `exclusive`: no other field of the struct is given
   with it.

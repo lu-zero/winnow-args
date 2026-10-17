@@ -314,6 +314,11 @@ mod spec;
 /// - `help_heading = "…"`: list the field under this heading. Fields with none
 ///   are listed under "Options", or under the struct's `next_help_heading`.
 /// - `warning = "…"`: `--help` shows it as `Warning: …`.
+/// - `hide_default_value`, `hide_env`: help and the pages leave out the
+///   default, or the environment variable; both still apply.
+/// - `display_order = n`: list the flag at place `n` among the fields, which
+///   otherwise keep their declaration's place, counted from 0. It goes before
+///   the field already there. Parsing is unchanged.
 /// - `effect = "read"`, `"write"` or `"destructive"`: what giving the flag
 ///   does, for the pages.
 /// - `hint = "file"`, `"dir"`, `"command"` or `"none"`: what a completing
@@ -1762,12 +1767,8 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         required,
         multiple: matches!(field.kind, Kind::Many(_) | Kind::Count(_)),
         trailing: field.double_dash() == DoubleDash::Required,
-        default: field
-            .default
-            .clone()
-            .or_else(|| field.default_note.clone())
-            .or_else(|| field.computed_default()),
-        env: field.env.clone(),
+        default: field.shown_default(),
+        env: field.shown_env().map(str::to_owned),
         choices: field.choices.clone().unwrap_or_default(),
         choices_ty: choices_link(field),
         require_equals: field.require_equals,
@@ -2314,6 +2315,12 @@ struct Field {
     complete: Option<syn::Path>,
     /// What to know before using it, shown by `--help`.
     warning: String,
+    /// Help and the pages leave the default out.
+    hide_default_value: bool,
+    /// Help and the pages leave the environment variable out.
+    hide_env: bool,
+    /// Where help lists it among the fields; otherwise its declaration's place.
+    display_order: Option<usize>,
     /// The value is parsed with its type's `FromStr`.
     from_str: bool,
     /// What giving it does, for the documentation: `read`, `write` or
@@ -2416,14 +2423,8 @@ impl Field {
             && !self.keywords
             || self.required;
         let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
-        let computed = self.computed_default();
-        let default = opt_str(
-            self.default
-                .as_deref()
-                .or(self.default_note.as_deref())
-                .or(computed.as_deref()),
-        );
-        let env = opt_str(self.env.as_deref());
+        let default = opt_str(self.shown_default().as_deref());
+        let env = opt_str(self.shown_env());
         // Declared `choices`, else whatever fixed set the value type has.
         let choices = match (&self.choices, &self.kind, &self.role) {
             (Some(choices), _, _) => quote!(&[#(#choices),*]),
@@ -2601,6 +2602,20 @@ impl Field {
             },
             Kind::Switch | Kind::Count(_) => unreachable!("a switch or a count takes no value"),
         }
+    }
+
+    /// The default help and the pages show, unless `hide_default_value`.
+    fn shown_default(&self) -> Option<String> {
+        if self.hide_default_value {
+            return None;
+        }
+        let stated = self.default.clone().or_else(|| self.default_note.clone());
+        stated.or_else(|| self.computed_default())
+    }
+
+    /// The environment variable help and the pages show, unless `hide_env`.
+    fn shown_env(&self) -> Option<&str> {
+        self.env.as_deref().filter(|_| !self.hide_env)
     }
 
     /// The type of the value a `default_from` is given for this field.
@@ -3870,8 +3885,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
         _ => quote!(::core::option::Option::None),
     };
-    let help_items = fields
-        .iter()
+    let help_items = in_help_order(&fields)
+        .into_iter()
         .filter(|f| !matches!(f.role, Role::Subcommand))
         .map(|f| f.help_item());
     let (help_subcommands, subcommand_required) = match subcommand {
@@ -4259,8 +4274,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 link(quote!(Args), field.spec.clone(), ty)?;
             }
         }
-        let items = fields
-            .iter()
+        let items = in_help_order(&fields)
+            .into_iter()
             .filter(|field| !matches!(field.role, Role::Subcommand))
             .map(spec_item)
             .collect::<syn::Result<Vec<_>>>()?;
@@ -5298,6 +5313,19 @@ fn default_froms(fields: &[Field], rules: &Rules, generic: bool) -> syn::Result<
     Ok(quote!(#(#out)*))
 }
 
+/// The fields in the order help lists them: by `display_order` where one is
+/// given, else by their place among the fields, counted from 0. A field given
+/// place `n` comes before the field that is at `n`.
+fn in_help_order(fields: &[Field]) -> Vec<&Field> {
+    let mut ordered: Vec<((usize, bool), &Field)> = fields
+        .iter()
+        .enumerate()
+        .map(|(i, f)| ((f.display_order.unwrap_or(i), f.display_order.is_none()), f))
+        .collect();
+    ordered.sort_by_key(|&(key, _)| key);
+    ordered.into_iter().map(|(_, f)| f).collect()
+}
+
 /// Whether `other` has a value, or `equals` when it is given: the condition
 /// of a `default_if` or a `required_if`, judged before the defaults.
 fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
@@ -5400,6 +5428,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let mut warning = String::new();
+    let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
     let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
@@ -5471,6 +5500,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 hide = true;
             } else if meta.path.is_ident("from_str") {
                 from_str = true;
+            } else if meta.path.is_ident("hide_default_value") {
+                hide_default_value = true;
+            } else if meta.path.is_ident("hide_env") {
+                hide_env = true;
+            } else if meta.path.is_ident("display_order") {
+                display_order = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse::<usize>()?);
             } else if meta.path.is_ident("warning") {
                 warning = meta.value()?.parse::<LitStr>()?.value();
             } else if meta.path.is_ident("effect") {
@@ -5645,7 +5680,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `requires_if`, `exclusive`, \
-                     `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -5735,6 +5770,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error(
             "`default_from` is for a field that takes a value, a switch or a count, without `default` or `default_fn`"
+                .into(),
+        );
+    }
+    if display_order.is_some() && positional {
+        return error(
+            "`display_order` is for a flag: positionals are listed in the order they are taken"
                 .into(),
         );
     }
@@ -5882,6 +5923,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hint,
         complete,
         warning,
+        hide_default_value,
+        hide_env,
+        display_order,
         from_str,
         effect,
         negative_numbers,
