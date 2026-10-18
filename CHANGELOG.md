@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.3.3 (2026-10-18)
 
 - **Added**: `Args` derives for a unit struct (`struct Noop;`), which takes
   no words.
