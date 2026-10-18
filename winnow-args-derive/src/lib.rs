@@ -5440,8 +5440,19 @@ fn index_of(fields: &[Field], f: &Field) -> usize {
         .expect("a field of this struct")
 }
 
+/// The variable a field's value is collected in. A leading `_` of the field's name is
+/// spelled `u`, after a `slotu` that no other field's variable starts with, so the name
+/// stays snake case (`_args` gives `__slotu_args`, not `__slot__args`).
 fn slot(ident: &Ident) -> Ident {
-    format_ident!("__slot_{}", ident)
+    let name = ident.to_string();
+    let name = name.trim_start_matches("r#");
+    let bare = name.trim_start_matches('_');
+    let underscores = name.len() - bare.len();
+    if underscores == 0 {
+        format_ident!("__slot_{}", bare)
+    } else {
+        format_ident!("__slot{}_{}", "u".repeat(underscores), bare)
+    }
 }
 
 fn field(f: &syn::Field) -> syn::Result<Field> {

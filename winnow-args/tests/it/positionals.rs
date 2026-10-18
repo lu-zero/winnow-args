@@ -170,3 +170,33 @@ fn extra_and_invalid_words() {
         (ErrorKind::InvalidValue, Some("N"), Some("x"))
     );
 }
+
+/// Fields whose names start with `_` derive without lint warnings, and `_a` does not
+/// clash with a field named `u_a`.
+#[deny(non_snake_case)]
+mod underscore_fields {
+    use winnow_args::Args;
+
+    #[derive(Args, Debug, PartialEq)]
+    struct Cli {
+        #[arg(short = 'a')]
+        u_a: bool,
+        #[arg(short = 'b')]
+        _a: bool,
+        #[arg(positional)]
+        __rest: Vec<String>,
+    }
+
+    #[test]
+    fn parse() {
+        let cli = Cli::parse_from(["-b", "x", "y"]).unwrap();
+        assert_eq!(
+            cli,
+            Cli {
+                u_a: false,
+                _a: true,
+                __rest: vec!["x".into(), "y".into()],
+            }
+        );
+    }
+}

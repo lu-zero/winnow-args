@@ -4,6 +4,12 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Fixed**: deriving `Args` on a struct with a field named with a leading
+  `_`, such as `_args`, no longer raises a `non_snake_case` warning in the
+  crate that derives it.
+
 ## 0.3.2 (2026-10-17)
 
 - **Added**: `examples/gallery.rs` uses every item help renders.
