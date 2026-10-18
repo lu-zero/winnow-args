@@ -200,3 +200,33 @@ mod underscore_fields {
         );
     }
 }
+
+/// A unit struct takes no words.
+mod unit_struct {
+    use winnow_args::{Args, ErrorKind};
+
+    /// Do nothing.
+    #[derive(Args, Debug, PartialEq)]
+    #[arg(name = "noop")]
+    struct Noop;
+
+    #[test]
+    fn parses_no_words() {
+        assert_eq!(Noop::parse_from::<_, &str>([]).unwrap(), Noop);
+    }
+
+    #[test]
+    fn rejects_a_word() {
+        let error = Noop::parse_from(["x"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::UnexpectedArg);
+    }
+
+    #[cfg(feature = "help-text")]
+    #[test]
+    fn has_help() {
+        let error = Noop::parse_from(["--help"]).unwrap_err();
+        let help = error.render_help("noop").unwrap();
+        assert!(help.contains("Do nothing."), "{help}");
+        assert!(help.contains("Usage: noop"), "{help}");
+    }
+}

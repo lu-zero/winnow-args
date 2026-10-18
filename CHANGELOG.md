@@ -6,6 +6,8 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `Args` derives for a unit struct (`struct Noop;`), which takes
+  no words.
 - **Fixed**: deriving `Args` on a struct with a field named with a leading
   `_`, such as `_args`, no longer raises a `non_snake_case` warning in the
   crate that derives it.

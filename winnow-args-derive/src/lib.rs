@@ -56,7 +56,8 @@ use syn::{
 
 mod spec;
 
-/// Derive `Args` for a struct with named fields.
+/// Derive `Args` for a struct with named fields, or for a unit struct
+/// (`struct Noop;`), which takes no words.
 ///
 /// Attributes are `#[arg(...)]`, or `#[winnow_args(...)]` where another derive
 /// claims `arg`. With no `short`, `long` or `plus`, a field is `--field-name`.
@@ -2846,13 +2847,19 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Args` can only be derived for structs",
         ));
     };
-    let Fields::Named(named) = &data.fields else {
-        return Err(syn::Error::new(
-            data.fields.span(),
-            "`Args` needs a struct with named fields",
-        ));
+    // A unit struct (`struct Cli;`) has no fields, and `Cli {}` builds it.
+    let no_fields = syn::punctuated::Punctuated::new();
+    let named = match &data.fields {
+        Fields::Named(named) => &named.named,
+        Fields::Unit => &no_fields,
+        Fields::Unnamed(_) => {
+            return Err(syn::Error::new(
+                data.fields.span(),
+                "`Args` needs a struct with named fields, or a unit struct",
+            ));
+        }
     };
-    for f in &named.named {
+    for f in named {
         role_alone(f)?;
     }
     let StructOptions {
@@ -2886,7 +2893,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         plus_options,
     } = struct_options(input)?;
     let mut fields = named
-        .named
         .iter()
         .filter(|f| !is_skipped(f) && !is_sequence(f) && !is_unknown(f) && !is_flatten(f))
         .map(field)
@@ -2896,14 +2902,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     let fields = fields;
     let skipped: Vec<&Ident> = named
-        .named
         .iter()
         .filter(|f| is_skipped(f) && !is_sequence(f) && !is_unknown(f) && !is_flatten(f))
         .filter_map(|f| f.ident.as_ref())
         .collect();
     // `#[arg(sequence)] items: Vec<T>`: occurrences of `T`'s flags and
     // positional, in order.
-    let sequences: Vec<&syn::Field> = named.named.iter().filter(|f| is_sequence(f)).collect();
+    let sequences: Vec<&syn::Field> = named.iter().filter(|f| is_sequence(f)).collect();
     if let Some(extra) = sequences.get(1) {
         return Err(syn::Error::new(
             extra.span(),
@@ -2919,7 +2924,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     )?;
     let sequence_ty = sequence.as_ref().map(|(_, ty)| ty);
     // `#[arg(unknown)] unknown: Vec<T>`: flag-like words naming no flag.
-    let unknowns: Vec<&syn::Field> = named.named.iter().filter(|f| is_unknown(f)).collect();
+    let unknowns: Vec<&syn::Field> = named.iter().filter(|f| is_unknown(f)).collect();
     if let Some(extra) = unknowns.get(1) {
         return Err(syn::Error::new(
             extra.span(),
@@ -2932,7 +2937,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     )?;
     // `#[arg(flatten)] common: T`: `T`'s flags, parsed as if declared here.
     let flattens: Vec<(Ident, Type)> = named
-        .named
         .iter()
         .filter(|f| is_flatten(f))
         .map(|f| (f.ident.clone().expect("named field"), f.ty.clone()))
@@ -4304,7 +4308,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         // The name stated on a `flatten` or `sequence` field, which `field`
         // does not read.
         let stated = |ident: &Ident| {
-            let field = named.named.iter().find(|f| f.ident.as_ref() == Some(ident));
+            let field = named.iter().find(|f| f.ident.as_ref() == Some(ident));
             field.map_or(Ok(None), |f| spec_name(&f.attrs))
         };
         let mut link = |kind: TokenStream2, stated: Option<String>, ty: &Type| {

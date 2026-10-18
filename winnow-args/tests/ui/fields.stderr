@@ -52,7 +52,7 @@ error: a hint is "file", "dir", "command" or "none"
 54 |     #[arg(long, hint = "folder")]
    |                        ^^^^^^^^
 
-error: `Args` needs a struct with named fields
+error: `Args` needs a struct with named fields, or a unit struct
   --> tests/ui/fields.rs:59:13
    |
 59 | struct Tuple(bool);
