@@ -323,8 +323,8 @@ mod spec;
 /// - `message = "…"` after the names of `conflicts` or `requires`: said in
 ///   place of the default error, `{0}` this field and `{1}` the other, each by
 ///   its long name, else its letter. For a group, `{1}` is its members. The
-///   error's kind is unchanged: `MissingRequired` for a field,
-///   `MissingOneOf` for a group.
+///   error's kind is unchanged: `MissingRequired` for a field, `MissingOneOf`
+///   for a group, whose token is the group's name.
 /// - `group = "name"`: this field is a member of that group.
 ///
 /// # Help
@@ -4961,11 +4961,7 @@ impl Rules {
                             "`{selector}` is the negation of `{}`: name that flag instead",
                             f.display()
                         ),
-                        None => {
-                            format!(
-                                "`{selector}` names no flag, positional or group of this struct"
-                            )
-                        }
+                        None => format!("`{selector}` names no flag or positional of this struct"),
                     };
                     syn::Error::new(from.ident.span(), message)
                 })
@@ -5010,6 +5006,14 @@ impl Rules {
                     Ok(j) => Need::Field(j),
                     Err(error) => match groups.iter().position(|g| &g.name == selector) {
                         Some(g) => Need::Group(g),
+                        None if !selector.starts_with('-') => {
+                            return Err(syn::Error::new(
+                                f.ident.span(),
+                                format!(
+                                    "`{selector}` names no field, positional or group of this struct"
+                                ),
+                            ));
+                        }
                         None => return Err(error),
                     },
                 };
@@ -5281,8 +5285,7 @@ impl Rules {
     /// Whether each `requires`-declaring field was supplied, before defaults fill it.
     fn supplied(&self, fields: &[Field]) -> TokenStream2 {
         let mut seen = Vec::new();
-        let snapshots = self.requires.iter().filter_map(|(i, _, _)| {
-            let i = *i;
+        let snapshots = self.requires.iter().filter_map(|&(i, _, _)| {
             if seen.contains(&i) {
                 return None;
             }
@@ -5378,8 +5381,14 @@ impl Rules {
                     let members = &self.members[*g];
                     let has = members.iter().map(|&m| fields[m].has());
                     let names = members.iter().map(|&m| fields[m].display());
+                    let group = &groups[*g].name;
                     let error = worded(
-                        quote!(__wa::Error::missing_one_of(__input.offset(), #by, &[#(#names),*])),
+                        quote!(__wa::Error::one_of_required_by(
+                            __input.offset(),
+                            #group,
+                            &[#(#names),*],
+                            #by,
+                        )),
                         message.as_deref(),
                     );
                     (quote!((#(#has)||*)), error)

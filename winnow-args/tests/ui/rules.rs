@@ -120,4 +120,13 @@ struct RequiresIfSwitch {
     log: Option<String>,
 }
 
+#[derive(Args)]
+#[arg(group("output"))]
+struct RequiresNoGroup {
+    #[arg(long, requires = "ouptut")]
+    export: bool,
+    #[arg(long, group = "output")]
+    json: bool,
+}
+
 fn main() {}

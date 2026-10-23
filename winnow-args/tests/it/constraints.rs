@@ -155,13 +155,13 @@ fn a_flag_requires_one_member_of_a_group() {
         (e.kind(), e.token(), e.value()),
         (
             ErrorKind::MissingOneOf,
-            Some("--check"),
+            Some("loaded"),
             Some("--continue, --resume")
         )
     );
     assert_eq!(
         e.to_string(),
-        "one of --continue, --resume is required (--check)"
+        "`--check` requires one of `--continue`, `--resume`"
     );
     let e = err::<Fork>(&["--fork"], &[]);
     assert_eq!(e.kind(), ErrorKind::MissingOneOf);
@@ -243,7 +243,7 @@ fn a_missing_field_is_reported_before_the_group() {
     );
     let e = err::<FieldThenGroup>(&["--strict", "--json"], &[]);
     assert_eq!(e.kind(), ErrorKind::MissingOneOf);
-    assert_eq!(e.token(), Some("--strict"));
+    assert_eq!(e.token(), Some("loaded"));
     assert!(parse::<FieldThenGroup>(&["--strict", "--json", "--resume"], &[]).is_ok());
 }
 

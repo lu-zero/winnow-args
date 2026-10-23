@@ -97,6 +97,8 @@ struct Detail {
     rows: Vec<&'static crate::help::Item>,
     /// The program's own message, said in place of the default one.
     wording: Option<&'static str>,
+    /// The field whose `requires` named the group a `MissingOneOf` is about.
+    by: Option<String>,
 }
 
 /// A parse failure.
@@ -215,6 +217,18 @@ impl Error {
     pub fn missing_one_of(offset: usize, group: impl Into<String>, members: &[&str]) -> Self {
         let mut error = Self::with_token(ErrorKind::MissingOneOf, offset, group.into());
         error.detail_mut().value = Some(members.join(", "));
+        error
+    }
+
+    /// `name` requires a member of `group`, and none has a value. The offset is the end of the line.
+    pub fn one_of_required_by(
+        offset: usize,
+        group: impl Into<String>,
+        members: &[&str],
+        name: &str,
+    ) -> Self {
+        let mut error = Self::missing_one_of(offset, group, members);
+        error.detail_mut().by = Some(name.to_owned());
         error
     }
 
@@ -451,11 +465,13 @@ impl Error {
         let good = |text: &str| Style::paint(style.valid(), text);
         let token = self.token().unwrap_or_default();
         let value = self.value().unwrap_or_default();
+        let by = self.detail.as_deref().and_then(|d| d.by.as_deref());
         if let Some(wording) = self.detail.as_deref().and_then(|d| d.wording) {
             // `required_by` holds the target first; the field that requires it
             // declared the rule.
-            let (first, second) = match self.kind {
-                ErrorKind::MissingRequired => (value, token),
+            let (first, second) = match (self.kind, by) {
+                (_, Some(by)) => (by, value),
+                (ErrorKind::MissingRequired, _) => (value, token),
                 _ => (token, value),
             };
             return wording.replace("{0}", first).replace("{1}", second);
@@ -484,7 +500,16 @@ impl Error {
             ErrorKind::RequiresDoubleDash => {
                 format!("`{}` can only be set after a `--` separator", bad(token))
             }
-            ErrorKind::MissingOneOf => format!("one of {} is required ({token})", good(value)),
+            ErrorKind::MissingOneOf => match by {
+                Some(by) => {
+                    let members: Vec<String> = value
+                        .split(", ")
+                        .map(|m| format!("`{}`", good(m)))
+                        .collect();
+                    format!("`{}` requires one of {}", bad(by), members.join(", "))
+                }
+                None => format!("one of {} is required ({token})", good(value)),
+            },
             ErrorKind::MissingSubcommand => "a subcommand is required".to_owned(),
             ErrorKind::Invalid => self
                 .detail

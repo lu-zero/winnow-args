@@ -11,8 +11,12 @@ released together. Versions follow [semver](https://semver.org).
   a second `long` stay hidden.
 - **Added**: `requires` names a group. When the field is supplied, one of the
   group's members has a value. `message` works as for a field: `{0}` is this
-  field and `{1}` the members. The error's kind is `MissingOneOf`. A field
-  of the group's name is the one named.
+  field and `{1}` the members. The error is `Error::one_of_required_by`, of
+  the kind `MissingOneOf`, with the group's name as its token. If a field has
+  the group's name, the field is meant.
+- **Changed**: `help::Item` and `winnow_args_spec::Item` have one more
+  field, `visible_aliases`. A value written by hand that ends in
+  `..Item::EMPTY` or `..Item::default()` is unaffected.
 - **Added**: `conflicts` and `requires` take `message = "…"` after their
   names, and `group` takes it among its options: the program's own words in
   place of the default error, `{0}` and `{1}` the two names. The error's kind
