@@ -249,8 +249,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Conformance, size, ports
 
 - [ ] usage's `binding` corpus run as tests
-- [ ] Binary size: 45 % over usage's for mise; share the lexer and
-      continuations across structs instead of inlining them everywhere
+- [ ] Binary size: mise is 79 % over usage's (1 743 088 bytes against
+      974 824, `release-lto`, aarch64), almost all of it the generated
+      parsers. The lexer out of line saves 147 KB and costs 5–15 % (PERF.md
+      step 32); one exit for every error made mise 23 KB larger
 - [ ] mise's shadow from usage's KDL spec rather than from usage's shadow
 - [ ] wild: its parser and integration tests, as for mold
 - [ ] brush: `dirs`/`pushd`/`popd` `+N` indices (parsed; brush implements them
