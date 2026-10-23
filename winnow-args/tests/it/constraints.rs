@@ -302,3 +302,57 @@ mod requires_if_exclusive {
         assert_eq!(parse(&["--list"]).unwrap().jobs, 4);
     }
 }
+
+/// Messages of the program's own, as brush's `unset` gives bash's.
+mod worded {
+    use super::*;
+
+    #[derive(Args, Debug)]
+    #[arg(group("how", required, message = "{0} or {1}: say how, with {1}"))]
+    struct Unset {
+        #[arg(short = 'f', group = "how")]
+        function: bool,
+        #[arg(
+            short = 'v',
+            group = "how",
+            conflicts(
+                "-f",
+                message = "cannot simultaneously unset a function and a variable"
+            )
+        )]
+        variable: bool,
+        #[arg(short = 'n', requires("-v", message = "{0} needs {1}"))]
+        nameref: bool,
+    }
+
+    #[derive(Args, Debug)]
+    #[arg(group("mode", message = "{0} and {1} are both modes"))]
+    struct Modes {
+        #[arg(long, group = "mode")]
+        fast: bool,
+        #[arg(long, group = "mode")]
+        safe: bool,
+    }
+
+    #[test]
+    fn a_rule_says_its_own_message_of_the_declared_names() {
+        let e = err::<Unset>(&["-f", "-v"], &[]);
+        assert_eq!(
+            (e.kind(), e.token(), e.value()),
+            (ErrorKind::Conflict, Some("-v"), Some("-f"))
+        );
+        assert_eq!(
+            e.to_string(),
+            "cannot simultaneously unset a function and a variable"
+        );
+        let e = err::<Unset>(&["-f", "-n"], &[]);
+        assert_eq!(e.kind(), ErrorKind::MissingRequired);
+        assert_eq!(e.to_string(), "-n needs -v");
+        let e = err::<Unset>(&[], &[]);
+        assert_eq!(e.kind(), ErrorKind::MissingOneOf);
+        assert_eq!(e.to_string(), "how or -f, -v: say how, with -f, -v");
+        let e = err::<Modes>(&["--safe", "--fast"], &[]);
+        assert_eq!(e.kind(), ErrorKind::Conflict);
+        assert_eq!(e.to_string(), "--fast and --safe are both modes");
+    }
+}

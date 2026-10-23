@@ -173,9 +173,11 @@ mod spec;
 ///   `tool run -p pkg`). The words and flags after that one are the
 ///   subcommand's, and a word that names another subcommand is one of those
 ///   words. A flag of this struct without `global` comes first (`tool -qp pkg`).
-/// - `group("name", required, multiple)`: a group. A field joins it with
-///   `group = "name"`. `required` means at least one member is present.
-///   Without `multiple`, a second member conflicts with the first.
+/// - `group("name", required, multiple, message = "…")`: a group. A field
+///   joins it with `group = "name"`. `required` means at least one member is
+///   present. Without `multiple`, a second member conflicts with the first.
+///   `message` is said in place of either error, `{0}` and `{1}` the two
+///   members given, or the group's name and its members when none was.
 /// - `validate = path`: a function such as
 ///   `fn check(cli: &Cli) -> Result<(), winnow_args::Error>`, called with the
 ///   struct once it is built and its rules hold. It returns
@@ -314,6 +316,9 @@ mod spec;
 ///   both supplied.
 /// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
 /// - `requires("…", …)`: when this field is supplied, each of those has a value.
+/// - `message = "…"` after the names of `conflicts` or `requires`: said in
+///   place of the default error, `{0}` this field and `{1}` the other, each by
+///   its long name, else its letter. The error's kind is unchanged.
 /// - `group = "name"`: this field is a member of that group.
 ///
 /// # Help
@@ -2105,6 +2110,14 @@ fn docs(attrs: &[syn::Attribute]) -> (String, String) {
     (short, long)
 }
 
+/// `error`, said with `message` in place of its default one when there is one.
+fn worded(error: TokenStream2, message: Option<&str>) -> TokenStream2 {
+    match message {
+        Some(message) => quote!(__wa::worded(#error, #message)),
+        None => error,
+    }
+}
+
 /// `Some("s")` or `None`, spelled out.
 fn opt_str(s: Option<&str>) -> TokenStream2 {
     match s {
@@ -2148,6 +2161,39 @@ fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
     syn::parenthesized!(content in meta.input);
     let names = syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
     Ok(names.iter().map(LitStr::value).collect())
+}
+
+/// `key("a", "b", message = "…")` or `key = "a"`: each selector, with the
+/// message said in place of the default one, `{0}` this field and `{1}` the other.
+fn related(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<(String, Option<String>)>> {
+    if meta.input.peek(syn::Token![=]) {
+        return Ok(vec![(meta.value()?.parse::<LitStr>()?.value(), None)]);
+    }
+    let content;
+    syn::parenthesized!(content in meta.input);
+    let (mut names, mut message) = (Vec::new(), None);
+    while !content.is_empty() {
+        if content.peek(LitStr) {
+            names.push(content.parse::<LitStr>()?.value());
+        } else {
+            let key = content.parse::<Ident>()?;
+            if key != "message" {
+                return Err(syn::Error::new(
+                    key.span(),
+                    "expected a selector or `message`",
+                ));
+            }
+            content.parse::<syn::Token![=]>()?;
+            message = Some(content.parse::<LitStr>()?.value());
+        }
+        if !content.is_empty() {
+            content.parse::<syn::Token![,]>()?;
+        }
+    }
+    Ok(names
+        .into_iter()
+        .map(|name| (name, message.clone()))
+        .collect())
 }
 
 /// `DryRun` → `dry-run`.
@@ -2314,12 +2360,14 @@ struct Field {
     env: Option<String>,
     /// Value used when neither the command line nor the environment did.
     default: Option<String>,
-    /// Selectors that may not be supplied together with this field.
-    conflicts: Vec<String>,
+    /// Selectors that may not be supplied together with this field, each with
+    /// the message said in place of the default one.
+    conflicts: Vec<(String, Option<String>)>,
     /// Selectors this field replaces, and that replace it: the last one given wins.
     overrides: Vec<String>,
-    /// Selectors that must have a value when this field is supplied.
-    requires: Vec<String>,
+    /// Selectors that must have a value when this field is supplied, each with
+    /// the message said in place of the default one.
+    requires: Vec<(String, Option<String>)>,
     /// Must end up with a value (for `Option` and `Vec` fields).
     required: bool,
     /// Required unless one of these selectors has a value.
@@ -4497,6 +4545,9 @@ struct Group {
     name: String,
     required: bool,
     multiple: bool,
+    /// Said in place of the default message: `{0}` and `{1}` are two members
+    /// given, or the group's name and its members when none was.
+    message: Option<String>,
 }
 
 /// `#[arg(...)]` on the struct: options declared there rather than on a field.
@@ -4747,17 +4798,21 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             let content;
             syn::parenthesized!(content in meta.input);
             let name = content.parse::<LitStr>()?.value();
-            let (mut required, mut multiple) = (false, false);
+            let (mut required, mut multiple, mut message) = (false, false, None);
             while !content.is_empty() {
                 content.parse::<syn::Token![,]>()?;
                 let flag = content.parse::<Ident>()?;
                 match flag.to_string().as_str() {
                     "required" => required = true,
                     "multiple" => multiple = true,
+                    "message" => {
+                        content.parse::<syn::Token![=]>()?;
+                        message = Some(content.parse::<LitStr>()?.value());
+                    }
                     _ => {
                         return Err(syn::Error::new(
                             flag.span(),
-                            "expected `required` or `multiple`",
+                            "expected `required`, `multiple` or `message`",
                         ));
                     }
                 }
@@ -4766,6 +4821,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 name,
                 required,
                 multiple,
+                message,
             });
             Ok(())
         })?;
@@ -4813,12 +4869,13 @@ fn titled<const N: usize>(
 
 /// The relations between fields, resolved to field indices.
 struct Rules {
-    /// Pairs `(a, b)` that may not both be supplied; each unordered pair once.
-    conflicts: Vec<(usize, usize)>,
+    /// Pairs `(a, b)` that may not both be supplied, each unordered pair once,
+    /// with the message `a` gives in place of the default one.
+    conflicts: Vec<(usize, usize, Option<String>)>,
     /// For each field, the fields it displaces when bound (symmetric).
     beats: Vec<Vec<usize>>,
-    /// `(field, target)`: `field` supplied needs `target` to have a value.
-    requires: Vec<(usize, usize)>,
+    /// `(field, target, message)`: `field` supplied needs `target` to have a value.
+    requires: Vec<(usize, usize, Option<String>)>,
     /// `(field, others)`: `field` needs a value unless one of `others` has one.
     required_unless: Vec<(usize, Vec<usize>)>,
     /// `(field, others)`: `field` needs a value unless every one of `others` has one.
@@ -4883,11 +4940,17 @@ impl Rules {
             default_ifs: Vec::new(),
         };
         for (i, f) in fields.iter().enumerate() {
-            for selector in &f.conflicts {
+            for (selector, message) in &f.conflicts {
                 let j = resolve(f, selector)?;
-                let pair = (i.min(j), i.max(j));
-                if !rules.conflicts.contains(&pair) {
-                    rules.conflicts.push(pair);
+                let same = |&(a, b, _): &(usize, usize, _)| (a, b) == (i, j) || (a, b) == (j, i);
+                match rules.conflicts.iter_mut().find(|pair| same(pair)) {
+                    // Declared from both sides: a message says which comes first.
+                    Some(pair) if message.is_some() && pair.2.is_none() => {
+                        *pair = (i, j, message.clone());
+                    }
+                    Some(_) => {}
+                    None if message.is_some() => rules.conflicts.push((i, j, message.clone())),
+                    None => rules.conflicts.push((i.min(j), i.max(j), None)),
                 }
             }
             for selector in &f.overrides {
@@ -4899,8 +4962,10 @@ impl Rules {
                     rules.beats[j].push(i);
                 }
             }
-            for selector in &f.requires {
-                rules.requires.push((i, resolve(f, selector)?));
+            for (selector, message) in &f.requires {
+                rules
+                    .requires
+                    .push((i, resolve(f, selector)?, message.clone()));
             }
             // A condition on another field: given, or given a value it can compare.
             // `instead` is the spelling without the comparison.
@@ -5055,28 +5120,32 @@ impl Rules {
 
     /// Conflicts and at-most-one groups, judged on what was supplied.
     fn exclusive(&self, fields: &[Field], groups: &[Group]) -> TokenStream2 {
-        let pairs = self.conflicts.iter().map(|&(a, b)| {
-            let (fa, fb) = (&fields[a], &fields[b]);
+        let pairs = self.conflicts.iter().map(|(a, b, message)| {
+            let (fa, fb) = (&fields[*a], &fields[*b]);
             let (has_a, has_b) = (fa.has(), fb.has());
             let (name_a, name_b) = (fa.display(), fb.display());
+            let error = worded(
+                quote!(__wa::Error::conflict(__input.offset(), #name_a, #name_b)),
+                message.as_deref(),
+            );
             quote! {
                 if #has_a && #has_b {
-                    return ::core::result::Result::Err(
-                        __wa::Error::conflict(__input.offset(), #name_a, #name_b),
-                    );
+                    return ::core::result::Result::Err(#error);
                 }
             }
         });
-        let at_most_one = groups.iter().zip(&self.members).filter(|(g, _)| !g.multiple).map(|(_, members)| {
+        let at_most_one = groups.iter().zip(&self.members).filter(|(g, _)| !g.multiple).map(|(g, members)| {
             let checks = members.iter().map(|&m| {
                 let has = fields[m].has();
                 let name = fields[m].display();
+                let error = worded(
+                    quote!(__wa::Error::conflict(__input.offset(), __first, #name)),
+                    g.message.as_deref(),
+                );
                 quote! {
                     if #has {
                         if let ::core::option::Option::Some(__first) = __first {
-                            return ::core::result::Result::Err(
-                                __wa::Error::conflict(__input.offset(), __first, #name),
-                            );
+                            return ::core::result::Result::Err(#error);
                         }
                         __first = ::core::option::Option::Some(#name);
                     }
@@ -5153,7 +5222,7 @@ impl Rules {
     /// Whether each `requires`-declaring field was supplied, before defaults fill it.
     fn supplied(&self, fields: &[Field]) -> TokenStream2 {
         let mut seen = Vec::new();
-        let snapshots = self.requires.iter().filter_map(|&(i, _)| {
+        let snapshots = self.requires.iter().filter_map(|&(i, _, _)| {
             if seen.contains(&i) {
                 return None;
             }
@@ -5223,23 +5292,27 @@ impl Rules {
                 let name = &g.name;
                 let has = members.iter().map(|&m| fields[m].has());
                 let names = members.iter().map(|&m| fields[m].display());
+                let error = worded(
+                    quote!(__wa::Error::missing_one_of(__input.offset(), #name, &[#(#names),*])),
+                    g.message.as_deref(),
+                );
                 quote! {
                     if #(!#has)&&* {
-                        return ::core::result::Result::Err(
-                            __wa::Error::missing_one_of(__input.offset(), #name, &[#(#names),*]),
-                        );
+                        return ::core::result::Result::Err(#error);
                     }
                 }
             });
-        let requires = self.requires.iter().map(|&(i, j)| {
-            let supplied = format_ident!("__supplied_{}", fields[i].ident);
-            let has = fields[j].has();
-            let (by, target) = (fields[i].display(), fields[j].display());
+        let requires = self.requires.iter().map(|(i, j, message)| {
+            let supplied = format_ident!("__supplied_{}", fields[*i].ident);
+            let has = fields[*j].has();
+            let (by, target) = (fields[*i].display(), fields[*j].display());
+            let error = worded(
+                quote!(__wa::Error::required_by(__input.offset(), #target, #by)),
+                message.as_deref(),
+            );
             quote! {
                 if #supplied && !#has {
-                    return ::core::result::Result::Err(
-                        __wa::Error::required_by(__input.offset(), #target, #by),
-                    );
+                    return ::core::result::Result::Err(#error);
                 }
             }
         });
@@ -5722,11 +5795,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                     }
                 });
             } else if meta.path.is_ident("conflicts") {
-                conflicts.extend(aliases(&meta)?);
+                conflicts.extend(related(&meta)?);
             } else if meta.path.is_ident("overrides") {
                 overrides.extend(aliases(&meta)?);
             } else if meta.path.is_ident("requires") {
-                requires.extend(aliases(&meta)?);
+                requires.extend(related(&meta)?);
             } else if meta.path.is_ident("required_unless")
                 || meta.path.is_ident("required_unless_all")
             {

@@ -95,6 +95,8 @@ struct Detail {
     also_missing: Vec<String>,
     /// The help rows of every one of them, once [`Error::suggested`] finds them all.
     rows: Vec<&'static crate::help::Item>,
+    /// The program's own message, said in place of the default one.
+    wording: Option<&'static str>,
 }
 
 /// A parse failure.
@@ -183,6 +185,16 @@ impl Error {
             ErrorKind::MissingRequired => self.value().is_none(),
             _ => false,
         }
+    }
+
+    /// `self`, said with `wording` in place of its default message: `{0}` the
+    /// field that declares the rule and `{1}` the other, or a group's name
+    /// and its members when none of them was given.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn worded(mut self, wording: &'static str) -> Self {
+        self.detail_mut().wording = Some(wording);
+        self
     }
 
     /// `name` requires `target`, which has no value. The offset is the end of the line.
@@ -439,6 +451,15 @@ impl Error {
         let good = |text: &str| Style::paint(style.valid(), text);
         let token = self.token().unwrap_or_default();
         let value = self.value().unwrap_or_default();
+        if let Some(wording) = self.detail.as_deref().and_then(|d| d.wording) {
+            // `required_by` holds the target first; the field that requires it
+            // declared the rule.
+            let (first, second) = match self.kind {
+                ErrorKind::MissingRequired => (value, token),
+                _ => (token, value),
+            };
+            return wording.replace("{0}", first).replace("{1}", second);
+        }
         match self.kind {
             ErrorKind::Backtrack => "invalid command line".to_owned(),
             ErrorKind::UnknownFlag => format!("unknown flag `{}`", bad(token)),

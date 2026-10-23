@@ -6,6 +6,10 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `conflicts` and `requires` take `message = "…"` after their
+  names, and `group` takes it among its options: the program's own words in
+  place of the default error, `{0}` and `{1}` the two names. The error's kind
+  is unchanged.
 - **Added**: the `unicode` feature measures help in terminal columns, so a
   wide character takes two and a combining mark none, as clap's does.
 - **Added**: `verbatim_doc_comment` keeps a doc comment's lines as written,

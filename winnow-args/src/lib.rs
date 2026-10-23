@@ -763,6 +763,11 @@ pub mod __private {
         });
     }
 
+    /// `error`, said with the program's `wording` in place of its default message.
+    pub fn worded(error: Error, wording: &'static str) -> Error {
+        error.worded(wording)
+    }
+
     /// Whether every letter of the short bundle `token` (`-abc`) is `known`,
     /// up to the first that takes a value: the rest is that value.
     pub fn bundle_known(token: &[u8], known: impl Fn(char) -> Option<bool>) -> bool {
