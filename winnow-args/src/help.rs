@@ -845,6 +845,31 @@ fn page(
     }
 }
 
+/// `items` as short help lists them, wrapped to [`width`].
+pub(crate) fn rows(items: &[&Item], style: Style) -> String {
+    let layout = Layout {
+        long: false,
+        width: width(),
+        style,
+    };
+    let rows: Vec<(Cell, String)> = items
+        .iter()
+        .map(|item| {
+            let cell = if item.positional {
+                let mut cell = Cell::default();
+                push_item_placeholder(&mut cell, style, item);
+                cell
+            } else {
+                flag_spec(item, style)
+            };
+            (cell, describe(item, false, style))
+        })
+        .collect();
+    let mut out = String::new();
+    list(&mut out, &rows, layout);
+    out
+}
+
 /// A command's positionals, as the rows of its Arguments section.
 fn argument_rows(command: &Command, layout: Layout) -> Vec<(Cell, String)> {
     let shown = command.items.iter().filter(|i| i.positional && !i.hide);

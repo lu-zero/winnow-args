@@ -18,6 +18,8 @@ use winnow::error::{FromExternalError, ModalError, ParserError};
 use crate::help::Style;
 use crate::stream::Argv;
 
+const NOT_PROVIDED: &str = "the following required arguments were not provided";
+
 mod suggest;
 
 /// Boxed cause of an [`ErrorKind::InvalidValue`].
@@ -88,6 +90,11 @@ struct Detail {
     path: Vec<&'static str>,
     /// What was probably meant, and what it is: "flag".
     similar: Option<(&'static str, String)>,
+    /// The required flags and positionals left without a value after the
+    /// first, which `token` names: `--jobs`, `<FILE>`.
+    also_missing: Vec<String>,
+    /// The help rows of every one of them, once [`Error::suggested`] finds them all.
+    rows: Vec<&'static crate::help::Item>,
 }
 
 /// A parse failure.
@@ -142,6 +149,40 @@ impl Error {
     /// The required positional `name` was never filled. The offset is the end of the line.
     pub fn missing_argument(offset: usize, name: impl Into<String>) -> Self {
         Self::with_token(ErrorKind::MissingArgument, offset, name.into())
+    }
+
+    /// `self`, a required flag or positional left without a value, also
+    /// naming the one `other` reports: every one is listed together.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn also_missing(mut self, other: Error) -> Self {
+        let name = other.missing().next().unwrap_or_default();
+        self.detail_mut().also_missing.push(name);
+        self
+    }
+
+    /// Each required flag or positional left without a value, as a message
+    /// spells it: `--jobs`, `<FILE>`.
+    fn missing(&self) -> impl Iterator<Item = String> + '_ {
+        let detail = self.detail.as_deref();
+        let first = detail.map(|d| match self.kind {
+            ErrorKind::MissingArgument => format!("<{}>", d.token),
+            _ => d.token.clone(),
+        });
+        let rest = detail
+            .into_iter()
+            .flat_map(|d| d.also_missing.iter().cloned());
+        first.into_iter().chain(rest)
+    }
+
+    /// Whether this says required flags or positionals have no value, rather
+    /// than that one requires another.
+    fn is_not_provided(&self) -> bool {
+        match self.kind {
+            ErrorKind::MissingArgument => true,
+            ErrorKind::MissingRequired => self.value().is_none(),
+            _ => false,
+        }
     }
 
     /// `name` requires `target`, which has no value. The offset is the end of the line.
@@ -249,6 +290,17 @@ impl Error {
         };
         if let Some(found) = found {
             detail.similar = Some(found);
+        }
+        if self.is_not_provided() {
+            let path = self
+                .detail
+                .as_deref()
+                .map(|d| d.path.clone())
+                .unwrap_or_default();
+            let rows = self.missing().map(|name| suggest::item(root, &path, &name));
+            // A row for each, or none: a partial list would hide one.
+            let rows: Option<Vec<_>> = rows.collect();
+            self.detail_mut().rows = rows.unwrap_or_default();
         }
         self
     }
@@ -397,10 +449,14 @@ impl Error {
                 bad(token),
                 bad(value)
             ),
-            ErrorKind::MissingRequired => match self.value() {
-                Some(by) => format!("`{}` is required by `{}`", good(token), bad(by)),
-                None => format!("`{}` is required", good(token)),
-            },
+            ErrorKind::MissingRequired if !self.is_not_provided() => {
+                format!("`{}` is required by `{}`", good(token), bad(value))
+            }
+            ErrorKind::MissingRequired | ErrorKind::MissingArgument => {
+                let names: Vec<String> =
+                    self.missing().map(|n| format!("`{}`", good(&n))).collect();
+                format!("{NOT_PROVIDED}: {}", names.join(", "))
+            }
             ErrorKind::Conflict => format!("`{}` cannot be used with `{}`", bad(token), bad(value)),
             ErrorKind::HelpRequested => "help requested".to_owned(),
             ErrorKind::VersionRequested => "version requested".to_owned(),
@@ -408,7 +464,6 @@ impl Error {
                 format!("`{}` can only be set after a `--` separator", bad(token))
             }
             ErrorKind::MissingOneOf => format!("one of {} is required ({token})", good(value)),
-            ErrorKind::MissingArgument => format!("missing argument `{}`", good(token)),
             ErrorKind::MissingSubcommand => "a subcommand is required".to_owned(),
             ErrorKind::Invalid => self
                 .detail
@@ -439,16 +494,21 @@ impl Error {
 
     /// The whole report for an error that is not help or version:
     /// `error: …`, a tip when something close was accepted, and a pointer to
-    /// `--help`.
+    /// `--help`. Required flags and positionals left without a value are
+    /// listed as `--help` shows them, once [`Error::suggested`] found them.
     pub fn render(&self, style: Style) -> String {
+        let more = format!(
+            "For more information, try '{}'.",
+            Style::paint(style.flag(), "--help")
+        );
+        let error = Style::paint(style.error(), "error:");
+        if let Some(detail) = self.detail.as_deref().filter(|d| !d.rows.is_empty()) {
+            let rows = crate::help::rows(&detail.rows, style);
+            return format!("{error} {NOT_PROVIDED}:\n\n{rows}\n{more}");
+        }
         let tip = self.tip(style).map(|tip| format!("\n\n  {tip}"));
-        format!(
-            "{} {}{}\n\nFor more information, try '{}'.",
-            Style::paint(style.error(), "error:"),
-            self.message(style),
-            tip.unwrap_or_default(),
-            Style::paint(style.flag(), "--help"),
-        )
+        let tip = tip.unwrap_or_default();
+        format!("{error} {}{tip}\n\n{more}", self.message(style))
     }
 
     /// [`Error::render_help`], painted with `style`.

@@ -750,6 +750,17 @@ pub mod __private {
             .fold(Error::help(command, true), Error::within)
     }
 
+    /// `error`, a required flag or positional left without a value, added to
+    /// those `found` already reports.
+    #[cold]
+    #[inline(never)]
+    pub fn missing(found: &mut Option<Error>, error: Error) {
+        *found = Some(match found.take() {
+            Some(first) => first.also_missing(error),
+            None => error,
+        });
+    }
+
     /// Whether every letter of the short bundle `token` (`-abc`) is `known`,
     /// up to the first that takes a value: the rest is that value.
     pub fn bundle_known(token: &[u8], known: impl Fn(char) -> Option<bool>) -> bool {

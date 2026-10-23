@@ -80,6 +80,31 @@ pub(super) fn subcommand(
     )
 }
 
+/// The flag or positional the command at `path` takes that a message spells
+/// `name`: `--jobs`, `-j`, `+o` or `<FILE>`.
+pub(super) fn item(root: &'static Command, path: &[&str], name: &str) -> Option<&'static Item> {
+    let (command, globals) = reached(root, path);
+    let spelled = |item: &Item| match name.strip_prefix('<').and_then(|n| n.strip_suffix('>')) {
+        Some(value) => item.positional && item.value_name == Some(value),
+        None if item.positional => false,
+        None => match (
+            name.strip_prefix("--"),
+            name.strip_prefix('-'),
+            name.strip_prefix('+'),
+        ) {
+            (Some(long), ..) => item.long == Some(long),
+            (None, Some(short), _) => item.short.is_some_and(|c| short == c.to_string()),
+            (.., Some(plus)) => item.plus.is_some_and(|c| plus == c.to_string()),
+            _ => false,
+        },
+    };
+    command
+        .items
+        .iter()
+        .chain(globals)
+        .find(|item| spelled(item))
+}
+
 /// The one of `names` most like `typed`, when one is like enough: the first
 /// of the closest. The measure and the bar are clap's, Jaro at 0.7.
 pub(super) fn nearest<'a>(typed: &str, names: impl Iterator<Item = &'a str>) -> Option<&'a str> {

@@ -247,7 +247,10 @@ mod conditional {
         // `--dir` has a default, so with `--name` both have a value.
         assert!(parse(&["--name", "n"]).unwrap().target.is_none());
         let error = parse(&[]).unwrap_err();
-        assert_eq!(error.to_string(), "`--target` is required");
+        assert_eq!(
+            error.to_string(),
+            "the following required arguments were not provided: `--target`"
+        );
         assert!(parse(&["--target", "t"]).is_ok());
     }
 }

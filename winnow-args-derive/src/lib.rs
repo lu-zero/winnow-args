@@ -5169,10 +5169,26 @@ impl Rules {
                 quote!(&& !#flag)
             })
         };
-        let plain = fields.iter().filter(|f| f.required).map(|f| {
+        // Every one left without a value is reported together, a field of a
+        // type that is not an `Option` included: building it would fail.
+        let conditional = |i: usize| {
+            let mut unless = self.required_unless.iter().chain(&self.required_unless_all);
+            unless.any(|(j, _)| *j == i)
+        };
+        let built = |i: usize, f: &Field| {
+            matches!(f.kind, Kind::Required(_))
+                && !f.keywords
+                && !matches!(f.role, Role::Subcommand)
+                && !conditional(i)
+        };
+        let plain = fields
+            .iter()
+            .enumerate()
+            .filter(|&(i, f)| f.required || built(i, f));
+        let plain = plain.map(|(_, f)| {
             let (has, displaced) = (f.has(), displaced(f));
             let error = missing(f);
-            quote!(if !#has #displaced { return ::core::result::Result::Err(#error); })
+            quote!(if !#has #displaced { __wa::missing(&mut __missing, #error); })
         });
         let unless = self.required_unless.iter().map(|(i, others)| {
             let (has, displaced) = (fields[*i].has(), displaced(&fields[*i]));
@@ -5180,7 +5196,7 @@ impl Rules {
             let error = missing(&fields[*i]);
             quote! {
                 if !#has #displaced #(&& !#others)* {
-                    return ::core::result::Result::Err(#error);
+                    __wa::missing(&mut __missing, #error);
                 }
             }
         });
@@ -5218,7 +5234,17 @@ impl Rules {
             let error = missing(&fields[*i]);
             quote! {
                 if !#has #displaced && !(#(#others)&&*) {
-                    return ::core::result::Result::Err(#error);
+                    __wa::missing(&mut __missing, #error);
+                }
+            }
+        });
+        let missing: Vec<TokenStream2> = plain.chain(unless).chain(unless_all).collect();
+        let missing = (!missing.is_empty()).then(|| {
+            quote! {
+                let mut __missing = ::core::option::Option::None;
+                #(#missing)*
+                if let ::core::option::Option::Some(__error) = __missing {
+                    return ::core::result::Result::Err(__error);
                 }
             }
         });
@@ -5259,7 +5285,7 @@ impl Rules {
                     }
                 }
             });
-        quote!(#(#plain)* #(#unless)* #(#unless_all)* #(#required_ifs)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
+        quote!(#missing #(#required_ifs)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
     }
 }
 

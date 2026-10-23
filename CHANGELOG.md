@@ -4,6 +4,15 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Changed**: every required flag and positional left without a value is
+  reported at once, under "the following required arguments were not
+  provided", each as `--help` lists it: its spellings, value, description
+  and possible values. The error's kind and token are the first one's.
+- **Fixed**: a doc comment's paragraph is wrapped to the terminal, not where
+  its source lines break; an indented line is kept as written.
+
 ## 0.3.3 (2026-10-18)
 
 - **Added**: `Args` derives for a unit struct (`struct Noop;`), which takes

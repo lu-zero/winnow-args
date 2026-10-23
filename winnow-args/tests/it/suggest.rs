@@ -166,3 +166,60 @@ fn the_report_has_the_tip_and_the_message_does_not() {
         "error: unknown flag `--zzz`\n\nFor more information, try '--help'."
     );
 }
+
+#[derive(Args, Debug)]
+#[arg(name = "git")]
+struct Git {
+    #[arg(subcommand)]
+    command: GitCommand,
+}
+
+#[derive(Subcommand, Debug)]
+enum GitCommand {
+    Fetch(Fetch),
+}
+
+#[derive(Args, Debug)]
+struct Fetch {
+    /// Where to fetch from
+    #[arg(short, long, value_name = "URL")]
+    remote: String,
+    /// Talk more
+    #[arg(short, long)]
+    verbose: bool,
+    /// What to fetch
+    #[arg(positional)]
+    refspec: String,
+}
+
+#[test]
+fn every_missing_required_argument_is_listed_as_help_shows_it() {
+    let error = Git::parse_from(["fetch", "-v"]).unwrap_err();
+    assert_eq!(
+        (error.kind(), error.token()),
+        (ErrorKind::MissingRequired, Some("--remote"))
+    );
+    assert_eq!(
+        error.to_string(),
+        "the following required arguments were not provided: `--remote`, `<REFSPEC>`"
+    );
+    let report = winnow_args::with_env(&[("COLUMNS", "100")], || error.render(Style::PLAIN));
+    let rows = if cfg!(feature = "help-text") {
+        "  -r, --remote <URL>  Where to fetch from\n  <REFSPEC>           What to fetch\n"
+    } else {
+        // Without the prose, the spellings alone.
+        "  -r, --remote <URL>\n  <REFSPEC>\n"
+    };
+    assert_eq!(
+        report,
+        format!(
+            "error: the following required arguments were not provided:\n\n{rows}\n\
+             For more information, try '--help'."
+        )
+    );
+    let error = Git::parse_from(["fetch", "-r", "origin"]).unwrap_err();
+    assert_eq!(
+        (error.kind(), error.token()),
+        (ErrorKind::MissingArgument, Some("REFSPEC"))
+    );
+}
