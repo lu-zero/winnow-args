@@ -299,7 +299,8 @@ mod spec;
 /// # Rules
 ///
 /// A string here names another field: `"--long"`, `"-s"`, a positional's
-/// placeholder, or the field's name.
+/// placeholder, or the field's name. `requires` also takes a group's name,
+/// as `group("name")` spells it, when no field has it.
 ///
 /// - `required`: after `env` and the defaults, the field holds a value. A
 ///   `Vec` without `required` may be empty.
@@ -318,9 +319,12 @@ mod spec;
 ///   both supplied.
 /// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
 /// - `requires("…", …)`: when this field is supplied, each of those has a value.
+///   A group's name means one of its members does. A field of that name wins.
 /// - `message = "…"` after the names of `conflicts` or `requires`: said in
 ///   place of the default error, `{0}` this field and `{1}` the other, each by
-///   its long name, else its letter. The error's kind is unchanged.
+///   its long name, else its letter. For a group, `{1}` is its members. The
+///   error's kind is unchanged: `MissingRequired` for a field,
+///   `MissingOneOf` for a group.
 /// - `group = "name"`: this field is a member of that group.
 ///
 /// # Help
@@ -4895,6 +4899,13 @@ fn titled<const N: usize>(
     Ok((text, given))
 }
 
+/// What a supplied field requires: one field, or one member of a group.
+#[derive(Clone, Copy)]
+enum Need {
+    Field(usize),
+    Group(usize),
+}
+
 /// The relations between fields, resolved to field indices.
 struct Rules {
     /// Pairs `(a, b)` that may not both be supplied, each unordered pair once,
@@ -4902,8 +4913,8 @@ struct Rules {
     conflicts: Vec<(usize, usize, Option<String>)>,
     /// For each field, the fields it displaces when bound (symmetric).
     beats: Vec<Vec<usize>>,
-    /// `(field, target, message)`: `field` supplied needs `target` to have a value.
-    requires: Vec<(usize, usize, Option<String>)>,
+    /// `(field, what it needs, message)`: `field` supplied needs that to have a value.
+    requires: Vec<(usize, Need, Option<String>)>,
     /// `(field, others)`: `field` needs a value unless one of `others` has one.
     required_unless: Vec<(usize, Vec<usize>)>,
     /// `(field, others)`: `field` needs a value unless every one of `others` has one.
@@ -4950,7 +4961,11 @@ impl Rules {
                             "`{selector}` is the negation of `{}`: name that flag instead",
                             f.display()
                         ),
-                        None => format!("`{selector}` names no flag or positional of this struct"),
+                        None => {
+                            format!(
+                                "`{selector}` names no flag, positional or group of this struct"
+                            )
+                        }
                     };
                     syn::Error::new(from.ident.span(), message)
                 })
@@ -4991,9 +5006,14 @@ impl Rules {
                 }
             }
             for (selector, message) in &f.requires {
-                rules
-                    .requires
-                    .push((i, resolve(f, selector)?, message.clone()));
+                let need = match resolve(f, selector) {
+                    Ok(j) => Need::Field(j),
+                    Err(error) => match groups.iter().position(|g| &g.name == selector) {
+                        Some(g) => Need::Group(g),
+                        None => return Err(error),
+                    },
+                };
+                rules.requires.push((i, need, message.clone()));
             }
             // A condition on another field: given, or given a value it can compare.
             // `instead` is the spelling without the comparison.
@@ -5085,6 +5105,17 @@ impl Rules {
                         )
                     })?;
                 rules.members[g].push(i);
+            }
+        }
+        for (i, need, _) in &rules.requires {
+            let Need::Group(g) = *need else {
+                continue;
+            };
+            if rules.members[g].is_empty() {
+                return Err(syn::Error::new(
+                    fields[*i].ident.span(),
+                    format!("group `{}` has no member", groups[g].name),
+                ));
             }
         }
         if let Some((g, _)) = groups
@@ -5250,7 +5281,8 @@ impl Rules {
     /// Whether each `requires`-declaring field was supplied, before defaults fill it.
     fn supplied(&self, fields: &[Field]) -> TokenStream2 {
         let mut seen = Vec::new();
-        let snapshots = self.requires.iter().filter_map(|&(i, _, _)| {
+        let snapshots = self.requires.iter().filter_map(|(i, _, _)| {
+            let i = *i;
             if seen.contains(&i) {
                 return None;
             }
@@ -5330,16 +5362,31 @@ impl Rules {
                     }
                 }
             });
-        let requires = self.requires.iter().map(|(i, j, message)| {
+        let requires = self.requires.iter().map(|(i, need, message)| {
             let supplied = format_ident!("__supplied_{}", fields[*i].ident);
-            let has = fields[*j].has();
-            let (by, target) = (fields[*i].display(), fields[*j].display());
-            let error = worded(
-                quote!(__wa::Error::required_by(__input.offset(), #target, #by)),
-                message.as_deref(),
-            );
+            let by = fields[*i].display();
+            let (satisfied, error) = match need {
+                Need::Field(j) => {
+                    let target = fields[*j].display();
+                    let error = worded(
+                        quote!(__wa::Error::required_by(__input.offset(), #target, #by)),
+                        message.as_deref(),
+                    );
+                    (fields[*j].has(), error)
+                }
+                Need::Group(g) => {
+                    let members = &self.members[*g];
+                    let has = members.iter().map(|&m| fields[m].has());
+                    let names = members.iter().map(|&m| fields[m].display());
+                    let error = worded(
+                        quote!(__wa::Error::missing_one_of(__input.offset(), #by, &[#(#names),*])),
+                        message.as_deref(),
+                    );
+                    (quote!((#(#has)||*)), error)
+                }
+            };
             quote! {
-                if #supplied && !#has {
+                if #supplied && !(#satisfied) {
                     return ::core::result::Result::Err(#error);
                 }
             }

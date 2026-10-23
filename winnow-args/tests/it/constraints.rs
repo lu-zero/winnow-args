@@ -134,6 +134,119 @@ fn groups_bound_how_many_members_are_given() {
     assert!(parse::<Groups>(&["--brew", "--nvm", "--toml"], &[]).is_ok());
 }
 
+/// `requires` of a group: one member, once the flag is supplied.
+#[derive(Args, Debug)]
+#[arg(group("loaded"))]
+struct Fork {
+    #[arg(short = 'c', long = "continue", group = "loaded")]
+    continue_session: bool,
+    #[arg(long, group = "loaded", env = "WA_RESUME")]
+    resume: Option<String>,
+    #[arg(long, requires = "loaded")]
+    check: bool,
+    #[arg(long, requires("loaded", message = "{0} needs one of {1}"))]
+    fork: bool,
+}
+
+#[test]
+fn a_flag_requires_one_member_of_a_group() {
+    let e = err::<Fork>(&["--check"], &[]);
+    assert_eq!(
+        (e.kind(), e.token(), e.value()),
+        (
+            ErrorKind::MissingOneOf,
+            Some("--check"),
+            Some("--continue, --resume")
+        )
+    );
+    assert_eq!(
+        e.to_string(),
+        "one of --continue, --resume is required (--check)"
+    );
+    let e = err::<Fork>(&["--fork"], &[]);
+    assert_eq!(e.kind(), ErrorKind::MissingOneOf);
+    assert_eq!(e.to_string(), "--fork needs one of --continue, --resume");
+    assert!(parse::<Fork>(&["--fork", "--continue"], &[]).is_ok());
+    assert!(parse::<Fork>(&["--fork", "--resume", "s"], &[]).is_ok());
+    // A member's value may come from the environment. Nothing is required
+    // while the declaring flag is absent.
+    assert!(parse::<Fork>(&["--fork"], &[("WA_RESUME", "s")]).is_ok());
+    assert!(parse::<Fork>(&[], &[]).is_ok());
+    // The group's own rule still holds: at most one member.
+    assert_eq!(
+        err::<Fork>(&["--fork", "--continue", "--resume", "s"], &[]).kind(),
+        ErrorKind::Conflict
+    );
+}
+
+#[derive(Args, Debug)]
+#[arg(group("output"))]
+struct Exported {
+    #[arg(long, requires = "output")]
+    export: bool,
+    #[arg(long, group = "output", default = "text")]
+    format: Option<String>,
+}
+
+#[test]
+fn a_members_default_satisfies_the_requirement() {
+    let exported = parse::<Exported>(&["--export"], &[]).unwrap();
+    assert_eq!(exported.format.as_deref(), Some("text"));
+}
+
+#[derive(Args, Debug)]
+#[arg(group("json"))]
+struct FieldFirst {
+    #[arg(long, group = "json")]
+    json: bool,
+    #[arg(long, group = "json")]
+    toml: bool,
+    #[arg(long, requires = "json")]
+    strict: bool,
+}
+
+#[test]
+fn a_field_is_named_ahead_of_a_group() {
+    let e = err::<FieldFirst>(&["--strict"], &[]);
+    assert_eq!(
+        (e.kind(), e.to_string()),
+        (
+            ErrorKind::MissingRequired,
+            "`--json` is required by `--strict`".to_owned()
+        )
+    );
+    // `--toml` would satisfy the group. It does not satisfy the field.
+    assert_eq!(
+        err::<FieldFirst>(&["--strict", "--toml"], &[]).kind(),
+        ErrorKind::MissingRequired
+    );
+    assert!(parse::<FieldFirst>(&["--strict", "--json"], &[]).is_ok());
+}
+
+#[derive(Args, Debug)]
+#[arg(group("loaded"))]
+struct FieldThenGroup {
+    #[arg(long)]
+    json: bool,
+    #[arg(long, group = "loaded")]
+    resume: bool,
+    #[arg(long, requires("--json", "loaded"))]
+    strict: bool,
+}
+
+#[test]
+fn a_missing_field_is_reported_before_the_group() {
+    let e = err::<FieldThenGroup>(&["--strict"], &[]);
+    assert_eq!(
+        (e.kind(), e.token()),
+        (ErrorKind::MissingRequired, Some("--json"))
+    );
+    let e = err::<FieldThenGroup>(&["--strict", "--json"], &[]);
+    assert_eq!(e.kind(), ErrorKind::MissingOneOf);
+    assert_eq!(e.token(), Some("--strict"));
+    assert!(parse::<FieldThenGroup>(&["--strict", "--json", "--resume"], &[]).is_ok());
+}
+
 #[derive(Args, Debug)]
 struct Required {
     #[arg(short, long)]

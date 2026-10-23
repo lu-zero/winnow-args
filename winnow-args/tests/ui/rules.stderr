@@ -1,4 +1,4 @@
-error: `--quiet` names no flag or positional of this struct
+error: `--quiet` names no flag, positional or group of this struct
  --> tests/ui/rules.rs:7:5
   |
 7 |     verbose: bool,
@@ -46,7 +46,7 @@ error: `-v` has no value to compare: use `required_if("-v")`
 61 |     log: Option<String>,
    |     ^^^
 
-error: `--nope` names no flag or positional of this struct
+error: `--nope` names no flag, positional or group of this struct
   --> tests/ui/rules.rs:67:5
    |
 67 |     log: Option<String>,

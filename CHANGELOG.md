@@ -9,6 +9,10 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `visible_alias` on an `Args` flag or an `Occurrence` variant:
   another long name, listed in help, suggestions and completion. `alias` and
   a second `long` stay hidden.
+- **Added**: `requires` names a group. When the field is supplied, one of the
+  group's members has a value. `message` works as for a field: `{0}` is this
+  field and `{1}` the members. The error's kind is `MissingOneOf`. A field
+  of the group's name is the one named.
 - **Added**: `conflicts` and `requires` take `message = "…"` after their
   names, and `group` takes it among its options: the program's own words in
   place of the default error, `{0}` and `{1}` the two names. The error's kind
