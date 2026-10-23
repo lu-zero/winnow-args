@@ -42,6 +42,12 @@ struct TwoDefaults {
 }
 
 #[derive(Args)]
+struct RepeatedDefault {
+    #[arg(long, default = "1", default = "2")]
+    jobs: Option<u32>,
+}
+
+#[derive(Args)]
 struct NoteOfNothing {
     #[arg(long, default_note = "one per core")]
     jobs: Option<u32>,

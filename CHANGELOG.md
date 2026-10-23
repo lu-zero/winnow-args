@@ -6,6 +6,12 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: a bare `env` on a field reads the variable of the field's name
+  in capitals: `jobs` reads `JOBS`.
+- **Added**: `default` repeated on a `Vec`, one value each, in order. Help
+  shows them all.
+- **Added**: `required_if_all(…)`, written as `required_if` and repeated:
+  the field is required only when every one of them holds.
 - **Added**: `visible_alias` on an `Args` flag or an `Occurrence` variant:
   another long name, listed in help, suggestions and completion. `alias` and
   a second `long` stay hidden.

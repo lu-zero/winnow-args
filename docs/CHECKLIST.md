@@ -55,7 +55,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `alias_hidden`, `hide`, `rename_all`)
 - [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
       `default_note`); `default_missing` for an optional value; an `Option`
-      field with `require_equals` holds `None` for a bare flag
+      field with `require_equals` holds `None` for a bare flag; a bare `env`
+      named after the field; `default` repeated on a `Vec`
 - [x] `keywords`: `-z now` is `--now` of a nested `Args` type, in order
 - [x] `@file` response files (`response`): nested 10 deep, 4096 files, GNU quoting
 
@@ -84,7 +85,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `default_from(field, …, function)`: a default made from other fields
 - [x] `requires_if("value", "--flag")`, `exclusive`
 - [x] `required_if("--flag")`, `required_if("--flag", "value")`, repeatable;
-      `required_unless_all`
+      `required_if_all` (every condition); `required_unless_all`
 
 ### Help, errors, completion
 
@@ -193,9 +194,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Defaults and rules
 
-- [ ] Bare `env`, `env_fallback`, `deprecated_env`
-- [ ] Repeated `default` for a `Vec`
-- [ ] `required_if_eq_all` (every condition)
+- [ ] `env_fallback`, `deprecated_env`
 - [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime

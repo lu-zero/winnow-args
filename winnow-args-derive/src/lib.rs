@@ -252,11 +252,13 @@ mod spec;
 ///   is dropped.
 /// - `choices("a", "b")`: the only values accepted.
 /// - `env = "VAR"`: used when the command line left the field unset. On
-///   `Option<T>` the field is then `Some`. A switch is true unless the
+///   `Option<T>` the field is then `Some`. A bare `env` is the field's name
+///   in capitals: `jobs` reads `JOBS`. A switch is true unless the
 ///   variable is empty, `0`, `false`, `no` or `off`. A `count` variable that
 ///   does not parse is left unset.
 /// - `default = "…"`: parsed as the field's value when the command line, `env`
 ///   and `default_if` left it unset. On `Option<T>` the field is then `Some`.
+///   A `Vec` takes it repeated, one value each, in order.
 /// - `default_fn = path`: a function returning the field's value, or the whole
 ///   list for a `Vec`, called at the same point as `default`. Setting both is
 ///   a compile error. `default_note = "…"` is the text help shows for it.
@@ -310,6 +312,8 @@ mod spec;
 ///   `required_if("--flag", "x")`: when its value equals `x` (`PartialEq`).
 ///   Judged on the command line and `env`, before the defaults. Repeat it for
 ///   another condition: any one makes the field required.
+/// - `required_if_all("--flag")`, `required_if_all("--flag", "x")`: written
+///   as `required_if`, repeated, and required only when all of them hold.
 /// - `requires_if("x", "--other")`: when this field's value equals `x`,
 ///   `--other` must have one too.
 /// - `exclusive`: given on the command line or by `env`, no other field of
@@ -1776,7 +1780,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         None
     };
     let required = (matches!(field.kind, Kind::Required(_))
-        && field.default.is_none()
+        && field.defaults.is_empty()
         && field.default_fn.is_none()
         && field.env.is_none()
         && field.default_from.is_none()
@@ -2380,7 +2384,8 @@ struct Field {
     /// Environment variable consulted when the command line gave nothing.
     env: Option<String>,
     /// Value used when neither the command line nor the environment did.
-    default: Option<String>,
+    /// `default`, once, or once a value for a `Vec`.
+    defaults: Vec<String>,
     /// Selectors that may not be supplied together with this field, each with
     /// the message said in place of the default one.
     conflicts: Vec<(String, Option<String>)>,
@@ -2397,6 +2402,8 @@ struct Field {
     required_unless_all: Vec<String>,
     /// Required when a field was given, or given this value.
     required_ifs: Vec<(String, Option<String>)>,
+    /// Required when every one of these holds.
+    required_if_all: Vec<(String, Option<String>)>,
     /// When this field has the value, the field named needs one.
     requires_ifs: Vec<(String, String)>,
     /// Given only alone.
@@ -2523,7 +2530,7 @@ impl Field {
             None => quote!(::core::option::Option::None),
         };
         let required = matches!(self.kind, Kind::Required(_))
-            && self.default.is_none()
+            && self.defaults.is_empty()
             && self.default_fn.is_none()
             && self.env.is_none()
             && self.default_from.is_none()
@@ -2717,7 +2724,9 @@ impl Field {
         if self.hide_default_value {
             return None;
         }
-        let stated = self.default.clone().or_else(|| self.default_note.clone());
+        let stated = (!self.defaults.is_empty())
+            .then(|| self.defaults.join(", "))
+            .or_else(|| self.default_note.clone());
         stated.or_else(|| self.computed_default())
     }
 
@@ -2784,15 +2793,14 @@ impl Field {
                 };
                 return quote!(if #unset { #set });
             }
-            return self
-                .default
-                .as_ref()
-                .map(|value| {
-                    let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
-                    let assign = assign(quote!(__wa::BStr::new(#bytes)), &self.display());
-                    quote!(if #unset { #assign })
-                })
-                .unwrap_or_default();
+            if self.defaults.is_empty() {
+                return quote!();
+            }
+            let assigns = self.defaults.iter().map(|value| {
+                let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
+                assign(quote!(__wa::BStr::new(#bytes)), &self.display())
+            });
+            return quote!(if #unset { #(#assigns)* });
         }
         self.env
             .as_ref()
@@ -2840,7 +2848,7 @@ impl Field {
                 }
             }
         } else {
-            match (&self.default_fn, &self.default) {
+            match (&self.default_fn, self.defaults.first()) {
                 (Some(function), _) => quote!(#slot = ::core::option::Option::Some(#function());),
                 (None, Some(default)) => {
                     let default = default == "true";
@@ -4906,6 +4914,9 @@ enum Need {
     Group(usize),
 }
 
+/// A field given, or given this value.
+type Condition = (usize, Option<String>);
+
 /// The relations between fields, resolved to field indices.
 struct Rules {
     /// Pairs `(a, b)` that may not both be supplied, each unordered pair once,
@@ -4921,6 +4932,8 @@ struct Rules {
     required_unless_all: Vec<(usize, Vec<usize>)>,
     /// `(field, other, the value `other` must have)`: `field` needs a value when it holds.
     required_ifs: Vec<(usize, usize, Option<String>)>,
+    /// `(field, conditions)`: `field` needs a value when every `(other, value)` holds.
+    required_if_all: Vec<(usize, Vec<Condition>)>,
     /// `(field, its value, target)`: `target` needs a value when `field` was given that one.
     requires_ifs: Vec<(usize, String, usize)>,
     /// Fields given only alone.
@@ -4973,6 +4986,7 @@ impl Rules {
             required_unless: Vec::new(),
             required_unless_all: Vec::new(),
             required_ifs: Vec::new(),
+            required_if_all: Vec::new(),
             requires_ifs: Vec::new(),
             exclusives: Vec::new(),
             members: vec![Vec::new(); groups.len()],
@@ -5058,6 +5072,14 @@ impl Rules {
                 let instead = format!("required_if(\"{selector}\")");
                 let other = condition(selector, equals, &instead)?;
                 rules.required_ifs.push((i, other, equals.clone()));
+            }
+            if !f.required_if_all.is_empty() {
+                let mut all = Vec::new();
+                for (selector, equals) in &f.required_if_all {
+                    let instead = format!("required_if_all(\"{selector}\")");
+                    all.push((condition(selector, equals, &instead)?, equals.clone()));
+                }
+                rules.required_if_all.push((i, all));
             }
             for (equals, selector) in &f.requires_ifs {
                 let target = other_than_self(selector)?;
@@ -5232,6 +5254,13 @@ impl Rules {
             let holds = format_ident!("__required_if_{n}");
             let condition = condition(&fields[*other], equals.as_deref());
             conditions.push(quote!(let #holds = #condition;));
+        }
+        for (n, (_, all)) in self.required_if_all.iter().enumerate() {
+            let holds = format_ident!("__required_if_all_{n}");
+            let each = all
+                .iter()
+                .map(|(other, equals)| condition(&fields[*other], equals.as_deref()));
+            conditions.push(quote!(let #holds = #(#each)&&*;));
         }
         for (n, (field, equals, _)) in self.requires_ifs.iter().enumerate() {
             let holds = format_ident!("__requires_if_{n}");
@@ -5440,6 +5469,30 @@ impl Rules {
                     }
                 }
             });
+        let required_if_all = self
+            .required_if_all
+            .iter()
+            .enumerate()
+            .map(|(n, (i, all))| {
+                let holds = format_ident!("__required_if_all_{n}");
+                let (has, displaced) = (fields[*i].has(), displaced(&fields[*i]));
+                let target = fields[*i].display();
+                let by: Vec<String> = all
+                    .iter()
+                    .map(|(j, equals)| match equals {
+                        Some(equals) => format!("{}={equals}", fields[*j].display()),
+                        None => fields[*j].display(),
+                    })
+                    .collect();
+                let by = by.join(", ");
+                quote! {
+                    if #holds && !#has #displaced {
+                        return ::core::result::Result::Err(
+                            __wa::Error::required_by(__input.offset(), #target, #by),
+                        );
+                    }
+                }
+            });
         let requires_ifs = self
             .requires_ifs
             .iter()
@@ -5457,7 +5510,7 @@ impl Rules {
                     }
                 }
             });
-        quote!(#missing #(#required_ifs)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
+        quote!(#missing #(#required_ifs)* #(#required_if_all)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
     }
 }
 
@@ -5684,7 +5737,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut delimiter = None;
     let mut choices = None;
     let mut env = None;
-    let mut default = None;
+    let mut defaults = Vec::new();
     let mut double_dash = None;
     let mut default_missing = None;
     let mut negative_numbers = false;
@@ -5711,6 +5764,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let (mut required_unless_all, mut required_ifs) = (Vec::new(), Vec::new());
+    let mut required_if_all = Vec::new();
     let (mut requires_ifs, mut exclusive) = (Vec::new(), false);
     let mut value_name = None;
     let (mut hint, mut complete) = (None, None);
@@ -5899,20 +5953,27 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 } else {
                     required_unless_all.extend(others);
                 }
-            } else if meta.path.is_ident("required_if") {
+            } else if meta.path.is_ident("required_if") || meta.path.is_ident("required_if_all") {
+                let all = meta.path.is_ident("required_if_all");
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let list =
                     syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
                 let mut words = list.iter().map(LitStr::value);
-                required_ifs.push(match (words.next(), words.next(), words.next()) {
+                let condition = match (words.next(), words.next(), words.next()) {
                     (Some(selector), equals, None) => (selector, equals),
                     _ => {
-                        return Err(meta.error(
-                            "expected `required_if(\"--flag\")` or `required_if(\"--flag\", \"its value\")`",
-                        ));
+                        let key = if all { "required_if_all" } else { "required_if" };
+                        return Err(meta.error(format!(
+                            "expected `{key}(\"--flag\")` or `{key}(\"--flag\", \"its value\")`",
+                        )));
                     }
-                });
+                };
+                if all {
+                    required_if_all.push(condition);
+                } else {
+                    required_ifs.push(condition);
+                }
             } else if meta.path.is_ident("requires_if") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -5934,9 +5995,13 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("group") {
                 group = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("env") {
-                env = Some(meta.value()?.parse::<LitStr>()?.value());
+                env = Some(if meta.input.peek(syn::Token![=]) {
+                    meta.value()?.parse::<LitStr>()?.value()
+                } else {
+                    bare.to_uppercase()
+                });
             } else if meta.path.is_ident("default") {
-                default = Some(meta.value()?.parse::<LitStr>()?.value());
+                defaults.push(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("choices") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -5958,7 +6023,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
-                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `requires_if`, `exclusive`, \
+                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
                 ));
             }
@@ -6004,7 +6069,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             || subcommand
             || !matches!(kind, Kind::Required(_))
             || env.is_some()
-            || default.is_some()
+            || !defaults.is_empty()
             || default_missing.is_some()
             || choices.is_some()
             || delimiter.is_some())
@@ -6039,13 +6104,13 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         return error("`value_terminator` ends a range of `values` (`values = 1..`)".into());
     }
     let valueless = matches!(kind, Kind::Switch | Kind::Count(_)) && negate.is_none();
-    if default_fn.is_some() && (default.is_some() || subcommand || keywords || valueless) {
+    if default_fn.is_some() && (!defaults.is_empty() || subcommand || keywords || valueless) {
         return error(
             "`default_fn` is for a field that takes a value, or `negate`, without `default`".into(),
         );
     }
     if default_from.is_some()
-        && (default.is_some() || default_fn.is_some() || subcommand || keywords || tristate)
+        && (!defaults.is_empty() || default_fn.is_some() || subcommand || keywords || tristate)
     {
         return error(
             "`default_from` is for a field that takes a value, a switch or a count, without `default` or `default_fn`"
@@ -6150,7 +6215,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error("`choices` needs a field that takes a value".into());
     }
-    if (env.is_some() || default.is_some()) && matches!(role, Role::Subcommand) {
+    if (env.is_some() || !defaults.is_empty()) && matches!(role, Role::Subcommand) {
         return error("a subcommand field takes no `env` or `default`".into());
     }
     let negate = match negate {
@@ -6169,7 +6234,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error(format!("`{no}` is not a usable long name"));
     }
-    match (&default, &negate) {
+    if defaults.len() > 1 && !matches!(kind, Kind::Many(_)) {
+        return error("`default` is given once, except on a `Vec`".into());
+    }
+    match (defaults.first(), &negate) {
         (Some(d), Some(_)) if d != "true" && d != "false" => {
             return error("a negatable flag's `default` is \"true\" or \"false\"".into());
         }
@@ -6199,7 +6267,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         delimiter,
         choices,
         env,
-        default,
+        defaults,
         conflicts,
         overrides,
         requires,
@@ -6207,6 +6275,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         required_unless,
         required_unless_all,
         required_ifs,
+        required_if_all,
         requires_ifs,
         exclusive,
         group,

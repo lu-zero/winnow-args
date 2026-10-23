@@ -109,3 +109,32 @@ fn the_environment_satisfies_a_required_flag() {
     let parsed = with_env(&[("WA_TOKEN", "t")], || Required::parse_words(&[])).unwrap();
     assert_eq!(parsed.token, "t");
 }
+
+#[derive(Args, Debug)]
+struct Named {
+    /// A bare `env` reads the field's name in capitals.
+    #[arg(long, env)]
+    wa_bare_jobs: Option<u32>,
+    /// Repeated, each `default` is one value.
+    #[arg(long, default = "a.toml", default = "b.toml")]
+    config: Vec<String>,
+}
+
+#[test]
+fn a_bare_env_is_the_fields_name_and_a_vec_takes_each_default() {
+    let named = with_env(&[("WA_BARE_JOBS", "3")], || Named::parse_words(&[])).unwrap();
+    assert_eq!(named.wa_bare_jobs, Some(3));
+    assert_eq!(named.config, ["a.toml", "b.toml"]);
+    let words = crate::words(&["--config", "c.toml"]);
+    let named = with_env(&[], || Named::parse_words(&words)).unwrap();
+    assert_eq!(
+        (named.wa_bare_jobs, named.config),
+        (None, vec!["c.toml".to_owned()])
+    );
+    let help = Named::parse_from(["--help"])
+        .unwrap_err()
+        .render_help("named")
+        .unwrap();
+    assert!(help.contains("[env: WA_BARE_JOBS]"), "{help}");
+    assert!(help.contains("[default: a.toml, b.toml]"), "{help}");
+}

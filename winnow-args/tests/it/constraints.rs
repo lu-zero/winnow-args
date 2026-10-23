@@ -366,6 +366,31 @@ mod conditional {
         );
         assert!(parse(&["--target", "t"]).is_ok());
     }
+
+    #[derive(Args, Debug)]
+    struct Publish {
+        #[arg(long)]
+        format: Option<Format>,
+        #[arg(long)]
+        upload: bool,
+        #[arg(long, required_if_all("--format", "json"), required_if_all("--upload"))]
+        schema: Option<String>,
+    }
+
+    #[test]
+    fn required_if_all_needs_every_condition() {
+        let publish = |line: &[&str]| Publish::parse_from(line);
+        assert!(publish(&["--format", "json"]).is_ok());
+        assert!(publish(&["--upload"]).is_ok());
+        assert!(publish(&["--upload", "--format", "text"]).is_ok());
+        let error = publish(&["--upload", "--format", "json"]).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::MissingRequired);
+        assert_eq!(
+            error.to_string(),
+            "`--schema` is required by `--format=json, --upload`"
+        );
+        assert!(publish(&["--upload", "--format", "json", "--schema", "s"]).is_ok());
+    }
 }
 
 /// `requires_if` and `exclusive`.
