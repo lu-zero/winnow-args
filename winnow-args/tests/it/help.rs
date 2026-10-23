@@ -219,6 +219,29 @@ fn before_help_usage_and_long_version() {
 }
 
 #[test]
+fn a_bool_value_and_value_names_in_help() {
+    #[derive(Args, Debug)]
+    #[arg(name = "tool")]
+    struct Tool {
+        /// Color the output.
+        #[arg(long, bool_value)]
+        color: bool,
+        /// A point.
+        #[arg(long, value_names("X", "Y"))]
+        point: Vec<i32>,
+    }
+    let text = parse::<Tool>(&["-h"])
+        .unwrap_err()
+        .render_help("tool")
+        .unwrap();
+    assert!(
+        text.contains("--color[=<BOOL>]    Color the output. [possible values: true, false]"),
+        "{text}"
+    );
+    assert!(text.contains("--point <X> <Y>..."), "{text}");
+}
+
+#[test]
 fn report_prints_and_chooses_the_exit_status() {
     assert_eq!(report(&parse::<Cli>(&["-h"]).unwrap_err(), "mise"), 0);
     let version = parse::<Cli>(&["-V"]).unwrap_err();

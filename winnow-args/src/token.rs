@@ -143,6 +143,16 @@ impl<'i> Arg<'i> {
         }
     }
 
+    /// Finish a switch that may be given `true` or `false` attached:
+    /// `--color=false`. Given alone, or by a short letter, it is true.
+    #[inline]
+    pub fn switch_value(&self) -> Result<bool, Error> {
+        match self {
+            Arg::Long(LongFlag { value: Some(v), .. }) => self.convert(v),
+            _ => Ok(true),
+        }
+    }
+
     // The errors of the continuations above, built out of line: they are
     // inlined into every flag's arm, and only this call should be.
     #[cold]

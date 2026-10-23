@@ -49,8 +49,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       floats, `char`; `Parsed<T>` (any `FromStr`), `CInt<T>` (C-syntax
       numbers), `KeyValue<K, V>`, `Spanned<T>` (with its offset)
 - [x] Switch, `count` (saturating), `Option<T>`, required `T`, `Vec<T>` one
-      value per occurrence; a repeated single value keeps the last
-- [x] `delimiter`, `values = N`, `values = 1..` / `a..=b` with `value_terminator`,
+      value per occurrence; a repeated single value keeps the last;
+      `bool_value` (`--flag=false`)
+- [x] `delimiter`, `values = N` (with `value_names`), `values = 1..` / `a..=b`
+      with `value_terminator`,
       `choices(…)`, `ValueEnum` (`name`, `alias`,
       `alias_hidden`, `hide`, `rename_all`)
 - [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
@@ -184,7 +186,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] A variadic positional that is not last; `allow_missing_positional`
 - [ ] A negative number routed into a default subcommand's positional
       (usage corpus `default-takes-an-opted-negative-number`)
-- [ ] `bool_value` (`--flag=false`), `Option<Option<T>>`, `value_names`
+- [ ] `Option<Option<T>>`
 - [ ] `choices_strict = false`: choices as suggestions only
 - [ ] Custom value parsers in the derive (`parse_with`)
 - [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names

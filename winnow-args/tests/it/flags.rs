@@ -313,3 +313,45 @@ mod from_str {
         assert_eq!(error.kind(), ErrorKind::InvalidValue);
     }
 }
+
+#[derive(Args, Debug)]
+#[arg(name = "tool")]
+struct Valued {
+    /// Color the output.
+    #[arg(long, short = 'c', bool_value)]
+    color: bool,
+    /// Keep the cache.
+    #[arg(long, bool_value, negate)]
+    cache: bool,
+    /// A point.
+    #[arg(long, value_names("X", "Y"))]
+    point: Vec<i32>,
+}
+
+#[test]
+fn a_bool_value_takes_true_or_false_attached() {
+    let parse = |line: &[&str]| Valued::parse_from(line);
+    assert!(parse(&["--color"]).unwrap().color);
+    assert!(parse(&["-c"]).unwrap().color);
+    assert!(parse(&["--color=true"]).unwrap().color);
+    assert!(!parse(&["--color=false"]).unwrap().color);
+    assert!(!parse(&["--cache=false"]).unwrap().cache);
+    assert!(!parse(&["--cache=true", "--no-cache"]).unwrap().cache);
+    let error = parse(&["--color=yes"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::InvalidValue);
+    // Never the next word: that stays a word.
+    assert_eq!(
+        parse(&["--color", "false"]).unwrap_err().kind(),
+        ErrorKind::UnexpectedArg
+    );
+}
+
+#[test]
+fn value_names_name_each_word_and_set_how_many() {
+    let parsed = Valued::parse_from(["--point", "1", "2", "--point", "3", "4"]).unwrap();
+    assert_eq!(parsed.point, [1, 2, 3, 4]);
+    assert_eq!(
+        Valued::parse_from(["--point", "1"]).unwrap_err().kind(),
+        ErrorKind::MissingValue
+    );
+}

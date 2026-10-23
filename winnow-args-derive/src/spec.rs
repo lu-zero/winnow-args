@@ -95,6 +95,8 @@ pub(crate) struct ItemDoc {
     pub aliases: Vec<String>,
     /// Long names help lists after `long`.
     pub visible_aliases: Vec<String>,
+    /// A placeholder for each value of a flag that takes several.
+    pub value_names: Vec<String>,
     pub negate: Option<String>,
     pub value_name: Option<String>,
     pub help: String,
@@ -229,6 +231,7 @@ fn item_toml(item: &ItemDoc) -> String {
     opt(&mut out, "long", &item.long);
     strings(&mut out, "aliases", &item.aliases);
     strings(&mut out, "visible_aliases", &item.visible_aliases);
+    strings(&mut out, "value_names", &item.value_names);
     opt(&mut out, "negate", &item.negate);
     opt(&mut out, "value_name", &item.value_name);
     field(&mut out, "help", &item.help);

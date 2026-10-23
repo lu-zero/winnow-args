@@ -51,3 +51,15 @@ error: `default_fn` is for a field that takes a value, or `negate`, without `def
    |
 58 |     #[arg(long, default_fn = four)]
    |     ^
+
+error: `bool_value` is for a `bool` flag with a long name
+  --> tests/ui/values.rs:64:5
+   |
+64 |     #[arg(long, bool_value)]
+   |     ^
+
+error: `value_names` names each of the `values = N` a flag takes
+  --> tests/ui/values.rs:70:5
+   |
+70 |     #[arg(long, values = 3, value_names("X", "Y"))]
+   |     ^

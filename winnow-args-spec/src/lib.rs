@@ -225,6 +225,9 @@ pub struct Item {
     pub optional_value: bool,
     /// How many words one occurrence takes. Zero is read as one.
     pub values: usize,
+    /// A placeholder for each of `values`, in place of the value name
+    /// repeated. Empty when there are none.
+    pub value_names: Vec<String>,
     /// Further words are accepted while they are not flag-like.
     pub more_values: bool,
     /// Under `long_only`, this long name refuses a one-dash spelling.
@@ -743,7 +746,12 @@ impl Item {
             };
         };
         let count = self.values.max(1);
-        let mut value = vec![format!("<{name}>"); count].join(" ");
+        let mut value = if self.value_names.is_empty() {
+            vec![format!("<{name}>"); count].join(" ")
+        } else {
+            let names: Vec<String> = self.value_names.iter().map(|n| format!("<{n}>")).collect();
+            names.join(" ")
+        };
         if self.more_values {
             value.push_str("...");
         }
@@ -1110,6 +1118,7 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 long: opt_present(row, "long")?,
                 aliases: strings(row, "aliases")?,
                 visible_aliases: strings(row, "visible_aliases")?,
+                value_names: strings(row, "value_names")?,
                 negate: opt_present(row, "negate")?,
                 value_name: opt_present(row, "value_name")?,
                 help: opt_str(row, "help")?,
@@ -2157,6 +2166,18 @@ mod tests {
         assert_eq!(after("[default: 4]"), "[default: 4] The default.");
         assert_eq!(after("One.\n\nTwo"), "One.\n\nTwo.\nThe default.");
         assert_eq!(after(""), "The default.");
+    }
+
+    #[test]
+    fn value_names_name_each_word_of_the_synopsis() {
+        let point = Item {
+            long: Some("point".to_owned()),
+            value_name: Some("POINT".to_owned()),
+            values: 2,
+            value_names: vec!["X".to_owned(), "Y".to_owned()],
+            ..Item::default()
+        };
+        assert_eq!(point.synopsis(), "--point <X> <Y>");
     }
 
     #[test]

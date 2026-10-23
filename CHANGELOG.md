@@ -6,6 +6,11 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `bool_value` on a `bool` flag: it also takes `--flag=true` and
+  `--flag=false`, attached, and alone is true. Help shows `--flag[=<BOOL>]`
+  and its two values. `Arg::switch_value` reads one.
+- **Added**: `value_names("X", "Y")` on a `Vec` flag: one placeholder a word,
+  `--point <X> <Y>`, and as many words each time.
 - **Added**: `long_version = "…"` on a struct: what `--version` prints,
   where `-V` keeps `version`. `Error::long_version` is its request.
 - **Added**: `before_help` and `before_long_help` on a struct: text before
@@ -30,9 +35,9 @@ released together. Versions follow [semver](https://semver.org).
   field and `{1}` the members. The error is `Error::one_of_required_by`, of
   the kind `MissingOneOf`, with the group's name as its token. If a field has
   the group's name, the field is meant.
-- **Changed**: `help::Item` and `winnow_args_spec::Item` have one more
-  field, `visible_aliases`. A value written by hand that ends in
-  `..Item::EMPTY` or `..Item::default()` is unaffected.
+- **Changed**: `help::Item` and `winnow_args_spec::Item` have two more
+  fields, `visible_aliases` and `value_names`. A value written by hand that
+  ends in `..Item::EMPTY` or `..Item::default()` is unaffected.
 - **Added**: `conflicts` and `requires` take `message = "…"` after their
   names, and `group` takes it among its options: the program's own words in
   place of the default error, `{0}` and `{1}` the two names. The error's kind

@@ -148,6 +148,9 @@ pub struct Item {
     pub negate: Option<&'static str>,
     /// The value's placeholder; `None` for a switch.
     pub value_name: Option<&'static str>,
+    /// A placeholder for each of [`values`](Self::values), in place of
+    /// `value_name` repeated: `--point <X> <Y>`. Empty when there are none.
+    pub value_names: &'static [&'static str],
     /// First paragraph of the description.
     pub help: &'static str,
     /// The whole description.
@@ -204,6 +207,7 @@ impl Item {
         visible_aliases: &[],
         negate: None,
         value_name: None,
+        value_names: &[],
         help: "",
         long_help: "",
         heading: None,
@@ -1258,7 +1262,12 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
         // `<V>`, `=<V>` when only attached, in brackets when optional, and
         // once a word for `values = N`.
         let more = if item.more_values { "..." } else { "" };
-        let value = vec![format!("<{value}>"); item.values.max(1)].join(" ") + more;
+        let value = if item.value_names.is_empty() {
+            vec![format!("<{value}>"); item.values.max(1)].join(" ")
+        } else {
+            let names: Vec<String> = item.value_names.iter().map(|n| format!("<{n}>")).collect();
+            names.join(" ")
+        } + more;
         let (open, close) = match (item.require_equals, item.optional_value) {
             (true, true) => ("[=", "]"),
             (true, false) => ("=", ""),

@@ -59,4 +59,16 @@ struct DefaultFnOnASwitch {
     verbose: bool,
 }
 
+#[derive(Args)]
+struct BoolValueOnAValue {
+    #[arg(long, bool_value)]
+    jobs: Option<u32>,
+}
+
+#[derive(Args)]
+struct ValueNamesAgainstValues {
+    #[arg(long, values = 3, value_names("X", "Y"))]
+    point: Vec<i32>,
+}
+
 fn main() {}

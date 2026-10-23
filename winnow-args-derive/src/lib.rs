@@ -246,11 +246,15 @@ mod spec;
 ///   parse error. The type brings no choices and no completion hint: set
 ///   `choices` or `hint`.
 /// - `count`: an integer. Each time the flag is given adds one.
+/// - `bool_value`: a `bool` flag also takes `--flag=true` and `--flag=false`,
+///   attached; alone it is true. Help shows `--flag[=<BOOL>]`.
 /// - `value_name = "…"`: the placeholder in help. With none, the field name
 ///   in capitals.
 /// - `delimiter = ','`: split one value of a `Vec` on this ASCII character.
 /// - `values = N`: each time a `Vec` flag is given, it takes `N` words,
 ///   whatever they look like.
+/// - `value_names("X", "Y")`: a placeholder for each word, `--point <X> <Y>`,
+///   in place of `value_name` repeated. It sets `values` to their count.
 /// - `values = 1..`, or `values = 2..=3`: at least, and at most, that many
 ///   words each time. After the first, a word is taken while it does not look
 ///   like a flag. A positional after this flag needs a flag, or `--`, before it.
@@ -1542,6 +1546,7 @@ fn occurrence_item(
         aliases: &[#(#aliases),*],
         visible_aliases: &[#(#visible),*],
         negate: ::core::option::Option::None,
+        value_names: &[],
         value_name: #value_name,
         help: #help,
         long_help: #long_help,
@@ -1803,6 +1808,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
             .map(|name| (*name).to_owned())
             .collect(),
         visible_aliases: field.visible_aliases.clone(),
+        value_names: field.value_names.clone(),
         negate: field.negate.clone(),
         value_name: if field.is_positional() {
             Some(field.display())
@@ -1824,6 +1830,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         require_equals: field.require_equals,
         global: field.is_global(),
         optional_value: field.default_missing.is_some()
+            || field.bool_value
             || field.require_equals && matches!(field.kind, Kind::Optional(_)),
         values: field.values,
         more_values: field.values_max.is_some(),
@@ -2479,6 +2486,8 @@ struct Field {
     /// An `Option<bool>` with `short` and the same `plus` letter: `-c` is
     /// `Some(true)`, `+c` is `Some(false)`.
     tristate: bool,
+    /// `--flag=true` and `--flag=false` are taken.
+    bool_value: bool,
     /// Its values are words of a vocabulary of their own, the field's type
     /// (`Args`): `-z now -z max-page-size=4096` (ld).
     keywords: bool,
@@ -2486,6 +2495,8 @@ struct Field {
     short_aliases: Vec<char>,
     /// More long names, listed in help. `alias` stays hidden.
     visible_aliases: Vec<String>,
+    /// A placeholder for each of `values`.
+    value_names: Vec<String>,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -2498,6 +2509,7 @@ impl Field {
         let long = opt_str(self.longs().first().copied());
         let aliases = self.longs().into_iter().skip(1);
         let visible_aliases = self.visible_aliases.iter();
+        let value_names = self.value_names.iter();
         let negate = opt_str(self.negate.as_deref());
         let require_equals = self.require_equals;
         let global = self.is_global();
@@ -2516,6 +2528,7 @@ impl Field {
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
         let optional_value = self.default_missing.is_some()
+            || self.bool_value
             || require_equals && matches!(self.kind, Kind::Optional(_));
         let values = self.values;
         let more_values = self.values_max.is_some();
@@ -2562,6 +2575,7 @@ impl Field {
                 visible_aliases: &[#(#visible_aliases),*],
                 negate: #negate,
                 value_name: #value_name,
+                value_names: &[#(#value_names),*],
                 help: #help,
                 long_help: #long_help,
                 heading: #heading,
@@ -3156,6 +3170,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #ident.push(__value);
                 }
             }
+            _ if f.bool_value && f.negate.is_some() => quote! {
+                #ident = ::core::option::Option::Some(__arg.switch_value()?);
+            },
+            Kind::Switch if f.bool_value => quote! {
+                #ident = __arg.switch_value()?;
+            },
             _ if f.tristate || f.negate.is_some() => quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(true);
@@ -5805,6 +5825,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut warning = String::new();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
+    let mut bool_value = false;
+    let mut value_names = Vec::new();
     let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
@@ -6033,6 +6055,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                         ));
                     }
                 });
+            } else if meta.path.is_ident("value_names") {
+                value_names.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("bool_value") {
+                bool_value = true;
             } else if meta.path.is_ident("exclusive") {
                 exclusive = true;
             } else if meta.path.is_ident("required") {
@@ -6066,7 +6092,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
-                     `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
+                     `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
@@ -6130,6 +6156,17 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     if double_dash.is_some() && !positional {
         return error("`double_dash` is for positional fields".into());
+    }
+    if !value_names.is_empty() {
+        if value_names.len() < 2 || value_name.is_some() {
+            return error(
+                "`value_names` names two values or more, in place of `value_name`".into(),
+            );
+        }
+        if values_max.is_some() || values != 1 && values != value_names.len() {
+            return error("`value_names` names each of the `values = N` a flag takes".into());
+        }
+        values = value_names.len();
     }
     if (values > 1 || values_max.is_some())
         && (positional
@@ -6224,7 +6261,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         Role::Positional {
             double_dash: double_dash.unwrap_or(DoubleDash::Optional),
-            name: value_name.unwrap_or_else(|| bare.to_uppercase()),
+            name: value_name.clone().unwrap_or_else(|| bare.to_uppercase()),
         }
     } else {
         // Like bpaf: a flag with no names is `--field-name` (unless it is
@@ -6300,6 +6337,24 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if hint.is_some() && complete.is_some() {
         return error("`complete` answers alone: `hint` beside it would never be asked".into());
     }
+    if bool_value
+        && (!matches!(kind, Kind::Switch)
+            || tristate
+            || !matches!(&role, Role::Flag { long: Some(_), .. }))
+    {
+        return error("`bool_value` is for a `bool` flag with a long name".into());
+    }
+    // Help and the pages show it as `--flag[=<BOOL>]`, a value of two choices.
+    let (flag_value_name, require_equals, choices) = if bool_value {
+        let name = value_name.clone().unwrap_or_else(|| "BOOL".to_owned());
+        (
+            Some(name),
+            true,
+            Some(vec!["true".to_owned(), "false".to_owned()]),
+        )
+    } else {
+        (flag_value_name, require_equals, choices)
+    };
     let spec = spec_name(&f.attrs)?;
     if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`spec` names the type of a field's value, and this field has none".into());
@@ -6355,9 +6410,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         stop_flags,
         plus,
         tristate,
+        bool_value,
         keywords,
         short_aliases,
         visible_aliases: visible,
+        value_names,
     })
 }
 
