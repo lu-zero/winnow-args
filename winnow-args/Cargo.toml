@@ -19,11 +19,15 @@ help-text = []
 # Wrap help to the terminal's width when `COLUMNS` does not say, as clap's
 # `wrap_help` does.
 terminal-size = ["dep:terminal_size"]
+# Measure help in terminal columns, a wide character two and a combining mark
+# none, as clap's `unicode` does; else one column a character.
+unicode = ["dep:unicode-width"]
 
 [dependencies]
 winnow.workspace = true
 winnow-args-derive = { workspace = true, optional = true }
 terminal_size = { version = "0.4", optional = true }
+unicode-width = { version = "0.2", optional = true }
 
 [[example]]
 name = "example"

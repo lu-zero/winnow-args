@@ -6,6 +6,8 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: the `unicode` feature measures help in terminal columns, so a
+  wide character takes two and a combining mark none, as clap's does.
 - **Added**: `verbatim_doc_comment` keeps a doc comment's lines as written,
   on a field, a struct, a `Subcommand` enum or a variant.
 - **Changed**: every required flag and positional left without a value is

@@ -103,6 +103,8 @@
 //! - `help-text` (default): the prose of derived help. Without it, help still
 //!   lists commands, flags, values and defaults, and the binary is smaller.
 //! - `terminal-size`: wrap help to the terminal's width when `COLUMNS` is unset.
+//! - `unicode`: measure help in terminal columns, so a wide character (CJK,
+//!   emoji) takes two and a combining mark none. Without it, one a character.
 //!
 //! # From clap and usage
 //!

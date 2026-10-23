@@ -578,6 +578,19 @@ fn push_painted(out: &mut String, ink: Ink, text: &str) {
     ink.paint.write(out, ink.depth, text);
 }
 
+/// The terminal columns `c` takes: two for a wide character, none for a
+/// combining mark.
+#[cfg(feature = "unicode")]
+fn columns(c: char) -> usize {
+    unicode_width::UnicodeWidthChar::width(c).unwrap_or(0)
+}
+
+/// One column a character, without the `unicode` feature's tables.
+#[cfg(not(feature = "unicode"))]
+fn columns(_: char) -> usize {
+    1
+}
+
 /// Painted text and how many columns it takes on screen.
 #[derive(Default)]
 struct Cell {
@@ -588,7 +601,7 @@ struct Cell {
 impl Cell {
     fn push(&mut self, ink: Ink, text: &str) {
         push_painted(&mut self.text, ink, text);
-        self.width += text.chars().count();
+        self.width += text.chars().map(columns).sum::<usize>();
     }
 
     /// `<NAME>` painted whole, or `[NAME]` with only the name painted: square
@@ -1504,8 +1517,8 @@ fn wrap_text(text: &str, width: usize) -> String {
     out
 }
 
-/// The pieces of `line` broken at spaces into at most `width` characters; a
-/// word longer than that stands alone. Leading indentation stays on the first
+/// The pieces of `line` broken at spaces into at most `width` columns; a
+/// word wider than that stands alone. Leading indentation stays on the first
 /// piece. Borrowed slices, so a line that fits costs one scan.
 struct Wrap<'a> {
     rest: &'a str,
@@ -1541,7 +1554,8 @@ impl<'a> Iterator for Wrap<'a> {
                 escape = true;
                 continue;
             }
-            if count == self.width {
+            let width = columns(c);
+            if count + width > self.width {
                 end = at;
                 break;
             }
@@ -1551,7 +1565,7 @@ impl<'a> Iterator for Wrap<'a> {
             } else if text {
                 space = Some(at);
             }
-            count += 1;
+            count += width;
         }
         let cut = match (end == self.rest.len(), space) {
             (true, _) => end,

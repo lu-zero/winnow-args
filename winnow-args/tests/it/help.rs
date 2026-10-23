@@ -307,6 +307,28 @@ fn a_verbatim_doc_comment_keeps_its_lines() {
     );
 }
 
+/// 日本語 日本語 日本語 日本語 日本語 日本語 日本語 日本語
+#[cfg(feature = "unicode")]
+#[derive(Args, Debug)]
+#[arg(name = "wide")]
+struct Wide {
+    /// 名前 名前
+    #[arg(long)]
+    name: Option<String>,
+}
+
+#[cfg(feature = "unicode")]
+#[test]
+fn wide_characters_take_two_columns() {
+    let e = parse::<Wide>(&["-h"]).unwrap_err();
+    let text = with_env(&[("COLUMNS", "40")], || e.render_help("wide").unwrap());
+    // Five words are 34 columns and six 41, though six are 23 characters.
+    assert!(
+        text.starts_with("日本語 日本語 日本語 日本語 日本語\n日本語 日本語 日本語\n\n"),
+        "{text}"
+    );
+}
+
 /// `text` without its SGR escapes.
 fn strip(text: &str) -> String {
     let mut out = String::new();

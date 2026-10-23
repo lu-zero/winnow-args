@@ -90,7 +90,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Help from doc comments and `help`, `long_help`, `help_heading`, `hide`,
       `about`, `long_about`, `after_help`, `after_long_help`; `[possible values]`,
       defaults and env shown
-- [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size`), else 100
+- [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size`), else 100;
+      in terminal columns with `unicode`, else a column a character
 - [x] Colour: `help::Style`, `color::Theme` per depth (16, 256, 24-bit),
       chosen by `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE` and the stream
 - [x] `` `quoted` ``, `*emphasized*` and `**strong**` spans of a description
@@ -226,7 +227,6 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `help <topic>`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
-- [ ] Help width counts characters, not terminal columns
 
 ### Completion
 
