@@ -256,6 +256,29 @@ fn long_help_wraps_its_indented_blocks() {
     );
 }
 
+/// Copy files
+///
+/// Copies each source to the destination, which
+/// must exist; with more than one source it is a
+/// directory:
+///     cp a b dir/
+#[derive(Args, Debug)]
+#[arg(name = "cp")]
+struct Reflowed {}
+
+#[test]
+fn a_doc_comment_paragraph_fills_the_width_its_source_did_not() {
+    let e = parse::<Reflowed>(&["--help"]).unwrap_err();
+    let text = with_env(&[("COLUMNS", "120")], || e.render_help("cp").unwrap());
+    assert!(
+        text.starts_with(
+            "Copy files\n\nCopies each source to the destination, which must exist; \
+             with more than one source it is a directory:\n    cp a b dir/\n\n"
+        ),
+        "{text}"
+    );
+}
+
 /// `text` without its SGR escapes.
 fn strip(text: &str) -> String {
     let mut out = String::new();

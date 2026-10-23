@@ -2054,9 +2054,11 @@ fn variant_names<'a>(
     })
 }
 
-/// A doc comment as help: its first paragraph, and the whole of it.
+/// A doc comment as help: its first paragraph, and the whole of it. Each
+/// paragraph is one line, so help wraps it to the terminal rather than to the
+/// source; an indented line is kept as written.
 fn docs(attrs: &[syn::Attribute]) -> (String, String) {
-    let lines: Vec<String> = attrs
+    let lines = attrs
         .iter()
         .filter(|a| a.path().is_ident("doc"))
         .filter_map(|a| match &a.meta {
@@ -2074,9 +2076,20 @@ fn docs(attrs: &[syn::Attribute]) -> (String, String) {
                 .unwrap_or(&line)
                 .trim_end()
                 .to_owned()
-        })
-        .collect();
-    let long = lines.join("\n").trim().to_owned();
+        });
+    let mut long = String::new();
+    let mut joins = false;
+    for line in lines {
+        let kept = line.starts_with([' ', '\t']);
+        if joins && !kept && !line.is_empty() {
+            long.push(' ');
+        } else if !long.is_empty() {
+            long.push('\n');
+        }
+        long.push_str(&line);
+        joins = !kept && !line.is_empty();
+    }
+    let long = long.trim().to_owned();
     let short = long
         .split("\n\n")
         .next()
