@@ -183,6 +183,8 @@ pub struct Item {
     pub long: Option<String>,
     /// Further long names. Help does not show them, and neither do the pages.
     pub aliases: Vec<String>,
+    /// Further long names, shown beside the long name.
+    pub visible_aliases: Vec<String>,
     /// `--no-name`, the spelling that sets the flag false.
     pub negate: Option<String>,
     /// Placeholder, without brackets.
@@ -811,6 +813,9 @@ impl Item {
         if let Some(long) = &self.long {
             names.push(format!("--{long}"));
         }
+        for alias in &self.visible_aliases {
+            names.push(format!("--{alias}"));
+        }
         let mut line = names.join(", ");
         if let Some(negate) = &self.negate {
             if !line.is_empty() {
@@ -1080,6 +1085,7 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 plus: one_char(row, "plus")?,
                 long: opt_present(row, "long")?,
                 aliases: strings(row, "aliases")?,
+                visible_aliases: strings(row, "visible_aliases")?,
                 negate: opt_present(row, "negate")?,
                 value_name: opt_present(row, "value_name")?,
                 help: opt_str(row, "help")?,
@@ -2141,6 +2147,7 @@ mod tests {
             short = "f"
             long = "force"
             aliases = ["really"]
+            visible_aliases = ["push"]
             negate = "no-force"
             value_name = "MODE"
             require_equals = true
@@ -2168,7 +2175,7 @@ mod tests {
         assert_eq!(command.package_version.as_deref(), Some("1.2.3"));
         assert_eq!(
             command.items[0].synopsis(),
-            "-f, --force / --no-force=<MODE>"
+            "-f, --force, --push / --no-force=<MODE>"
         );
         assert!(command.items[0].choices.is_empty());
         assert_eq!(command.items[1].synopsis(), "<FILE>...");

@@ -30,7 +30,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       at the end is an error
 - [x] `-v`, bundles `-vq`, `-p value`, `-pvalue`, `-p=value`; a value letter
       ends the bundle; multi-byte letters
-- [x] Several names: `alias`, a second `short` or `long`
+- [x] Several names: `alias` (hidden), `visible_alias` (shown), a second
+      `short` (shown) or `long` (hidden), on a flag and an `Occurrence`
+      variant
 - [x] `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`,
       `keep_equals`, `prefix` (`-lfoo`), `two_dashes`
 - [x] `--no-name` negation (`negate`): last spelling wins

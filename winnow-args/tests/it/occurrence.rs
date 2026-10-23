@@ -177,3 +177,49 @@ fn a_bundle_is_an_item_before_its_letters() {
         ]
     );
 }
+
+/// Resume a session.
+#[derive(Occurrence, Debug, PartialEq)]
+enum SessionItem {
+    /// Resume a session.
+    #[arg(long = "resume", visible_alias = "session", alias = "old")]
+    Resume(String),
+}
+
+#[derive(Args, Debug)]
+#[arg(name = "tool", version = "1", long_only)]
+struct Session {
+    #[arg(sequence)]
+    items: Vec<SessionItem>,
+}
+
+#[test]
+fn a_visible_alias_parses_and_is_listed() {
+    let resume = |line: &[&str]| Session::parse_from(line).unwrap().items;
+    let one = [SessionItem::Resume("a".into())];
+    assert_eq!(resume(&["--session", "a"]), one);
+    assert_eq!(resume(&["-session", "a"]), one);
+    assert_eq!(resume(&["--old", "a"]), one);
+    let help = Session::parse_from(["-h"])
+        .unwrap_err()
+        .render_help("tool")
+        .unwrap();
+    assert!(help.contains("--resume, --session"), "{help}");
+    assert!(!help.contains("--old"), "{help}");
+    assert_eq!(
+        Session::parse_from(["--sesion"]).unwrap_err().similar(),
+        Some("--session")
+    );
+    assert_ne!(
+        Session::parse_from(["--oldd"]).unwrap_err().similar(),
+        Some("--old")
+    );
+    let offered: Vec<String> = winnow_args::complete::complete(Session::HELP, &["--"])
+        .candidates
+        .into_iter()
+        .map(|candidate| candidate.value)
+        .collect();
+    assert!(offered.contains(&"--resume".to_owned()), "{offered:?}");
+    assert!(offered.contains(&"--session".to_owned()), "{offered:?}");
+    assert!(!offered.iter().any(|name| name == "--old"), "{offered:?}");
+}

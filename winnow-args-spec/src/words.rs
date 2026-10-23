@@ -172,6 +172,7 @@ fn flag_word<'a>(word: &str, mut items: impl Iterator<Item = &'a Item> + Clone) 
         let item = items.find(|i| {
             i.long.as_deref() == Some(name)
                 || i.aliases.iter().any(|a| a == name)
+                || i.visible_aliases.iter().any(|a| a == name)
                 || i.negate.as_deref() == Some(name)
         })?;
         let negated = item.negate.as_deref() == Some(name);

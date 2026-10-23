@@ -223,3 +223,20 @@ fn every_missing_required_argument_is_listed_as_help_shows_it() {
         (ErrorKind::MissingArgument, Some("REFSPEC"))
     );
 }
+
+#[derive(Args, Debug)]
+#[arg(name = "tool", version = "1")]
+struct Aliased {
+    #[arg(long = "resume", visible_alias = "session")]
+    resume: bool,
+    #[arg(long = "session-id", alias = "sid")]
+    id: bool,
+}
+
+#[test]
+fn a_typo_suggests_a_shown_alias_and_not_a_hidden_one() {
+    let shown = Aliased::parse_from(["--sesion"]).unwrap_err();
+    assert_eq!(shown.similar(), Some("--session"));
+    let hidden = Aliased::parse_from(["--sidd"]).unwrap_err();
+    assert_ne!(hidden.similar(), Some("--sid"));
+}

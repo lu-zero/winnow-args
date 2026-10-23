@@ -259,8 +259,12 @@ impl Walk {
     }
 
     fn long(&self, name: &str) -> Option<&'static Item> {
-        self.flags()
-            .find(|i| i.long == Some(name) || i.negate == Some(name) || i.aliases.contains(&name))
+        self.flags().find(|i| {
+            i.long == Some(name)
+                || i.negate == Some(name)
+                || i.aliases.contains(&name)
+                || i.visible_aliases.contains(&name)
+        })
     }
 
     /// Whether `item` takes the next word as its value.
@@ -525,6 +529,9 @@ impl Walk {
 fn push_names(item: &'static Item, shorts: bool, current: &str, out: &mut Completions) {
     if let Some(long) = item.long {
         push(out, &format!("--{long}"), item.help, current);
+    }
+    for alias in item.visible_aliases {
+        push(out, &format!("--{alias}"), item.help, current);
     }
     if let Some(negate) = item.negate {
         push(out, &format!("--{negate}"), item.help, current);

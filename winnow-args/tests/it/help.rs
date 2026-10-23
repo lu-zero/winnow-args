@@ -154,6 +154,29 @@ fn the_help_word_follows_subcommand_names() {
 }
 
 #[test]
+fn a_visible_long_alias_is_listed_and_a_hidden_one_is_not() {
+    #[derive(Args, Debug)]
+    #[arg(name = "tool", version = "1")]
+    struct Tool {
+        /// Resume a session.
+        #[arg(
+            short = 'r',
+            short = 's',
+            long,
+            visible_alias = "session",
+            alias = "old"
+        )]
+        resume: bool,
+    }
+    let text = parse::<Tool>(&["-h"])
+        .unwrap_err()
+        .render_help("tool")
+        .unwrap();
+    assert!(text.contains("-r, -s, --resume, --session"), "{text}");
+    assert!(!text.contains("--old"), "{text}");
+}
+
+#[test]
 fn report_prints_and_chooses_the_exit_status() {
     assert_eq!(report(&parse::<Cli>(&["-h"]).unwrap_err(), "mise"), 0);
     let version = parse::<Cli>(&["-V"]).unwrap_err();

@@ -59,8 +59,12 @@ pub(super) fn flag(root: &'static Command, path: &[&str], typed: &str) -> Option
     let names = own
         .chain(globals)
         .filter(|item| !item.hide)
-        .flat_map(|item| [item.long, item.negate])
-        .flatten()
+        .flat_map(|item| {
+            item.long
+                .into_iter()
+                .chain(item.negate)
+                .chain(item.visible_aliases.iter().copied())
+        })
         .chain(command.help_flag.then_some("help"))
         .chain(command.version.map(|_| "version"));
     nearest(typed, names).map(|name| format!("--{name}"))

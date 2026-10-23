@@ -218,6 +218,8 @@ mod spec;
 /// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
 ///   `_` in the field name is written `-`. Help lists the first `long` only.
 /// - `alias = "…"`, or `alias("…", …)`: further long names. Help leaves them out.
+/// - `visible_alias = "…"`, or `visible_alias("…", …)`: further long names,
+///   listed after the first `long` in help, suggestions and completion.
 /// - `negate`, or `negate = "no-name"`: `--no-name` sets the `bool` false.
 ///   With no string, the name is `no-` plus the long name. A leading `--` on
 ///   the string is dropped.
@@ -980,6 +982,8 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
 ///   help lists the first.
 /// - `alias = "…"`, or `alias("…", …)`: more long names. Help lists an alias
 ///   only when it is the first long name.
+/// - `visible_alias = "…"`, or `visible_alias("…", …)`: further long names,
+///   listed after the first `long` in help, suggestions and completion.
 /// - `two_dashes`: with the parent's `long_only`, this name keeps both dashes.
 /// - `prefix`: an ASCII `short` takes the rest of its word (`-lfoo`). The
 ///   variant holds a value.
@@ -1101,7 +1105,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     for variant in &data.variants {
         let ident = &variant.ident;
-        let (mut short, mut longs, mut positional) = (None, Vec::new(), false);
+        let (mut short, mut longs, mut visible, mut positional) =
+            (None, Vec::new(), Vec::new(), false);
         let (mut two_dashes, mut prefix, mut value_name) = (false, false, None);
         let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
         let (mut require_equals, mut default_missing) = (false, None);
@@ -1139,6 +1144,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     });
                 } else if meta.path.is_ident("alias") {
                     longs.extend(aliases(&meta)?);
+                } else if meta.path.is_ident("visible_alias") {
+                    visible.extend(aliases(&meta)?);
                 } else if meta.path.is_ident("positional") {
                     positional = true;
                 } else if meta.path.is_ident("two_dashes") {
@@ -1150,7 +1157,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
                 } else {
                     return Err(meta.error(
-                        "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
+                        "expected `short`, `long`, `alias`, `visible_alias`, `positional`, `two_dashes`, `prefix`, \
                          `value_name`, `verbatim_doc_comment`, `allow_hyphen_values`, `allow_negative_numbers`, \
                          `require_equals`, `keep_equals`, `default_missing`, `skip`, `unknown` or `bundle`",
                     ));
@@ -1225,6 +1232,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     variant,
                     None,
                     &[],
+                    &[],
                     Some(&name),
                     Some(ty),
                     false,
@@ -1267,7 +1275,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let spelled = short
             .map(|c| format!("-{c}"))
             .into_iter()
-            .chain(longs.iter().map(|l| format!("--{l}")));
+            .chain(longs.iter().chain(&visible).map(|l| format!("--{l}")));
         for name in spelled {
             if let Some(other) = seen.insert(name.clone(), ident.clone()) {
                 return Err(syn::Error::new(
@@ -1281,6 +1289,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             variant,
             short,
             &longs,
+            &visible,
             takes
                 .is_some()
                 .then(|| value_name.as_deref().unwrap_or("VALUE")),
@@ -1297,6 +1306,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     short,
                     long: longs.first().cloned(),
                     aliases: longs.iter().skip(1).cloned().collect(),
+                    visible_aliases: visible.clone(),
                     value_name: value_ty
                         .map(|_| value_name.clone().unwrap_or_else(|| "VALUE".to_owned())),
                     choices_ty: value_ty.and_then(|ty| choices_name(stated.as_ref(), ty)),
@@ -1375,11 +1385,14 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
         };
-        if !longs.is_empty() {
-            let pattern = byte_patterns(&longs);
+        let mut names = Vec::with_capacity(longs.len() + visible.len());
+        names.extend(longs.iter().cloned());
+        names.extend(visible.iter().cloned());
+        if !names.is_empty() {
+            let pattern = byte_patterns(&names);
             long_arms.push(quote!(#pattern => { #body }));
             if !two_dashes {
-                single_dash.extend(longs.iter().cloned());
+                single_dash.extend(names);
             }
         }
         if let Some(c) = short {
@@ -1481,12 +1494,14 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     })
 }
 
-/// An `Occurrence` variant's row in help: a flag by `short` and `longs`, or
-/// the positional when it has neither.
+/// An `Occurrence` variant's row in help: a flag by `short`, `longs` and the
+/// shown `visible` names, or the positional when it has neither.
+#[allow(clippy::too_many_arguments)]
 fn occurrence_item(
     variant: &syn::Variant,
     short: Option<char>,
     longs: &[String],
+    visible: &[String],
     value_name: Option<&str>,
     value: Option<&Type>,
     require_equals: bool,
@@ -1511,6 +1526,7 @@ fn occurrence_item(
         short: #short,
         long: #long,
         aliases: &[#(#aliases),*],
+        visible_aliases: &[#(#visible),*],
         negate: ::core::option::Option::None,
         value_name: #value_name,
         help: #help,
@@ -1772,6 +1788,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
             .skip(1)
             .map(|name| (*name).to_owned())
             .collect(),
+        visible_aliases: field.visible_aliases.clone(),
         negate: field.negate.clone(),
         value_name: if field.is_positional() {
             Some(field.display())
@@ -2450,6 +2467,8 @@ struct Field {
     keywords: bool,
     /// More letters it answers to, from a second `short` (`kill -l`/`-L`).
     short_aliases: Vec<char>,
+    /// More long names, listed in help. `alias` stays hidden.
+    visible_aliases: Vec<String>,
     /// A short letter that always takes the rest of its word (`-lfoo`), so
     /// under `long_only` no long name starting with it is tried with one dash.
     prefix: bool,
@@ -2461,6 +2480,7 @@ impl Field {
         let short = opt_char(self.short());
         let long = opt_str(self.longs().first().copied());
         let aliases = self.longs().into_iter().skip(1);
+        let visible_aliases = self.visible_aliases.iter();
         let negate = opt_str(self.negate.as_deref());
         let require_equals = self.require_equals;
         let global = self.is_global();
@@ -2522,6 +2542,7 @@ impl Field {
                 short: #short,
                 long: #long,
                 aliases: &[#(#aliases),*],
+                visible_aliases: &[#(#visible_aliases),*],
                 negate: #negate,
                 value_name: #value_name,
                 help: #help,
@@ -2885,9 +2906,16 @@ impl Field {
         }
     }
 
+    /// The name, its hidden aliases and its shown ones.
+    fn every_long(&self) -> Vec<&str> {
+        let mut names = self.longs();
+        names.extend(self.visible_aliases.iter().map(String::as_str));
+        names
+    }
+
     /// The pattern matching any long spelling, if there is one.
     fn long_pattern(&self) -> Option<TokenStream2> {
-        let longs = self.longs();
+        let longs = self.every_long();
         (!longs.is_empty()).then(|| byte_patterns(&longs))
     }
 
@@ -3812,7 +3840,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     // `-h`/`--help` and `-V`/`--version`, unless declared or disabled: arms after
     // the struct's own, so a CLI naming its own `--help` keeps it.
-    let declares_long = |name: &str| fields.iter().any(|f| f.longs().contains(&name));
+    let declares_long = |name: &str| fields.iter().any(|f| f.every_long().contains(&name));
     let declares_short = |c: char| fields.iter().any(|f| f.shorts().contains(&c));
     let help = quote!(<Self as ::winnow_args::Args>::HELP);
     let help_long = (!disable_help_flag && !declares_long("help")).then(
@@ -4899,7 +4927,7 @@ impl Rules {
                 .iter()
                 .position(
                     |f| match (selector.strip_prefix("--"), selector.strip_prefix('-')) {
-                        (Some(long), _) => f.longs().contains(&long),
+                        (Some(long), _) => f.every_long().contains(&long),
                         (None, Some(short)) => {
                             let mut chars = short.chars();
                             chars
@@ -5616,6 +5644,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut plus: Option<char> = None;
     let mut keywords = false;
     let mut short_aliases = Vec::new();
+    let mut visible = Vec::new();
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs);
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
@@ -5682,6 +5711,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 global = true;
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("visible_alias") {
+                visible.extend(aliases(&meta)?);
             } else if meta.path.is_ident("help") {
                 help = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("long_help") {
@@ -5866,7 +5897,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 value_name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else {
                 return Err(meta.error(
-                    "unknown `arg` option; expected one of `short`, `long`, `alias`, `global`, `count`, \
+                    "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
@@ -5984,7 +6015,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             "a switch's `default_if` value is `true` or `false`, not `{value}`"
         ));
     }
-    if two_dashes && (long.is_none() && alias.is_empty() || positional || subcommand) {
+    if two_dashes
+        && (long.is_none() && alias.is_empty() && visible.is_empty() || positional || subcommand)
+    {
         return error("`two_dashes` is for flags with a long name".into());
     }
     if prefix
@@ -5999,7 +6032,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         (!positional && !subcommand && !matches!(kind, Kind::Switch | Kind::Count(_)))
             .then(|| value_name.clone().unwrap_or_else(|| bare.to_uppercase()));
     let role = if subcommand {
-        if positional || count || global || short.is_some() || long.is_some() || !alias.is_empty() {
+        if positional
+            || count
+            || global
+            || short.is_some()
+            || long.is_some()
+            || !alias.is_empty()
+            || !visible.is_empty()
+        {
             return error("a subcommand field takes no other `arg` options".into());
         }
         if !matches!(kind, Kind::Optional(_) | Kind::Required(_)) {
@@ -6007,8 +6047,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         }
         Role::Subcommand
     } else if positional {
-        if short.is_some() || long.is_some() || global || !alias.is_empty() {
-            return error("a positional field has no `short`, `long`, `alias` or `global`".into());
+        if short.is_some() || long.is_some() || global || !alias.is_empty() || !visible.is_empty() {
+            return error(
+                "a positional field has no `short`, `long`, `alias`, `visible_alias` or `global`"
+                    .into(),
+            );
         }
         if matches!(kind, Kind::Switch | Kind::Count(_)) {
             return error("a positional field cannot be `bool` or `count`".into());
@@ -6023,10 +6066,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         if short.is_none() && long.is_none() && plus.is_none() {
             long = Some(bare.replace('_', "-"));
         }
-        for l in long.iter().chain(&alias) {
+        let mut seen_longs = Vec::new();
+        for l in long.iter().chain(&alias).chain(&visible) {
             if l.is_empty() || l.starts_with('-') || l.contains('=') {
                 return error(format!("`{l}` is not a usable long name"));
             }
+            if seen_longs.contains(&l.as_str()) {
+                return error(format!("`{l}` is already a name of this field"));
+            }
+            seen_longs.push(l);
         }
         if let Some(c) = short
             && (c == '-' || c == '=')
@@ -6139,6 +6187,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         tristate,
         keywords,
         short_aliases,
+        visible_aliases: visible,
     })
 }
 
@@ -6179,7 +6228,7 @@ fn value_count(count: &syn::Expr) -> syn::Result<(usize, Option<usize>)> {
 
 /// Every long spelling of `f`, its negation included.
 fn spellings(f: &Field) -> Vec<&str> {
-    let mut longs = f.longs();
+    let mut longs = f.every_long();
     longs.extend(f.negate.as_deref());
     longs
 }

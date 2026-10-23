@@ -431,3 +431,26 @@ fn a_value_is_what_its_hint_or_its_function_says() {
         }
     }
 }
+
+#[derive(Args, Debug)]
+struct Aliased {
+    /// Resume a session.
+    #[arg(long, visible_alias = "session", alias = "old")]
+    resume: Option<When>,
+}
+
+#[test]
+fn completion_offers_a_visible_alias_and_its_values() {
+    let names = |words: &[&str]| -> Vec<String> {
+        complete(Aliased::HELP, words)
+            .candidates
+            .into_iter()
+            .map(|c| c.value)
+            .collect()
+    };
+    let offered = names(&["--"]);
+    assert!(offered.contains(&"--resume".to_owned()), "{offered:?}");
+    assert!(offered.contains(&"--session".to_owned()), "{offered:?}");
+    assert!(!offered.contains(&"--old".to_owned()), "{offered:?}");
+    assert_eq!(names(&["--session", ""]), ["auto", "always", "never"]);
+}

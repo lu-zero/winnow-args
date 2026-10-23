@@ -89,6 +89,8 @@ pub(crate) struct ItemDoc {
     pub plus: Option<char>,
     pub long: Option<String>,
     pub aliases: Vec<String>,
+    /// Long names help lists after `long`.
+    pub visible_aliases: Vec<String>,
     pub negate: Option<String>,
     pub value_name: Option<String>,
     pub help: String,
@@ -219,6 +221,7 @@ fn item_toml(item: &ItemDoc) -> String {
     opt_char(&mut out, "plus", item.plus);
     opt(&mut out, "long", &item.long);
     strings(&mut out, "aliases", &item.aliases);
+    strings(&mut out, "visible_aliases", &item.visible_aliases);
     opt(&mut out, "negate", &item.negate);
     opt(&mut out, "value_name", &item.value_name);
     field(&mut out, "help", &item.help);

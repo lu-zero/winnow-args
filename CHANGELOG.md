@@ -6,6 +6,9 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `visible_alias` on an `Args` flag or an `Occurrence` variant:
+  another long name, listed in help, suggestions and completion. `alias` and
+  a second `long` stay hidden.
 - **Added**: `conflicts` and `requires` take `message = "…"` after their
   names, and `group` takes it among its options: the program's own words in
   place of the default error, `{0}` and `{1}` the two names. The error's kind

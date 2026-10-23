@@ -167,3 +167,20 @@ fn short_aliases_are_letters_too() {
     assert_eq!(k.args, ["9"]);
     assert_eq!(parse(&["-LX"]).args, ["-LX"]);
 }
+
+#[derive(Args, Debug)]
+struct Shown {
+    #[arg(long, visible_alias = "session", alias = "old")]
+    resume: Option<String>,
+}
+
+#[test]
+fn a_visible_alias_parses_like_the_long_name() {
+    let parse = |line: &[&str]| {
+        let words = crate::words(line);
+        Shown::parse_words(&words).unwrap()
+    };
+    for line in [&["--session", "a"][..], &["--old", "a"], &["--resume=a"]] {
+        assert_eq!(parse(line).resume.as_deref(), Some("a"), "{line:?}");
+    }
+}

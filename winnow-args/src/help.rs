@@ -130,6 +130,8 @@ pub struct Item {
     pub long: Option<&'static str>,
     /// Other long names it answers to, not shown.
     pub aliases: &'static [&'static str],
+    /// Other long names it answers to, shown after the long name.
+    pub visible_aliases: &'static [&'static str],
     /// `--no-name`, the spelling that sets it false.
     pub negate: Option<&'static str>,
     /// The value's placeholder; `None` for a switch.
@@ -187,6 +189,7 @@ impl Item {
         short: None,
         long: None,
         aliases: &[],
+        visible_aliases: &[],
         negate: None,
         value_name: None,
         help: "",
@@ -261,6 +264,13 @@ pub const fn items_clash(parts: &[&[Item]]) -> bool {
             }
             i += 1;
         }
+        i = 0;
+        while i < item.visible_aliases.len() {
+            if same(Some(item.visible_aliases[i]), name) {
+                return true;
+            }
+            i += 1;
+        }
         false
     }
     const fn clash(a: &Item, b: &Item) -> bool {
@@ -283,6 +293,13 @@ pub const fn items_clash(parts: &[&[Item]]) -> bool {
         let mut i = 0;
         while i < a.aliases.len() {
             if has_long(b, Some(a.aliases[i])) {
+                return true;
+            }
+            i += 1;
+        }
+        i = 0;
+        while i < a.visible_aliases.len() {
+            if has_long(b, Some(a.visible_aliases[i])) {
                 return true;
             }
             i += 1;
@@ -1106,7 +1123,10 @@ fn flag_word<'a>(word: &str, mut items: impl Iterator<Item = &'a Item> + Clone) 
             .split_once('=')
             .map_or((long, false), |(n, _)| (n, true));
         let item = items.find(|i| {
-            i.long == Some(name) || i.aliases.contains(&name) || i.negate == Some(name)
+            i.long == Some(name)
+                || i.aliases.contains(&name)
+                || i.visible_aliases.contains(&name)
+                || i.negate == Some(name)
         })?;
         return Some(if attached || item.negate == Some(name) {
             0
@@ -1194,6 +1214,7 @@ fn flag_spec(item: &Item, style: Style) -> Cell {
         spec.push(Ink::NONE, "    ");
     }
     names.extend(item.long.map(|l| format!("--{l}")));
+    names.extend(item.visible_aliases.iter().map(|name| format!("--{name}")));
     for (i, name) in names.iter().enumerate() {
         if i > 0 {
             spec.push(Ink::NONE, ", ");
