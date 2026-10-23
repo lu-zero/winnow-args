@@ -27,6 +27,12 @@ pub struct Command {
     pub after_help: &'static str,
     /// Text after the lists, for `--help`.
     pub after_long_help: &'static str,
+    /// Text before the description, for `-h`.
+    pub before_help: &'static str,
+    /// Text before the description, for `--help`.
+    pub before_long_help: &'static str,
+    /// The usage lines, as written, in place of the ones help makes.
+    pub usage: &'static str,
     /// Flags and positionals, in declaration order.
     pub items: &'static [Item],
     /// Subcommands, in declaration order.
@@ -39,6 +45,8 @@ pub struct Command {
     pub help_short: bool,
     /// The version, when `-V`/`--version` are supplied.
     pub version: Option<&'static str>,
+    /// What `--version` prints in place of the version.
+    pub long_version: Option<&'static str>,
     /// The subcommand a line that names none runs: marked `(default)` in
     /// the list.
     pub default_subcommand: Option<&'static str>,
@@ -66,12 +74,16 @@ impl Command {
         long_about: "",
         after_help: "",
         after_long_help: "",
+        before_help: "",
+        before_long_help: "",
+        usage: "",
         items: &[],
         subcommands: &[],
         subcommand_required: false,
         help_flag: false,
         help_short: false,
         version: None,
+        long_version: None,
         default_subcommand: None,
         default_subcommand_flags: false,
         default_subcommand_help: false,
@@ -726,6 +738,14 @@ fn page(
     described: bool,
 ) {
     let Layout { long, width, style } = layout;
+    let before = if long && !command.before_long_help.is_empty() {
+        command.before_long_help
+    } else {
+        command.before_help
+    };
+    if described && !before.is_empty() {
+        let _ = writeln!(out, "{}\n", wrap_text(before, width));
+    }
     let about = if long && !command.long_about.is_empty() {
         command.long_about
     } else {
@@ -740,13 +760,13 @@ fn page(
     push_painted(out, style.header(), "Usage:");
     let mut lines = Vec::new();
     if !flat || !command.subcommand_required {
-        lines.push(usage(command, path, style));
+        lines.extend(usage_lines(command, path, style));
     }
     if flat {
-        lines.extend(visible_subs.iter().map(|sub| {
+        lines.extend(visible_subs.iter().flat_map(|sub| {
             let mut path = path.to_vec();
             path.push(sub.name);
-            usage(sub.command, &path, style)
+            usage_lines(sub.command, &path, style)
         }));
     }
     for (n, line) in lines.iter().enumerate() {
@@ -1157,6 +1177,15 @@ fn flag_word<'a>(word: &str, mut items: impl Iterator<Item = &'a Item> + Clone) 
 }
 
 /// `prog [OPTIONS] <A> [B]... [COMMAND]`.
+/// The command's own `usage` lines, or the one [`usage`] makes.
+fn usage_lines(command: &Command, path: &[&str], style: Style) -> Vec<String> {
+    if command.usage.is_empty() {
+        vec![usage(command, path, style)]
+    } else {
+        command.usage.lines().map(str::to_owned).collect()
+    }
+}
+
 pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {
     let mut line = Style::paint(style.program(), &path.join(" "));
     let mut cell = Cell::default();

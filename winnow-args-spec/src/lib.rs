@@ -48,6 +48,12 @@ pub struct Command {
     pub after_help: String,
     /// Longer text after the lists.
     pub after_long_help: String,
+    /// Text before the description.
+    pub before_help: String,
+    /// Longer text before the description.
+    pub before_long_help: String,
+    /// Usage lines, as written, in place of the made one. Empty when none.
+    pub usage: String,
     /// Flags and positionals, in the stitched order.
     pub items: Vec<Item>,
     /// Subcommands, in the stitched order.
@@ -308,6 +314,9 @@ struct ArgsFrag {
     long_about: String,
     after_help: String,
     after_long_help: String,
+    before_help: String,
+    before_long_help: String,
+    usage: String,
     items: Vec<ItemDraft>,
     flatten: Vec<String>,
     sequence: Option<String>,
@@ -591,8 +600,11 @@ fn whole_name(krate: &str, entry: &Entry) -> String {
 }
 
 impl Command {
-    /// `prog [OPTIONS] <FILE> [COMMAND]`.
+    /// `prog [OPTIONS] <FILE> [COMMAND]`, or the command's own usage lines.
     pub fn usage(&self, path: &[String]) -> String {
+        if !self.usage.is_empty() {
+            return self.usage.clone();
+        }
         let mut line = path.join(" ");
         if self.items.iter().any(|item| !item.positional && !item.hide) || self.help_flag {
             line.push_str(" [OPTIONS]");
@@ -655,6 +667,15 @@ impl Command {
             &self.about
         } else {
             &self.long_about
+        }
+    }
+
+    /// Text before the description on a long page: the long text, or the short one.
+    pub fn before(&self) -> &str {
+        if self.before_long_help.is_empty() {
+            &self.before_help
+        } else {
+            &self.before_long_help
         }
     }
 
@@ -986,6 +1007,9 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
         long_about: opt_str(table, "long_about")?,
         after_help: opt_str(table, "after_help")?,
         after_long_help: opt_str(table, "after_long_help")?,
+        before_help: opt_str(table, "before_help")?,
+        before_long_help: opt_str(table, "before_long_help")?,
+        usage: opt_str(table, "usage")?,
         items: parse_items(table)?,
         flatten: strings(table, "flatten")?,
         sequence: opt_present(table, "sequence")?,
@@ -1279,6 +1303,9 @@ impl Catalog {
             long_about: args.long_about.clone(),
             after_help: args.after_help.clone(),
             after_long_help: args.after_long_help.clone(),
+            before_help: args.before_help.clone(),
+            before_long_help: args.before_long_help.clone(),
+            usage: args.usage.clone(),
             items,
             subcommands,
             subcommand_required: args.subcommand_required,

@@ -117,4 +117,11 @@ struct ExampleMisspelled {
     verbose: bool,
 }
 
+#[derive(Args)]
+#[arg(long_version = "1.2 (abc123)")]
+struct LongVersionAlone {
+    #[arg(long)]
+    verbose: bool,
+}
+
 fn main() {}

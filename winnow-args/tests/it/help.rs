@@ -177,6 +177,48 @@ fn a_visible_long_alias_is_listed_and_a_hidden_one_is_not() {
 }
 
 #[test]
+fn before_help_usage_and_long_version() {
+    /// Sync the tree.
+    #[derive(Args, Debug)]
+    #[arg(
+        name = "tool",
+        version = "1.2",
+        long_version = "1.2 (abc123, 2026-10-23)",
+        before_help = "Short banner.",
+        before_long_help = "Long banner.",
+        usage = "tool [OPTIONS] <SRC>... <DST>\ntool --list"
+    )]
+    struct Tool {
+        #[arg(long)]
+        list: bool,
+    }
+    let page = |line: &[&str]| {
+        parse::<Tool>(line)
+            .unwrap_err()
+            .render_help("tool")
+            .unwrap()
+    };
+    let short = page(&["-h"]);
+    assert!(
+        short.starts_with("Short banner.\n\nSync the tree.\n\n"),
+        "{short}"
+    );
+    assert!(
+        short.contains("Usage: tool [OPTIONS] <SRC>... <DST>\n       tool --list\n"),
+        "{short}"
+    );
+    assert!(page(&["--help"]).starts_with("Long banner.\n\n"));
+    let version = |line: &[&str]| {
+        parse::<Tool>(line)
+            .unwrap_err()
+            .version_text("tool")
+            .unwrap()
+    };
+    assert_eq!(version(&["-V"]), "tool 1.2");
+    assert_eq!(version(&["--version"]), "tool 1.2 (abc123, 2026-10-23)");
+}
+
+#[test]
 fn report_prints_and_chooses_the_exit_status() {
     assert_eq!(report(&parse::<Cli>(&["-h"]).unwrap_err(), "mise"), 0);
     let version = parse::<Cli>(&["-V"]).unwrap_err();

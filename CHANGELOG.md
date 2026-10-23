@@ -6,6 +6,16 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `long_version = "…"` on a struct: what `--version` prints,
+  where `-V` keeps `version`. `Error::long_version` is its request.
+- **Added**: `before_help` and `before_long_help` on a struct: text before
+  the description, in help and the pages.
+- **Added**: `usage = "…"` on a struct: the usage lines as written, in help
+  and the pages, in place of the ones made from the fields.
+- **Changed**: `help::Command` has four more fields (`before_help`,
+  `before_long_help`, `usage`, `long_version`) and `winnow_args_spec::Command`
+  three. A value written by hand that ends in `..Command::EMPTY` or
+  `..Command::default()` is unaffected.
 - **Added**: a bare `env` on a field reads the variable of the field's name
   in capitals: `jobs` reads `JOBS`.
 - **Added**: `default` repeated on a `Vec`, one value each, in order. Help

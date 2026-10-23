@@ -117,6 +117,8 @@ mod spec;
 ///   means `argv[0]`. A completion script needs the name set.
 /// - `version`, or `version = "…"`: add `-V` and `--version`. With no string,
 ///   the text is the crate's `CARGO_PKG_VERSION`.
+/// - `long_version = "…"`: what `--version` prints after the program name;
+///   `-V` keeps `version`. It needs `version`.
 /// - `about`: the description on `-h`. It defaults to the doc comment's first
 ///   paragraph.
 /// - `long_about`: the description on `--help`. It defaults to the whole doc
@@ -124,6 +126,10 @@ mod spec;
 /// - `after_help`: text after the lists, on `-h`.
 /// - `after_long_help`: that text on `--help`. `--help` shows `after_help`
 ///   when this is empty.
+/// - `before_help`, `before_long_help`: text before the description, as
+///   `after_help` and `after_long_help` are after the lists.
+/// - `usage = "…"`: the usage lines, as written, in place of the ones help
+///   makes. The program name is written in them; the pages show them too.
 /// - `disable_help_flag`, `disable_version_flag`, `disable_help_subcommand`:
 ///   leave that item out. `disable_help_short` keeps `--help` and leaves `-h` out.
 /// - `arg_required_else_help`: an empty command line asks for help.
@@ -2997,6 +3003,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         long_about,
         after_help,
         after_long_help,
+        before_help,
+        before_long_help,
+        usage,
+        long_version,
         disable_help_flag,
         disable_help_short,
         disable_version_flag,
@@ -3099,6 +3109,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let (after_text, after_long_text) = (after_help, after_long_help);
     let (about, long_about) = (text(&about_text), text(&long_about_text));
     let (after_help, after_long_help) = (text(&after_text), text(&after_long_text));
+    let (before_text, before_long_text) = (before_help, before_long_help);
+    let (before_help, before_long_help) = (text(&before_text), text(&before_long_text));
+    let usage_text = usage;
+    let usage = LitStr::new(&usage_text, Span::call_site());
     let rules = Rules::new(&fields, &groups)?;
     // The program's own check of the built struct.
     let validate = validate.map(|path| quote!(#path(&__built)?;));
@@ -3861,9 +3875,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let help_short = (!disable_help_flag && !disable_help_short && !declares_short('h')).then(
         || quote!('h' => return ::core::result::Result::Err(__wa::Error::help(#help, false)),),
     );
+    if long_version.is_some() && version.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`long_version` needs `version`",
+        ));
+    }
     let with_version = version.is_some() && !disable_version_flag;
     let version_long = (with_version && !declares_long("version")).then(
-        || quote!(b"version" => return ::core::result::Result::Err(__wa::Error::version(#help)),),
+        || quote!(b"version" => return ::core::result::Result::Err(__wa::Error::long_version(#help)),),
     );
     let version_short = (with_version && !declares_short('V'))
         .then(|| quote!('V' => return ::core::result::Result::Err(__wa::Error::version(#help)),));
@@ -3887,7 +3907,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         late_if(
             version_long.is_some(),
             quote!(__flag.name == b"version"),
-            quote!(__wa::Error::version(#help)),
+            quote!(__wa::Error::long_version(#help)),
         ),
     ]
     .into_iter()
@@ -4042,6 +4062,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let help_version = match &version {
+        Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
+        _ => quote!(::core::option::Option::None),
+    };
+    let help_long_version = match &long_version {
         Some(v) if with_version => quote!(::core::option::Option::Some(#v)),
         _ => quote!(::core::option::Option::None),
     };
@@ -4465,6 +4489,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 long_about: long_about_text,
                 after_help: after_text,
                 after_long_help: after_long_text,
+                before_help: before_text,
+                before_long_help: before_long_text,
+                usage: usage_text,
                 package_version: package_version(&version, with_version),
                 items,
                 flatten,
@@ -4503,12 +4530,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 long_about: #long_about,
                 after_help: #after_help,
                 after_long_help: #after_long_help,
+                before_help: #before_help,
+                before_long_help: #before_long_help,
+                usage: #usage,
                 items: #items,
                 subcommands: #help_subcommands,
                 subcommand_required: #subcommand_required,
                 help_flag: #help_flag,
                 help_short: #help_short_flag,
                 version: #help_version,
+                long_version: #help_long_version,
                 default_subcommand: #help_default,
                 default_subcommand_flags: #default_subcommand_flags,
                 default_subcommand_help: #default_subcommand_help,
@@ -4631,6 +4662,12 @@ struct StructOptions {
     long_about: Option<String>,
     after_help: String,
     after_long_help: String,
+    before_help: String,
+    before_long_help: String,
+    /// Usage lines in place of the made one.
+    usage: String,
+    /// What `--version` prints in place of `version`.
+    long_version: Option<String>,
     disable_help_flag: bool,
     /// Help is `--help` alone, `-h` left undeclared (bash's builtins).
     disable_help_short: bool,
@@ -4803,9 +4840,16 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                     return Ok(());
                 }
             }
+            if meta.path.is_ident("long_version") {
+                options.long_version = Some(text(&meta)?);
+                return Ok(());
+            }
             for (key, slot) in [
                 ("after_help", &mut options.after_help),
                 ("after_long_help", &mut options.after_long_help),
+                ("before_help", &mut options.before_help),
+                ("before_long_help", &mut options.before_long_help),
+                ("usage", &mut options.usage),
             ] {
                 if meta.path.is_ident(key) {
                     *slot = text(&meta)?;
@@ -4830,7 +4874,8 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
-                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `example`, \
+                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
+                     `long_version`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));

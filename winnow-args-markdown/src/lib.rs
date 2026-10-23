@@ -26,6 +26,11 @@ pub fn render(page: &Page<'_>) -> String {
     out.push_str("# ");
     out.push_str(&page.path.join(" "));
     out.push_str("\n\n");
+    let before = command.before();
+    if !before.is_empty() {
+        out.push_str(&blocks(before));
+        out.push_str("\n\n");
+    }
     let about = command.prose();
     if !about.is_empty() {
         out.push_str(&blocks(about));
@@ -332,6 +337,28 @@ mod tests {
             package_version: Some("1.2.3".to_owned()),
             ..Command::default()
         }
+    }
+
+    #[test]
+    fn before_help_leads_and_usage_lines_are_the_usage() {
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            before_help: "A banner.".to_owned(),
+            usage: "tool <SRC> <DST>\ntool --list".to_owned(),
+            ..Command::default()
+        };
+        let page = &render_pages(&command, "tool").unwrap()[0];
+        assert!(
+            page.1.starts_with("# tool\n\nA banner.\n\nA tool.\n\n"),
+            "{}",
+            page.1
+        );
+        assert!(
+            page.1.contains("```\ntool <SRC> <DST>\ntool --list\n```"),
+            "{}",
+            page.1
+        );
     }
 
     #[test]

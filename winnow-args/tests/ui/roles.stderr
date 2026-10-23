@@ -81,3 +81,9 @@ error: expected `header` or `help`
     |
 114 | #[arg(example("tool run", title = "Run it"))]
     |                           ^^^^^
+
+error: `long_version` needs `version`
+   --> tests/ui/roles.rs:122:8
+    |
+122 | struct LongVersionAlone {
+    |        ^^^^^^^^^^^^^^^^

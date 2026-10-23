@@ -40,6 +40,10 @@ pub(crate) struct ArgsDoc {
     pub long_about: String,
     pub after_help: String,
     pub after_long_help: String,
+    pub before_help: String,
+    pub before_long_help: String,
+    /// Usage lines in place of the made one.
+    pub usage: String,
     pub package_version: Option<String>,
     pub items: Vec<ItemDoc>,
     pub flatten: Vec<String>,
@@ -173,6 +177,9 @@ fn args_toml(doc: &ArgsDoc) -> String {
     field(&mut out, "long_about", &doc.long_about);
     field(&mut out, "after_help", &doc.after_help);
     field(&mut out, "after_long_help", &doc.after_long_help);
+    field(&mut out, "before_help", &doc.before_help);
+    field(&mut out, "before_long_help", &doc.before_long_help);
+    field(&mut out, "usage", &doc.usage);
     opt(&mut out, "package_version", &doc.package_version);
     strings(&mut out, "flatten", &doc.flatten);
     opt(&mut out, "sequence", &doc.sequence);

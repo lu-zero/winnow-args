@@ -91,7 +91,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 - [x] `-h/--help`, `-V/--version`, `help <cmd…>`, each can be disabled
 - [x] Help from doc comments and `help`, `long_help`, `help_heading`, `hide`,
-      `about`, `long_about`, `after_help`, `after_long_help`; `[possible values]`,
+      `about`, `long_about`, `after_help`, `after_long_help`, `before_help`,
+      `before_long_help`, `usage`, `long_version`; `[possible values]`,
       defaults and env shown
 - [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size`), else 100;
       in terminal columns with `unicode`, else a column a character
@@ -224,8 +225,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `hide_default_value`, `hide_env`, `display_order`
 - [x] A doc comment's paragraph wrapped to the terminal, an indented line
       kept; `verbatim_doc_comment` keeps every line
-- [ ] `long_version`, `usage = "…"`, `before_help`, `note`, a logo,
-      `help <topic>`
+- [ ] `note`, a logo, `help <topic>`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
 

@@ -270,9 +270,14 @@ impl Error {
         Self::request(ErrorKind::HelpRequested, command, false, true)
     }
 
-    /// `-V`/`--version`.
+    /// `-V`, or a `--version` of a command without a `long_version`.
     pub fn version(command: &'static crate::help::Command) -> Self {
         Self::request(ErrorKind::VersionRequested, command, false, false)
+    }
+
+    /// `--version`: the command's `long_version`, else its version.
+    pub fn long_version(command: &'static crate::help::Command) -> Self {
+        Self::request(ErrorKind::VersionRequested, command, true, false)
     }
 
     /// Record that this came from within subcommand `name`, for the usage line
@@ -344,10 +349,15 @@ impl Error {
         self.render_help_styled(program, Style::PLAIN)
     }
 
-    /// `program version` for a [`ErrorKind::VersionRequested`].
+    /// `program version` for a [`ErrorKind::VersionRequested`], the long
+    /// version for a `--version` of a command that has one.
     pub fn version_text(&self, program: &str) -> Option<String> {
         let request = self.detail.as_deref()?.request.as_ref()?;
         let version = request.command.version?;
+        let version = match request.command.long_version {
+            Some(long) if request.long => long,
+            _ => version,
+        };
         (self.kind == ErrorKind::VersionRequested).then(|| format!("{program} {version}"))
     }
 

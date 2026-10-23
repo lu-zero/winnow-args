@@ -95,21 +95,33 @@ impl Manual {
         }
 
         doc.control("SH", ["SYNOPSIS"]);
-        doc.text([roman(command.usage(&page.path))]);
+        for (n, line) in command.usage(&page.path).lines().enumerate() {
+            if n > 0 {
+                doc.control("br", std::iter::empty::<&str>());
+            }
+            doc.text([roman(line)]);
+        }
 
+        let before = command.before();
         let body = command.prose();
         let effect = command
             .effect
             .map(|effect| format!("Effect: {}.", effect.label()));
         let notes = command.notes().into_iter().chain(effect.as_deref());
         let notes: Vec<&str> = notes.collect();
-        if !body.is_empty() || !notes.is_empty() {
+        if !before.is_empty() || !body.is_empty() || !notes.is_empty() {
             doc.control("SH", ["DESCRIPTION"]);
+            if !before.is_empty() {
+                doc.text(prose(before));
+            }
             if !body.is_empty() {
+                if !before.is_empty() {
+                    doc.control("PP", std::iter::empty::<&str>());
+                }
                 doc.text(prose(body));
             }
             for (index, note) in notes.into_iter().enumerate() {
-                if index > 0 || !body.is_empty() {
+                if index > 0 || !body.is_empty() || !before.is_empty() {
                     doc.control("PP", std::iter::empty::<&str>());
                 }
                 doc.text([roman(note)]);
@@ -411,6 +423,26 @@ mod tests {
         let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
         assert!(
             page.contains(".TP\n\\fB\\-\\-file\\fR\nA path.\n.PP\nSee also.\n"),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn before_help_opens_the_description_and_usage_lines_are_the_synopsis() {
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            before_help: "A banner.".to_owned(),
+            usage: "tool <SRC> <DST>\ntool --list".to_owned(),
+            ..Command::default()
+        };
+        let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
+        assert!(
+            page.contains(".SH SYNOPSIS\ntool <SRC> <DST>\n.br\ntool \\-\\-list\n"),
+            "{page}"
+        );
+        assert!(
+            page.contains(".SH DESCRIPTION\nA banner.\n.PP\nA tool.\n"),
             "{page}"
         );
     }
