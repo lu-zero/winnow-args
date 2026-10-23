@@ -6,6 +6,9 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Changed**: smaller generated parsers: a non-ASCII short letter is decoded
+  out of line, and the lexer has no inlined panic paths. mise's binary is
+  5 % smaller, and no slower.
 - **Added**: `bool_value` on a `bool` flag: it also takes `--flag=true` and
   `--flag=false`, attached, and alone is true. Help shows `--flag[=<BOOL>]`
   and its two values. `Arg::switch_value` reads one.

@@ -1390,3 +1390,30 @@ core, cold instructions and warm time:
 Each count is within a hundred of step 57's, in both directions: what was
 added runs after a failure or for a completion callback. These are the
 numbers the READMEs and the graph have.
+
+## 60. Size: the lexer's cold paths
+
+In mise an empty struct's parser was 1 852 bytes and a `bool` flag added
+136: the part inlined into each of the 211 structs is most of the generated
+code. It held two UTF-8 decoders, `letter`'s and `bundle_known`'s, the second
+with the `known` closure inlined twice. Both now call one `#[cold]`
+`decode_letter`. `Argv::front`, `take_word` and the long flag's split use
+`get` in place of indexing, so no panic path is inlined.
+
+`release-lto`, aarch64, warm min ns over three rounds:
+
+| | before | decoder | and `get` |
+|---|---:|---:|---:|
+| `parse-n-mise-wa` stripped | 1 767 536 | 1 692 528 | 1 678 048 |
+| empty struct's parser | 1 852 | 1 428 | 1 388 |
+| `use -g node@20` | 319–321 | 314–316 | 313–318 |
+| `-C /tmp install …` | 430–433 | 409–430 | 410–423 |
+| `ls --json` | 273–275 | 271–278 | 270–274 |
+| `settings set color false` | 291–294 | 278–280 | 266–277 |
+
+usage's mise is 974 824 bytes: 72 % over, was 81 %. Tried and dropped:
+`#[cold]` conversion errors (no change; LLVM already kept them out of line).
+With `panic = "abort"` both shrink alike (80 KB and 61 KB), so unwinding is
+not the gap. What is left: the lexer itself (1.4 KB a struct, step 32), the
+help tables (851 `help::Item`s of about 280 bytes, 238 KB with or without
+`help-text`), and the help prose (150 KB, `help-text`).

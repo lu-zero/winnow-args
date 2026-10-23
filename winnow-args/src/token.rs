@@ -498,21 +498,7 @@ fn letter(input: &mut Argv<'_>) -> char {
     let bytes = input.front();
     let (c, width) = match bytes[0] {
         b if b.is_ascii() => (b as char, 1),
-        b => {
-            let width = match b {
-                0xC2..=0xDF => 2,
-                0xE0..=0xEF => 3,
-                0xF0..=0xF4 => 4,
-                _ => 1,
-            };
-            match bytes.get(..width).and_then(|b| std::str::from_utf8(b).ok()) {
-                Some(s) => (
-                    s.chars().next().unwrap_or(char::REPLACEMENT_CHARACTER),
-                    width,
-                ),
-                None => (char::REPLACEMENT_CHARACTER, 1),
-            }
-        }
+        _ => decode_letter(bytes),
     };
     input.take_bytes(width);
     if input.front().is_empty() {
@@ -522,6 +508,26 @@ fn letter(input: &mut Argv<'_>) -> char {
         input.set_mode(Mode::Bundle);
     }
     c
+}
+
+/// The non-ASCII letter `bytes` starts with, and its width; U+FFFD and one
+/// byte if it is not UTF-8. Out of line: every struct inlines the lexer.
+#[cold]
+#[inline(never)]
+pub(crate) fn decode_letter(bytes: &[u8]) -> (char, usize) {
+    let width = match bytes[0] {
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => 1,
+    };
+    match bytes.get(..width).and_then(|b| std::str::from_utf8(b).ok()) {
+        Some(s) => (
+            s.chars().next().unwrap_or(char::REPLACEMENT_CHARACTER),
+            width,
+        ),
+        None => (char::REPLACEMENT_CHARACTER, 1),
+    }
 }
 
 /// What the next item is, without consuming it.
@@ -596,13 +602,16 @@ pub fn arg<'i>(input: &mut Argv<'i>) -> Result<Arg<'i>, Error> {
             Arg::Separator { offset }
         }
         Kind::Long => {
-            let word = &input.take_word()[2..];
+            let word = input.take_word().get(2..).unwrap_or_default();
             Arg::Long(match word.iter().position(|&b| b == b'=') {
-                Some(eq) => LongFlag {
-                    name: &word[..eq],
-                    value: Some(BStr::new(&word[eq + 1..])),
-                    offset,
-                },
+                Some(eq) => {
+                    let (name, value) = word.split_at(eq);
+                    LongFlag {
+                        name,
+                        value: Some(BStr::new(value.get(1..).unwrap_or_default())),
+                        offset,
+                    }
+                }
                 None => LongFlag {
                     name: word,
                     value: None,

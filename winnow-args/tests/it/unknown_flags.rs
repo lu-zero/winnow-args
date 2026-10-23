@@ -83,6 +83,29 @@ fn a_bundle_is_checked_whole_before_any_letter_binds() {
     assert_eq!(e.kind(), ErrorKind::HelpRequested);
 }
 
+#[derive(Args, Debug, PartialEq)]
+#[arg(unknown_flags = "value")]
+struct Accent {
+    #[arg(short = 'é')]
+    accent: bool,
+    #[arg(short = 'ü')]
+    name: Option<String>,
+    #[arg(positional)]
+    args: Vec<String>,
+}
+
+#[test]
+fn a_bundle_checks_letters_past_ascii() {
+    let a: Accent = parse(&["-éé"]).unwrap();
+    assert_eq!((a.accent, a.args), (true, strings(&[])));
+    let a: Accent = parse(&["-éx"]).unwrap();
+    assert_eq!((a.accent, a.args), (false, strings(&["-éx"])));
+    let a: Accent = parse(&["-éüλ"]).unwrap();
+    assert_eq!((a.accent, a.name), (true, Some("λ".to_owned())));
+    let a: Accent = parse(&["-xé"]).unwrap();
+    assert_eq!(a.args, strings(&["-xé"]));
+}
+
 #[test]
 fn with_nowhere_to_go_it_is_an_unexpected_argument() {
     let e = parse::<One>(&["a", "--wat"]).unwrap_err();

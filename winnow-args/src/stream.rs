@@ -146,10 +146,12 @@ impl<'i> Argv<'i> {
     }
 
     /// The unread part of the current word; empty at the end.
+    // `get`, not indexing: `skip` stays in the word, and a panic path would be
+    // inlined into every struct's parser.
     #[inline(always)]
     pub fn front(&self) -> &'i [u8] {
         match self.words.first() {
-            Some(word) => &word[self.skip as usize..],
+            Some(word) => word.get(self.skip as usize..).unwrap_or_default(),
             None => &[],
         }
     }
@@ -167,7 +169,7 @@ impl<'i> Argv<'i> {
     pub(crate) fn take_word(&mut self) -> &'i BStr {
         let rest = self.front();
         self.remaining -= rest.len() as u32 + 1;
-        self.words = &self.words[1..];
+        self.words = self.words.get(1..).unwrap_or_default();
         self.skip = 0;
         if self.mode == Mode::Bundle {
             self.mode = Mode::Word;

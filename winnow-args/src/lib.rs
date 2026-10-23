@@ -774,22 +774,16 @@ pub mod __private {
         let Some(mut rest) = token.strip_prefix(b"-") else {
             return false;
         };
-        // Letters are ASCII in practice: decode only from the first byte that is not.
-        while let Some((&byte, tail)) = rest.split_first() {
-            if !byte.is_ascii() {
-                let Ok(letters) = core::str::from_utf8(rest) else {
-                    return false;
-                };
-                return letters.chars().try_for_each(|letter| match known(letter) {
-                    None => Err(false),
-                    Some(true) => Err(true),
-                    Some(false) => Ok(()),
-                }) != Err(false);
-            }
-            match known(byte as char) {
+        // Letters are ASCII in practice: the decoder is out of line.
+        while let Some(&byte) = rest.first() {
+            let (letter, width) = match byte {
+                b if b.is_ascii() => (b as char, 1),
+                _ => crate::token::decode_letter(rest),
+            };
+            match known(letter) {
                 None => return false,
                 Some(true) => return true,
-                Some(false) => rest = tail,
+                Some(false) => rest = &rest[width..],
             }
         }
         true
