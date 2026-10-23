@@ -321,6 +321,10 @@ mod spec;
 /// - `help = "…"`: replaces the first paragraph of the doc comment, and the
 ///   whole text when `long_help` is absent.
 /// - `long_help = "…"`: replaces the whole text.
+/// - `verbatim_doc_comment`: the doc comment's lines are kept as written.
+///   Otherwise the lines of a paragraph are joined, for help to wrap to the
+///   terminal; an indented line is kept. A struct, a `Subcommand` enum and a
+///   variant take it too.
 /// - `help_heading = "…"`: list the field under this heading. Fields with none
 ///   are listed under "Options", or under the struct's `next_help_heading`.
 /// - `warning = "…"`: `--help` shows it as `Warning: …`.
@@ -1138,11 +1142,11 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     prefix = true;
                 } else if meta.path.is_ident("value_name") {
                     value_name = Some(meta.value()?.parse::<LitStr>()?.value());
-                } else if skip_spec(&meta)? {
+                } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
                 } else {
                     return Err(meta.error(
                         "expected `short`, `long`, `alias`, `positional`, `two_dashes`, `prefix`, \
-                         `value_name`, `allow_hyphen_values`, `allow_negative_numbers`, \
+                         `value_name`, `verbatim_doc_comment`, `allow_hyphen_values`, `allow_negative_numbers`, \
                          `require_equals`, `keep_equals`, `default_missing`, `skip`, `unknown` or `bundle`",
                     ));
                 }
@@ -1932,7 +1936,7 @@ fn rename_all(input: &DeriveInput, runs: Option<&mut Option<Runs>>) -> syn::Resu
     let may_run = runs.is_some();
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
-            if skip_spec(&meta)? {
+            if skip_spec(&meta)? || (may_run && meta.path.is_ident("verbatim_doc_comment")) {
                 return Ok(());
             }
             let run = match () {
@@ -1999,6 +2003,7 @@ fn variant_names<'a>(
             } else if meta.path.is_ident("long_help") {
                 // The listing shows one line; the subcommand's own help has the rest.
                 meta.value()?.parse::<LitStr>()?;
+            } else if meta.path.is_ident("verbatim_doc_comment") && !holds_type {
             } else if skip_spec(&meta)? {
                 if !holds_type {
                     return Err(meta
@@ -2056,8 +2061,10 @@ fn variant_names<'a>(
 
 /// A doc comment as help: its first paragraph, and the whole of it. Each
 /// paragraph is one line, so help wraps it to the terminal rather than to the
-/// source; an indented line is kept as written.
+/// source; an indented line is kept as written, and every line is with
+/// `verbatim_doc_comment`.
 fn docs(attrs: &[syn::Attribute]) -> (String, String) {
+    let verbatim = has_option(attrs, "verbatim_doc_comment");
     let lines = attrs
         .iter()
         .filter(|a| a.path().is_ident("doc"))
@@ -2080,7 +2087,7 @@ fn docs(attrs: &[syn::Attribute]) -> (String, String) {
     let mut long = String::new();
     let mut joins = false;
     for line in lines {
-        let kept = line.starts_with([' ', '\t']);
+        let kept = verbatim || line.starts_with([' ', '\t']);
         if joins && !kept && !line.is_empty() {
             long.push(' ');
         } else if !long.is_empty() {
@@ -2192,7 +2199,12 @@ fn is_skipped(f: &syn::Field) -> bool {
 
 /// Whether one of the field's attributes is the bare word `name`.
 fn has_flag(f: &syn::Field, name: &str) -> bool {
-    f.attrs.iter().filter(|a| is_ours(a)).any(|a| {
+    has_option(&f.attrs, name)
+}
+
+/// Whether one of `attrs` is `#[arg(name)]`, among other options.
+fn has_option(attrs: &[syn::Attribute], name: &str) -> bool {
+    attrs.iter().filter(|a| is_ours(a)).any(|a| {
         let mut found = false;
         let _ = a.parse_nested_meta(|meta| {
             if meta.path.is_ident(name) {
@@ -4572,6 +4584,9 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.flatten_help = true;
                 return Ok(());
             }
+            if meta.path.is_ident("verbatim_doc_comment") {
+                return Ok(());
+            }
             if meta.path.is_ident("next_help_heading") {
                 options.next_help_heading = Some(meta.value()?.parse::<LitStr>()?.value());
                 return Ok(());
@@ -4724,7 +4739,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
-                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `after_help`, `after_long_help`, `example`, \
+                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));
@@ -5624,7 +5639,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 });
             } else if meta.path.is_ident("keywords") {
                 keywords = true;
-            } else if skip_spec(&meta)? {
+            } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
             } else if meta.path.is_ident("plus") {
                 plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {
@@ -5784,7 +5799,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `two_dashes`, `prefix`, `values`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `requires_if`, `exclusive`, \
-                     `group`, `help`, `long_help`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
                 ));
             }
             Ok(())

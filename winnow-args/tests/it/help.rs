@@ -279,6 +279,34 @@ fn a_doc_comment_paragraph_fills_the_width_its_source_did_not() {
     );
 }
 
+/// Pick a mode
+///
+/// mode | meaning
+/// fast | skips checks
+#[derive(Args, Debug)]
+#[arg(name = "pick", verbatim_doc_comment)]
+struct Verbatim {
+    /// One of:
+    /// fast
+    /// safe
+    #[arg(long, verbatim_doc_comment)]
+    mode: Option<String>,
+}
+
+#[test]
+fn a_verbatim_doc_comment_keeps_its_lines() {
+    let e = parse::<Verbatim>(&["--help"]).unwrap_err();
+    let text = with_env(&[("COLUMNS", "120")], || e.render_help("pick").unwrap());
+    assert!(
+        text.starts_with("Pick a mode\n\nmode | meaning\nfast | skips checks\n\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("          One of:\n          fast\n          safe\n"),
+        "{text}"
+    );
+}
+
 /// `text` without its SGR escapes.
 fn strip(text: &str) -> String {
     let mut out = String::new();

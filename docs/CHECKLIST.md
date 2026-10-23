@@ -220,8 +220,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `flatten_help`, `warning`
 - [x] `effect`, output formats and exit codes in the man and markdown pages
 - [x] `hide_default_value`, `hide_env`, `display_order`
-- [ ] `long_version`, `usage = "…"`, `before_help`,
-      `verbatim_doc_comment`, `note`, a logo, `help <topic>`
+- [x] A doc comment's paragraph wrapped to the terminal, an indented line
+      kept; `verbatim_doc_comment` keeps every line
+- [ ] `long_version`, `usage = "…"`, `before_help`, `note`, a logo,
+      `help <topic>`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
 - [ ] Help width counts characters, not terminal columns

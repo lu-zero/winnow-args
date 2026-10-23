@@ -6,6 +6,8 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `verbatim_doc_comment` keeps a doc comment's lines as written,
+  on a field, a struct, a `Subcommand` enum or a variant.
 - **Changed**: every required flag and positional left without a value is
   reported at once, under "the following required arguments were not
   provided", each as `--help` lists it: its spellings, value, description
