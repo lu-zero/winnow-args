@@ -57,6 +57,50 @@ pub trait FromArg: Sized {
     /// it with each visible variant's name.
     const CHOICES: &'static [&'static str] = &[];
 
+    /// Whether [`FromArg::choice_help`] says something of its own: help then
+    /// asks it. `#[derive(ValueEnum)]` sets it when a visible variant has a
+    /// doc comment or `help`.
+    const DESCRIBES_CHOICES: bool = false;
+
+    /// What the choice at `index` of a field's choices means, for the long
+    /// help, which lists them one a line; `""` says nothing.
+    ///
+    /// `default` is the text written for it in the source: the field's
+    /// `choices("fast" = "…")`, or the variant's doc comment. It is what the
+    /// man and Markdown pages show, as they are written from the source when
+    /// the code is checked, for any target. The program asks this when it
+    /// renders help, so an implementation by hand can answer from what only
+    /// the running program has, such as the docs another crate's enum keeps
+    /// through `strum`, and fall back to `default`. The default answer is
+    /// `default`.
+    ///
+    /// ```
+    /// use winnow_args::{BStr, FromArg, error::BoxError};
+    ///
+    /// struct Level(u8);
+    ///
+    /// impl FromArg for Level {
+    ///     const CHOICES: &'static [&'static str] = &["low", "high"];
+    ///     const DESCRIBES_CHOICES: bool = true;
+    ///
+    ///     fn choice_help(index: usize, default: &'static str) -> &'static str {
+    ///         match index {
+    ///             1 if cfg!(unix) => "as loud as the terminal allows",
+    ///             _ => default,
+    ///         }
+    ///     }
+    ///
+    ///     fn from_arg(value: &BStr) -> Result<Self, BoxError> {
+    ///         Ok(Level(u8::from(&**value == b"high")))
+    ///     }
+    /// }
+    /// # let _ = Level(0).0;
+    /// ```
+    fn choice_help(index: usize, default: &'static str) -> &'static str {
+        let _ = index;
+        default
+    }
+
     /// The name `#[derive(ValueEnum)]` files its choices under when the
     /// documentation is built. Empty for an implementation written by hand.
     #[doc(hidden)]

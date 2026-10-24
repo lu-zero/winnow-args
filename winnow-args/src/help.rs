@@ -68,6 +68,8 @@ pub struct Command {
     /// Whether a word that names no subcommand, where nothing else takes
     /// it, is an external one, with the rest of the line its own.
     pub external_subcommands: bool,
+    /// Whether `--help` prints the short page, as `-h` does.
+    pub brief_help: bool,
 }
 
 impl Command {
@@ -98,6 +100,7 @@ impl Command {
         headings: &[],
         multicall: false,
         external_subcommands: false,
+        brief_help: false,
     };
 
     /// The subcommand a line that names none runs.
@@ -181,6 +184,16 @@ pub struct Item {
     pub env: Option<&'static str>,
     /// The only values accepted.
     pub choices: &'static [&'static str],
+    /// What the choice at an index of `choices` means, `""` when nothing
+    /// is said: [`FromArg::choice_help`](crate::FromArg::choice_help) given
+    /// the text the field or the type wrote. `None` when neither says
+    /// anything, so an item costs a function pointer and its relocation only
+    /// when it has something to say. The long help lists the choices one a
+    /// line when one of them says something.
+    pub choice_help: Option<fn(usize) -> &'static str>,
+    /// The choices are left out of help and the pages, though still
+    /// accepted and completed.
+    pub hide_choices: bool,
     /// The value is only taken attached (`--name=value`), never the next word.
     pub require_equals: bool,
     /// Also accepted by every subcommand below.
@@ -227,6 +240,8 @@ impl Item {
         default: None,
         env: None,
         choices: &[],
+        choice_help: None,
+        hide_choices: false,
         require_equals: false,
         global: false,
         more_shorts: &[],
@@ -874,7 +889,7 @@ fn page(
                     cell.push(style.flag(), "--help");
                     cell
                 };
-                let what = if command.help_short {
+                let what = if command.help_short && !command.brief_help {
                     what
                 } else {
                     "Print help".to_owned()
@@ -1319,18 +1334,35 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
         let default = Style::paint(style.default(), default);
         add(format!("{}{default}{}", label("[default: "), close()));
     }
-    if !item.choices.is_empty() {
-        let choices: Vec<String> = item
-            .choices
-            .iter()
-            .map(|c| Style::paint(style.choice(), c))
-            .collect();
-        add(format!(
-            "{}{}{}",
-            label("[possible values: "),
-            choices.join(", "),
-            close()
-        ));
+    let helps: Vec<&str> = match item.choice_help {
+        Some(help) if long => (0..item.choices.len()).map(help).collect(),
+        _ => Vec::new(),
+    };
+    if !item.choices.is_empty() && !item.hide_choices {
+        if helps.iter().any(|help| !help.is_empty()) {
+            // One a line, as clap's long help has them.
+            let mut list = format!("\n{}", label("Possible values:"));
+            for (choice, help) in item.choices.iter().zip(&helps) {
+                let name = Style::paint(style.choice(), choice);
+                list.push_str(&format!("\n- {name}"));
+                if !help.is_empty() {
+                    list.push_str(&format!(": {}", painted_marks(help, style)));
+                }
+            }
+            add(list);
+        } else {
+            let choices: Vec<String> = item
+                .choices
+                .iter()
+                .map(|c| Style::paint(style.choice(), c))
+                .collect();
+            add(format!(
+                "{}{}{}",
+                label("[possible values: "),
+                choices.join(", "),
+                close()
+            ));
+        }
     }
     if long && !item.warning.is_empty() {
         let label = Style::paint(style.error(), "Warning:");
@@ -1574,10 +1606,16 @@ fn wrap_text(text: &str, width: usize) -> String {
         if i > 0 {
             out.push('\n');
         }
-        for (j, piece) in Wrap::new(line, width.max(20)).enumerate() {
-            if j > 0 {
-                out.push('\n');
-            }
+        // A `- ` item of a list goes on under its text, not under the dash.
+        let hang = if line.starts_with("- ") { "  " } else { "" };
+        let mut pieces = Wrap::new(line, width.max(20));
+        if let Some(first) = pieces.next() {
+            out.push_str(first);
+        }
+        pieces.width = pieces.width.saturating_sub(hang.len()).max(20);
+        for piece in pieces {
+            out.push('\n');
+            out.push_str(hang);
             out.push_str(piece);
         }
     }
@@ -1686,6 +1724,16 @@ mod tests {
                 format!("[possible values: {},", green("auto")),
                 format!("{}]", green("never"))
             ]
+        );
+    }
+
+    #[test]
+    fn an_item_of_a_list_goes_on_under_its_text() {
+        let text = "- fast: as fast as it goes, and no faster\n- slow";
+        let wrapped = super::wrap_text(text, 20);
+        assert_eq!(
+            wrapped,
+            "- fast: as fast as\n  it goes, and no\n  faster\n- slow"
         );
     }
 

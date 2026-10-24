@@ -5,6 +5,8 @@ use winnow_args::BStr;
 
 mod alias;
 mod cfg;
+#[cfg(feature = "help-text")]
+mod choice_help;
 mod choices;
 mod compile_fail;
 mod complete;

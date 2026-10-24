@@ -64,7 +64,7 @@ error: a variant with fields in a generic enum is not supported: hold a struct t
 79 |     Build {
    |     ^^^^^
 
-error: expected `group("name", ...)`, `restart_token`, `default_subcommand`, `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `multicall`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, `long_version`, `example`, `heading("title", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output("name", ...)`, `exit_code(n, "meaning")` or a `disable_*` option
+error: expected `group("name", ...)`, `restart_token`, `default_subcommand`, `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, `plus_options`, `multicall`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, `long_version`, `brief_help`, `example`, `heading("title", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output("name", ...)`, `exit_code(n, "meaning")` or a `disable_*` option
   --> tests/ui/enums.rs:88:11
    |
 88 |     #[arg(exmaple = "tool build")]

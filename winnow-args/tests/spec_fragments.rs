@@ -140,6 +140,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecBoth",
             "SpecBox",
             "SpecChange",
+            "SpecChoices",
             "SpecCli",
             "SpecDupA",
             "SpecDupB",
@@ -414,4 +415,66 @@ fn external_and_multicall_are_in_the_fragments() {
         .stitch("SpecTools")
         .unwrap_or_else(|error| panic!("{error}"));
     assert!(tools.multicall && !tools.external_subcommands);
+}
+
+#[derive(ValueEnum)]
+enum SpecSpeed {
+    /// As fast as it goes.
+    Fast,
+    Slow,
+}
+
+#[derive(Args)]
+#[arg(brief_help)]
+struct SpecChoices {
+    #[arg(long)]
+    speed: Option<SpecSpeed>,
+    #[arg(long, choices("name" = "The file's name", "size"))]
+    sort: Option<String>,
+    #[arg(long, choices("a", "b"), hide_choices)]
+    log: Option<String>,
+    // Stated, with a word of its own for one.
+    #[arg(long, choices("fast", "slow" = "mine"))]
+    stated: Option<SpecSpeed>,
+}
+
+#[test]
+fn what_each_choice_means_is_in_the_fragments() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecChoices")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(command.brief_help);
+    let item = |long: &str| {
+        let items = command.items.iter();
+        items
+            .into_iter()
+            .find(|i| i.long.as_deref() == Some(long))
+            .unwrap()
+    };
+    let listed = |long| item(long).listed_choices();
+    assert_eq!(
+        listed("speed"),
+        Some(vec![("fast", "As fast as it goes."), ("slow", "")])
+    );
+    assert_eq!(
+        listed("sort"),
+        Some(vec![("name", "The file's name"), ("size", "")])
+    );
+    assert!(item("log").hide_choices && !item("log").description().contains("possible"));
+    assert_eq!(
+        listed("stated"),
+        Some(vec![("fast", "As fast as it goes."), ("slow", "mine")])
+    );
+    let _ = |c: SpecChoices| {
+        (
+            c.speed
+                .map(|s| matches!(s, SpecSpeed::Fast | SpecSpeed::Slow)),
+            c.sort,
+            c.log,
+        )
+    };
 }

@@ -52,6 +52,7 @@ pub(crate) struct ArgsDoc {
     pub subcommand_required: bool,
     pub help_flag: bool,
     pub help_short: bool,
+    pub brief_help: bool,
     pub long_only: bool,
     pub unknown_flags_value: bool,
     pub multicall: bool,
@@ -111,6 +112,8 @@ pub(crate) struct ItemDoc {
     pub default: Option<String>,
     pub env: Option<String>,
     pub choices: Vec<String>,
+    pub choice_help: Vec<String>,
+    pub hide_choices: bool,
     pub choices_ty: Option<String>,
     pub require_equals: bool,
     pub global: bool,
@@ -171,10 +174,16 @@ pub(crate) fn write_occurrence(span: Span, ident: &str, items: &[ItemDoc]) -> sy
     write_at(span, ident, &out)
 }
 
-pub(crate) fn write_choices(span: Span, ident: &str, choices: &[String]) -> syn::Result<()> {
+pub(crate) fn write_choices(
+    span: Span,
+    ident: &str,
+    choices: &[String],
+    help: &[String],
+) -> syn::Result<()> {
     let mut out = String::new();
     header(&mut out, "choices", ident);
     strings(&mut out, "choices", choices);
+    strings(&mut out, "help", help);
     write_at(span, ident, &out)
 }
 
@@ -196,6 +205,7 @@ fn args_toml(doc: &ArgsDoc) -> String {
     flag(&mut out, "subcommand_required", doc.subcommand_required);
     flag(&mut out, "help_flag", doc.help_flag);
     flag(&mut out, "help_short", doc.help_short);
+    flag(&mut out, "brief_help", doc.brief_help);
     flag(&mut out, "long_only", doc.long_only);
     flag(&mut out, "unknown_flags_value", doc.unknown_flags_value);
     flag(&mut out, "multicall", doc.multicall);
@@ -253,6 +263,8 @@ fn item_toml(item: &ItemDoc) -> String {
     opt(&mut out, "default", &item.default);
     opt(&mut out, "env", &item.env);
     strings(&mut out, "choices", &item.choices);
+    strings(&mut out, "choice_help", &item.choice_help);
+    flag(&mut out, "hide_choices", item.hide_choices);
     opt(&mut out, "choices_ty", &item.choices_ty);
     flag(&mut out, "require_equals", item.require_equals);
     flag(&mut out, "global", item.global);

@@ -74,4 +74,10 @@ struct FunctionOnACount {
     verbose: u8,
 }
 
+#[derive(Args)]
+struct HiddenChoicesOfNone {
+    #[arg(long, hide_choices)]
+    verbose: bool,
+}
+
 fn main() {}

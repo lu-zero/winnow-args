@@ -1,4 +1,4 @@
-error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`
  --> tests/ui/fields.rs:6:17
   |
 6 |     #[arg(long, hdie)]
@@ -68,4 +68,10 @@ error: `hint` and `complete` are for a field that takes a value
   --> tests/ui/fields.rs:73:5
    |
 73 |     #[arg(short, count, complete = names)]
+   |     ^
+
+error: `hide_choices` is for a value with choices
+  --> tests/ui/fields.rs:79:5
+   |
+79 |     #[arg(long, hide_choices)]
    |     ^

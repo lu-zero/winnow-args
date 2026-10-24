@@ -265,8 +265,12 @@ impl Error {
         }
     }
 
-    /// `-h` (`long == false`) or `--help` for `command`.
+    /// `-h` (`long == false`) or `--help` for `command`: the short page
+    /// either way when it has `brief_help`.
     pub fn help(command: &'static crate::help::Command, long: bool) -> Self {
+        // `brief_help` makes every request the short page: `--help`, and
+        // `help <command>` from the command above.
+        let long = long && !command.brief_help;
         Self::request(ErrorKind::HelpRequested, command, long, false)
     }
 

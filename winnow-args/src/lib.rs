@@ -723,6 +723,9 @@ macro_rules! __text {
     ($text:literal) => {
         $text
     };
+    (@expr $text:expr) => {
+        $text
+    };
 }
 
 /// Help prose the derive emits: `""` without the `help-text` feature.
@@ -733,6 +736,10 @@ macro_rules! __text {
     ($text:literal) => {
         ""
     };
+    (@expr $text:expr) => {{
+        let _: &'static str = $text;
+        ""
+    }};
 }
 
 #[doc(hidden)]
@@ -890,6 +897,9 @@ pub mod __private {
             Error::invalid_value(at, flag, keyword.as_bytes(), e)
         })
     }
+
+    /// Whether help prose is kept: the `help-text` feature.
+    pub const HELP_TEXT: bool = cfg!(feature = "help-text");
 
     /// Whether `word` reads as a flag (`-x`, `--name`), and so names no
     /// external subcommand.

@@ -95,6 +95,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `about`, `long_about`, `after_help`, `after_long_help`, `before_help`,
       `before_long_help`, `usage`, `long_version`; `[possible values]`,
       defaults and env shown
+- [x] What each choice means, listed one a line in the long help and the
+      pages; `hide_choices`; `help` from a constant; `brief_help`
 - [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size`), else 100;
       in terminal columns with `unicode`, else a column a character
 - [x] Colour: `help::Style`, `color::Theme` per depth (16, 256, 24-bit),

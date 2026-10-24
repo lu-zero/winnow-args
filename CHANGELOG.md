@@ -4,6 +4,34 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: what a choice means. A `ValueEnum` variant's doc comment or
+  `help = "…"`, and `choices("fast" = "…", "slow")` on a field: the long
+  help and the pages list each value with it, one a line, as clap's long
+  help does; the short help keeps `[possible values: …]`. The pages show
+  the text as written, the field's before the type's. Help asks
+  `FromArg::choice_help(index, default)`, `default` being the field's text,
+  so a `FromArg` written by hand can answer from what only the running
+  program has, as another crate's enum's docs, when it sets
+  `DESCRIBES_CHOICES`. `winnow_args_spec::Item::listed_choices` gives them
+  to a page.
+- **Added**: `hide_choices` on a field: help and the pages leave its choices
+  out, which are still the only values accepted, and still completed.
+- **Added**: `help = EXPR` on a field, a `&'static str` constant: what help
+  shows, short and long, as a text made per target; `long_help` beside it
+  is an error. The pages keep the doc comment.
+- **Added**: `brief_help` on a struct: `--help`, and `help <command>` from
+  the command above, print the short page, as `-h` does, and its row says
+  "Print help".
+- **Changed**: `help::Item` has two more fields (`choice_help`,
+  `hide_choices`), `help::Command` one (`brief_help`), and
+  `winnow_args_spec::Item` two and `Command` one of the same names. A value
+  written by hand that ends in `..Item::EMPTY`, `..Command::EMPTY` or
+  `..Default::default()` is unaffected. `choice_help` is a function, `None`
+  unless something describes the choices: mise's binary is 8 KB larger,
+  with 2 more relocations, and parsing takes no more instructions.
+
 ## 0.4.0 (2026-10-24)
 
 - **Added**: `#[arg(external)]` on a `Subcommand` variant holding a `Vec`:

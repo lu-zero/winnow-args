@@ -132,6 +132,10 @@ mod spec;
 ///   makes. The program name is written in them; the pages show them too.
 /// - `disable_help_flag`, `disable_version_flag`, `disable_help_subcommand`:
 ///   leave that item out. `disable_help_short` keeps `--help` and leaves `-h` out.
+/// - `brief_help`: `--help` prints the short page too, one line an item, as
+///   `-h` does, and so does `help <command>` from the command above; the
+///   long texts are for the pages. It is this struct's: a subcommand's
+///   struct has its own.
 /// - `arg_required_else_help`: an empty command line asks for help.
 /// - `example = "tool build --release"`: one line in an Examples section after
 ///   the lists, shown as written. Help paints its subcommands, flags,
@@ -265,7 +269,15 @@ mod spec;
 ///   like a flag. A positional after this flag needs a flag, or `--`, before it.
 /// - `value_terminator = ";"`: the word that ends a `values` range. The word
 ///   is dropped.
-/// - `choices("a", "b")`: the only values accepted.
+/// - `choices("a", "b")`: the only values accepted. `choices("fast" = "…",
+///   "slow")` says what a value means: the long help and the pages list each
+///   value with it, one a line, as for a `ValueEnum` whose variants say. Help
+///   asks the value's type, which answers this text unless its `FromArg`
+///   says otherwise (see `FromArg::choice_help`); the pages show it as
+///   written.
+/// - `hide_choices`: help and the pages leave the choices out; they are
+///   still the only values accepted, still completed, and still listed by
+///   the error for a value that is none of them.
 /// - `env = "VAR"`: used when the command line left the field unset. On
 ///   `Option<T>` the field is then `Some`. A bare `env` is the field's name
 ///   in capitals: `jobs` reads `JOBS`. A switch is true unless the
@@ -349,7 +361,10 @@ mod spec;
 /// # Help
 ///
 /// - `help = "…"`: replaces the first paragraph of the doc comment, and the
-///   whole text when `long_help` is absent.
+///   whole text when `long_help` is absent. `help = EXPR`, any `&'static str`
+///   a constant can be, as `help = LIMIT_HELP`, is what help shows instead,
+///   short and long; the pages, written when the code is checked, keep the
+///   doc comment.
 /// - `long_help = "…"`: replaces the whole text.
 /// - `verbatim_doc_comment`: the doc comment's lines are kept as written.
 ///   Otherwise the lines of a paragraph are joined, for help to wrap to the
@@ -1194,7 +1209,9 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 /// - `alias = "…"`, `alias("…", …)` or `alias_hidden`: other values that
 ///   select it. Help and errors list the primary name only.
 /// - `hide`: the value is accepted. Help and errors omit its name.
-/// - `help = "…"` and `long_help = "…"`: accepted, and unused.
+/// - `help = "…"`: what the value means, in place of the doc comment's first
+///   paragraph. The long help and the pages list each value with it, one a
+///   line, when one of them says something. `long_help = "…"` is unused.
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -1647,12 +1664,17 @@ fn occurrence_item(
     let (doc, long_doc) = docs(&variant.attrs);
     let (help, long_help) = (text(&doc), text(&long_doc));
     // What the value's type says of it, when the variant holds one.
-    let (choices, hint) = match value {
+    let (choices, choice_help, hint) = match value {
         Some(ty) => (
             quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
+            choice_help_fn(&[], None, Some(ty)),
             quote!(<#ty as ::winnow_args::FromArg>::HINT),
         ),
-        None => (quote!(&[]), quote!(::winnow_args::complete::Hint::Nothing)),
+        None => (
+            quote!(&[]),
+            quote!(::core::option::Option::None),
+            quote!(::winnow_args::complete::Hint::Nothing),
+        ),
     };
     let positional = short.is_none() && longs.is_empty();
     let short = opt_char(short);
@@ -1678,6 +1700,8 @@ fn occurrence_item(
         default: ::core::option::Option::None,
         env: ::core::option::Option::None,
         choices: #choices,
+        choice_help: #choice_help,
+        hide_choices: false,
         require_equals: #require_equals,
         global: false,
         more_shorts: &[],
@@ -1689,6 +1713,55 @@ fn occurrence_item(
         complete: ::core::option::Option::None,
         warning: "",
     })
+}
+
+/// A help item's `choice_help`: `None` unless the field writes what a choice
+/// means or its value's type describes its choices, and always without the
+/// `help-text` feature, so most items cost no relocation. Else a function
+/// asking the type, with the field's text as the default. With `declared`
+/// choices, the type is asked about the one of that name, wherever it is in
+/// the type's own list.
+fn choice_help_fn(
+    written: &[String],
+    declared: Option<&[String]>,
+    ty: Option<&Type>,
+) -> TokenStream2 {
+    let arms = written
+        .iter()
+        .enumerate()
+        .filter(|(_, help)| !help.is_empty())
+        .map(|(index, help)| {
+            let help = text(help);
+            quote!(#index => #help,)
+        });
+    let default = quote!(match __index { #(#arms)* _ => "" });
+    let said = written.iter().any(|help| !help.is_empty());
+    let help_text = quote!(::winnow_args::__private::HELP_TEXT);
+    let ask = match (ty, declared) {
+        (Some(ty), Some(declared)) => quote! {
+            let __declared: &[&str] = &[#(#declared),*];
+            let __choices = <#ty as ::winnow_args::FromArg>::CHOICES;
+            match __choices.iter().position(|c| __declared.get(__index) == Some(c)) {
+                ::core::option::Option::Some(__at) => {
+                    <#ty as ::winnow_args::FromArg>::choice_help(__at, #default)
+                }
+                ::core::option::Option::None => #default,
+            }
+        },
+        (Some(ty), None) => quote!(<#ty as ::winnow_args::FromArg>::choice_help(__index, #default)),
+        (None, _) => default,
+    };
+    let describes = match ty {
+        Some(ty) => quote!(<#ty as ::winnow_args::FromArg>::DESCRIBES_CHOICES),
+        None => quote!(false),
+    };
+    quote! {
+        if (#said && #help_text) || #describes {
+            ::core::option::Option::Some(|__index: usize| { #ask })
+        } else {
+            ::core::option::Option::None
+        }
+    }
 }
 
 /// `spec = "Name"` among the options of a type, a field or a variant: the
@@ -1851,8 +1924,10 @@ fn spec_check_stated(generics: &syn::Generics, field: &Field) -> Option<TokenStr
 
 /// The name the value type's choices are looked for under: the field's
 /// `spec`, or the type's own. Only a `ValueEnum` has a fragment under it.
+/// The type the pages find a field's choices under, and what each means:
+/// written for stated choices too, whose meaning the type may say.
 fn choices_link(field: &Field) -> Option<String> {
-    choices_name(field.spec.as_ref(), choices_type(field)?)
+    choices_name(field.spec.as_ref(), value_type(field)?)
 }
 
 fn choices_name(stated: Option<&String>, ty: &Type) -> Option<String> {
@@ -1945,6 +2020,8 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         default: field.shown_default(),
         env: field.shown_env().map(str::to_owned),
         choices: field.choices.clone().unwrap_or_default(),
+        choice_help: field.choice_help.clone(),
+        hide_choices: field.hide_choices,
         choices_ty: choices_link(field),
         require_equals: field.require_equals,
         global: field.is_global(),
@@ -1987,6 +2064,8 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let filed = filed(input)?;
     let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_choices = Vec::new();
+    let mut spec_choice_help = Vec::new();
+    let mut visible_help: Vec<String> = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -1997,14 +2076,17 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let Variant {
             names: spellings,
             hide,
+            about: doc,
             ..
         } = variant_names(variant, &mut names, case)?;
         let name = LitStr::new(&spellings[0], Span::call_site());
         if !hide {
             if spec_on {
                 spec_choices.push(spellings[0].clone());
+                spec_choice_help.push(doc.clone());
             }
             visible.push(name);
+            visible_help.push(doc);
         }
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
@@ -2013,11 +2095,41 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     if spec_on {
-        spec::write_choices(input.ident.span(), &filed, &spec_choices)?;
+        if spec_choice_help.iter().all(String::is_empty) {
+            spec_choice_help.clear();
+        }
+        spec::write_choices(input.ident.span(), &filed, &spec_choices, &spec_choice_help)?;
     }
+    // A variant that says nothing answers the field's default.
+    let describes = visible_help.iter().any(|help| !help.is_empty());
+    let help_arms = visible_help
+        .iter()
+        .enumerate()
+        .filter(|(_, help)| !help.is_empty())
+        .map(|(index, help)| {
+            let help = text(help);
+            quote!(#index => #help,)
+        });
+    // The field's text, when it writes one, wins.
+    let choice_help = describes.then(|| {
+        quote! {
+            const DESCRIBES_CHOICES: bool = ::winnow_args::__private::HELP_TEXT;
+
+            fn choice_help(__index: usize, __default: &'static str) -> &'static str {
+                if !__default.is_empty() {
+                    return __default;
+                }
+                match __index {
+                    #(#help_arms)*
+                    _ => __default,
+                }
+            }
+        }
+    });
     Ok(quote! {
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
             const CHOICES: &'static [&'static str] = &[#(#visible),*];
+            #choice_help
             const SPEC: &'static str = #identity;
 
             fn from_arg(
@@ -2527,6 +2639,14 @@ struct Field {
     delimiter: Option<u8>,
     /// The only values accepted, checked before conversion.
     choices: Option<Vec<String>>,
+    /// What each of `choices` means: `choices("fast" = "…")`. Empty when
+    /// none is said, else as long as `choices`.
+    choice_help: Vec<String>,
+    /// `hide_choices`: help and the pages leave the choices out.
+    hide_choices: bool,
+    /// `help = EXPR`, not a literal: the `&'static str` help shows in place
+    /// of the doc comment, which the pages keep.
+    help_expr: Option<syn::Expr>,
     /// Environment variable consulted when the command line gave nothing.
     env: Option<String>,
     /// Value used when neither the command line nor the environment did.
@@ -2654,7 +2774,14 @@ impl Field {
         } else {
             opt_str(self.value_name.as_deref())
         };
-        let (help, long_help) = (text(&self.help), text(&self.long_help));
+        let (help, long_help) = match &self.help_expr {
+            // The expression is shown in place of the doc comment, short and long.
+            Some(expr) => {
+                let shown = quote!(::winnow_args::__text!(@expr #expr));
+                (shown.clone(), shown)
+            }
+            None => (text(&self.help), text(&self.long_help)),
+        };
         let heading = opt_str(self.heading.as_deref());
         let warning = text(&self.warning);
         let hide = self.hide;
@@ -2692,14 +2819,19 @@ impl Field {
         let default = opt_str(self.shown_default().as_deref());
         let env = opt_str(self.shown_env());
         // Declared `choices`, else whatever fixed set the value type has.
-        let choices = match (&self.choices, &self.kind, &self.role) {
-            (Some(choices), _, _) => quote!(&[#(#choices),*]),
-            (None, _, Role::Subcommand) | (None, Kind::Switch | Kind::Count(_), _) => quote!(&[]),
-            (None, _, _) if self.keywords || self.tristate || self.from_str => quote!(&[]),
-            (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), _) => {
-                quote!(<#ty as ::winnow_args::FromArg>::CHOICES)
-            }
+        let value_ty = match &self.kind {
+            _ if matches!(self.role, Role::Subcommand) => None,
+            _ if self.keywords || self.tristate || self.from_str => None,
+            Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty) => Some(ty),
+            Kind::Switch | Kind::Count(_) => None,
         };
+        let choices = match (&self.choices, value_ty) {
+            (Some(choices), _) => quote!(&[#(#choices),*]),
+            (None, Some(ty)) => quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
+            (None, None) => quote!(&[]),
+        };
+        let choice_help = choice_help_fn(&self.choice_help, self.choices.as_deref(), value_ty);
+        let hide_choices = self.hide_choices;
         quote! {
             ::winnow_args::help::Item {
                 short: #short,
@@ -2720,6 +2852,8 @@ impl Field {
                 default: #default,
                 env: #env,
                 choices: #choices,
+                choice_help: #choice_help,
+                hide_choices: #hide_choices,
                 require_equals: #require_equals,
                 global: #global,
                 more_shorts: &[#(#more_shorts),*],
@@ -3156,6 +3290,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         long_version,
         disable_help_flag,
         disable_help_short,
+        brief_help,
         disable_version_flag,
         disable_help_subcommand,
         unknown_flags_value,
@@ -4060,8 +4195,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let declares_long = |name: &str| fields.iter().any(|f| f.every_long().contains(&name));
     let declares_short = |c: char| fields.iter().any(|f| f.shorts().contains(&c));
     let help = quote!(<Self as ::winnow_args::Args>::HELP);
+    let long_page = !brief_help;
     let help_long = (!disable_help_flag && !declares_long("help")).then(
-        || quote!(b"help" => return ::core::result::Result::Err(__wa::Error::help(#help, true)),),
+        || quote!(b"help" => return ::core::result::Result::Err(__wa::Error::help(#help, #long_page)),),
     );
     let help_short = (!disable_help_flag && !disable_help_short && !declares_short('h')).then(
         || quote!('h' => return ::core::result::Result::Err(__wa::Error::help(#help, false)),),
@@ -4700,6 +4836,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 subcommand_required,
                 help_flag,
                 help_short: help_short_flag,
+                brief_help,
                 long_only,
                 unknown_flags_value,
                 multicall,
@@ -4749,6 +4886,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 headings: #help_headings,
                 multicall: #multicall,
                 external_subcommands: #help_external,
+                brief_help: #brief_help,
             };
 
             fn parse_argv_with(
@@ -4874,6 +5012,8 @@ struct StructOptions {
     disable_help_flag: bool,
     /// Help is `--help` alone, `-h` left undeclared (bash's builtins).
     disable_help_short: bool,
+    /// `--help` prints the short page, as `-h` does.
+    brief_help: bool,
     disable_version_flag: bool,
     disable_help_subcommand: bool,
     /// An unknown flag-like word is a positional value.
@@ -5068,6 +5208,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             for (key, slot) in [
                 ("disable_help_flag", &mut options.disable_help_flag),
                 ("disable_help_short", &mut options.disable_help_short),
+                ("brief_help", &mut options.brief_help),
                 ("disable_version_flag", &mut options.disable_version_flag),
                 (
                     "disable_help_subcommand",
@@ -5084,7 +5225,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
                      `plus_options`, `multicall`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
-                     `long_version`, `example`, \
+                     `long_version`, `brief_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));
@@ -5977,6 +6118,25 @@ fn slot(ident: &Ident) -> Ident {
     }
 }
 
+/// One of `choices(…)`: `"fast"`, or `"fast" = "what it means"`.
+struct Choice {
+    name: LitStr,
+    help: Option<LitStr>,
+}
+
+impl syn::parse::Parse for Choice {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let name = input.parse()?;
+        let help = if input.peek(syn::Token![=]) {
+            input.parse::<syn::Token![=]>()?;
+            Some(input.parse()?)
+        } else {
+            None
+        };
+        Ok(Self { name, help })
+    }
+}
+
 fn field(f: &syn::Field) -> syn::Result<Field> {
     let ident = f.ident.clone().expect("named field");
     let bare = ident.to_string().trim_start_matches("r#").to_owned();
@@ -5990,6 +6150,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut alias = Vec::new();
     let mut delimiter = None;
     let mut choices = None;
+    let mut choice_help = Vec::new();
+    let mut hide_choices = false;
+    let mut help_expr = None;
     let mut env = None;
     let mut defaults = Vec::new();
     let mut double_dash = None;
@@ -6080,13 +6243,21 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("visible_alias") {
                 visible.extend(aliases(&meta)?);
             } else if meta.path.is_ident("help") {
-                help = Some(meta.value()?.parse::<LitStr>()?.value());
+                match meta.value()?.parse::<syn::Expr>()? {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(text),
+                        ..
+                    }) => help = Some(text.value()),
+                    expr => help_expr = Some(expr),
+                }
             } else if meta.path.is_ident("long_help") {
                 long_help = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("help_heading") {
                 heading = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
+            } else if meta.path.is_ident("hide_choices") {
+                hide_choices = true;
             } else if meta.path.is_ident("from_str") {
                 from_str = true;
             } else if meta.path.is_ident("hide_default_value") {
@@ -6266,8 +6437,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let list =
-                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
-                choices = Some(list.iter().map(LitStr::value).collect());
+                    syn::punctuated::Punctuated::<Choice, syn::Token![,]>::parse_terminated(&content)?;
+                choices = Some(list.iter().map(|choice| choice.name.value()).collect());
+                if list.iter().any(|choice| choice.help.is_some()) {
+                    choice_help = list
+                        .iter()
+                        .map(|choice| choice.help.as_ref().map(LitStr::value).unwrap_or_default())
+                        .collect();
+                }
             } else if meta.path.is_ident("delimiter") {
                 let c = meta.value()?.parse::<LitChar>()?;
                 if !c.value().is_ascii() {
@@ -6280,7 +6457,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
-                     `delimiter`, `choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
+                     `delimiter`, `choices`, `hide_choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
@@ -6548,6 +6725,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`spec` names the type of a field's value, and this field has none".into());
     }
+    if help_expr.is_some() && long_help.is_some() {
+        return error(
+            "`help = …` with a constant is the long help too: `long_help` beside it is unused"
+                .into(),
+        );
+    }
+    if hide_choices && choices.is_none() && matches!(kind, Kind::Switch | Kind::Count(_)) {
+        return error("`hide_choices` is for a value with choices".into());
+    }
     Ok(Field {
         ident,
         spec,
@@ -6555,6 +6741,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         role,
         delimiter,
         choices,
+        choice_help,
+        hide_choices,
+        help_expr,
         env,
         defaults,
         conflicts,

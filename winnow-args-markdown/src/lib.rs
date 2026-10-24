@@ -168,6 +168,15 @@ fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) 
 
 fn push_item(out: &mut String, item: &Item, indent: &str) {
     push_term(out, &item.synopsis(), &escape(&item.description()), indent);
+    if let Some(choices) = item.listed_choices() {
+        for (name, help) in choices {
+            out.push_str(&format!("{indent}  * `{name}`"));
+            if !help.is_empty() {
+                out.push_str(&format!(": {}", escape(help)));
+            }
+            out.push('\n');
+        }
+    }
     if let Some(vocabulary) = &item.vocabulary {
         out.push_str(indent);
         out.push_str("  Vocabulary:\n");
@@ -584,5 +593,30 @@ mod tests {
             ),
             "{root}"
         );
+    }
+}
+
+#[cfg(test)]
+mod choice_tests {
+    use super::*;
+
+    #[test]
+    fn each_choice_that_says_something_is_an_item_of_its_own() {
+        let command = Command {
+            name: "tool".to_owned(),
+            items: vec![Item {
+                long: Some("sort".to_owned()),
+                value_name: Some("KEY".to_owned()),
+                help: "What to sort by.".to_owned(),
+                choices: vec!["name".to_owned(), "size".to_owned()],
+                choice_help: vec!["The *file's* name".to_owned(), String::new()],
+                ..Item::default()
+            }],
+            ..Command::default()
+        };
+        let page = &render_pages(&command, "tool").unwrap()[0].1;
+        let list =
+            "* `--sort <KEY>` — What to sort by.\n  * `name`: The *file's* name\n  * `size`\n";
+        assert!(page.contains(list), "{page}");
     }
 }

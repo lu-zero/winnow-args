@@ -64,6 +64,8 @@ pub struct Command {
     pub help_flag: bool,
     /// The supplied help flag also has `-h`.
     pub help_short: bool,
+    /// `--help` prints the short page, as `-h` does.
+    pub brief_help: bool,
     /// A long name may also be spelled with one dash.
     pub long_only: bool,
     /// Unknown flag-like words are positional values.
@@ -221,6 +223,10 @@ pub struct Item {
     pub env: Option<String>,
     /// The only values accepted.
     pub choices: Vec<String>,
+    /// What each of `choices` means, in their order; empty when none is said.
+    pub choice_help: Vec<String>,
+    /// The pages leave the choices out.
+    pub hide_choices: bool,
     /// The value must be attached (`--name=value`).
     pub require_equals: bool,
     /// Also accepted on subcommands of this command.
@@ -316,7 +322,8 @@ enum Fragment {
     Args(Box<ArgsFrag>),
     Subcommands(SubsFrag),
     Occurrence(Vec<ItemDraft>),
-    Choices(Vec<String>),
+    /// A value enum's choices, and what each means (empty when none says).
+    Choices(Vec<String>, Vec<String>),
 }
 
 #[derive(Debug)]
@@ -336,6 +343,7 @@ struct ArgsFrag {
     subcommand_required: bool,
     help_flag: bool,
     help_short: bool,
+    brief_help: bool,
     long_only: bool,
     unknown_flags_value: bool,
     multicall: bool,
@@ -481,7 +489,7 @@ impl Catalog {
                         .iter()
                         .filter_map(|variant| Some((variant.ty.as_ref()?, COMMAND)))
                         .collect(),
-                    Fragment::Occurrence(_) | Fragment::Choices(_) => Vec::new(),
+                    Fragment::Occurrence(_) | Fragment::Choices(..) => Vec::new(),
                 };
                 for (name, kind) in links {
                     match self.find(at, name, kind) {
@@ -530,6 +538,7 @@ static SHELL: LazyLock<Entry> = LazyLock::new(|| Entry {
         ["bash", "zsh", "fish", "elvish", "powershell"]
             .map(str::to_owned)
             .to_vec(),
+        Vec::new(),
     ),
 });
 
@@ -539,7 +548,7 @@ type Kind = fn(&Fragment) -> bool;
 const COMMAND: Kind = |fragment| matches!(fragment, Fragment::Args(_) | Fragment::Subcommands(_));
 const SUBCOMMANDS: Kind = |fragment| matches!(fragment, Fragment::Subcommands(_));
 const OCCURRENCE: Kind = |fragment| matches!(fragment, Fragment::Occurrence(_));
-const CHOICES: Kind = |fragment| matches!(fragment, Fragment::Choices(_));
+const CHOICES: Kind = |fragment| matches!(fragment, Fragment::Choices(..));
 
 /// `src/cli/add.rs` as the modules a path to its types may name: `src`,
 /// `cli`, `add`. A `mod.rs` is its directory's module. The derive writes
@@ -721,10 +730,10 @@ impl Command {
     pub fn builtins(&self) -> Vec<(&'static str, &'static str)> {
         let mut rows = Vec::new();
         if self.help_flag {
-            rows.push(if self.help_short {
-                ("-h, --help", "Print help (see a summary with '-h')")
-            } else {
-                ("--help", "Print help")
+            rows.push(match (self.help_short, self.brief_help) {
+                (true, false) => ("-h, --help", "Print help (see a summary with '-h')"),
+                (true, true) => ("-h, --help", "Print help"),
+                (false, _) => ("--help", "Print help"),
             });
         }
         if self.package_version.is_some() {
@@ -798,6 +807,18 @@ impl Item {
         }
     }
 
+    /// The choices with what each means, `(name, help)`, for a page to list
+    /// one a line: when they are shown and one of them says something.
+    /// [`description`](Self::description) then leaves them out.
+    pub fn listed_choices(&self) -> Option<Vec<(&str, &str)>> {
+        let said = self.choice_help.iter().any(|help| !help.is_empty());
+        (said && !self.hide_choices).then(|| {
+            let help = self.choice_help.iter().map(String::as_str);
+            let names = self.choices.iter().map(String::as_str);
+            names.zip(help.chain(std::iter::repeat(""))).collect()
+        })
+    }
+
     /// [`prose`](Self::prose) plus the notes help appends.
     pub fn description(&self) -> String {
         let mut text = self.prose().to_owned();
@@ -807,7 +828,7 @@ impl Item {
         if let Some(default) = &self.default {
             append_note(&mut text, &format!("[default: {default}]"));
         }
-        if !self.choices.is_empty() {
+        if self.listed_choices().is_none() && !self.choices.is_empty() && !self.hide_choices {
             append_note(
                 &mut text,
                 &format!("[possible values: {}]", self.choices.join(", ")),
@@ -1083,7 +1104,7 @@ fn parse_fragment(text: &str) -> Result<Entry, Error> {
             multicall: flag(&table, "multicall")?,
         }),
         "occurrence" => Fragment::Occurrence(parse_items(&table)?),
-        "choices" => Fragment::Choices(strings(&table, "choices")?),
+        "choices" => Fragment::Choices(strings(&table, "choices")?, strings(&table, "help")?),
         other => return Err(Error::new(format!("unknown kind `{other}`"))),
     };
     let file = opt_str(&table, "file")?;
@@ -1116,6 +1137,7 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
         subcommand_required: flag(table, "subcommand_required")?,
         help_flag: flag(table, "help_flag")?,
         help_short: flag(table, "help_short")?,
+        brief_help: flag(table, "brief_help")?,
         long_only: flag(table, "long_only")?,
         unknown_flags_value: flag(table, "unknown_flags_value")?,
         multicall: flag(table, "multicall")?,
@@ -1224,6 +1246,8 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 default: opt_present(row, "default")?,
                 env: opt_present(row, "env")?,
                 choices: strings(row, "choices")?,
+                choice_help: strings(row, "choice_help")?,
+                hide_choices: flag(row, "hide_choices")?,
                 require_equals: flag(row, "require_equals")?,
                 global: flag(row, "global")?,
                 optional_value: flag(row, "optional_value")?,
@@ -1415,6 +1439,7 @@ impl Catalog {
             subcommand_required: args.subcommand_required,
             help_flag: args.help_flag,
             help_short: args.help_short,
+            brief_help: args.brief_help,
             long_only: args.long_only,
             unknown_flags_value: args.unknown_flags_value,
             package_version: args.package_version.clone(),
@@ -1496,15 +1521,11 @@ impl Catalog {
         stack: &mut Vec<*const Entry>,
     ) -> Result<Item, Error> {
         let mut item = draft.item.clone();
-        if let Some(ty) = draft
-            .choices_ty
-            .as_deref()
-            .filter(|_| item.choices.is_empty())
-        {
+        if let Some(ty) = draft.choices_ty.as_deref() {
             // A name with no value enum under it is an open value (`String`,
             // a number), or a type that parses itself.
             if let Some((krate, entry)) = self.find(at, ty, CHOICES)?
-                && let Fragment::Choices(choices) = &entry.fragment
+                && let Fragment::Choices(choices, help) = &entry.fragment
             {
                 // A name its file neither declares nor brings in by name:
                 // an enum of another file may be it, and so may a type of
@@ -1521,7 +1542,27 @@ impl Catalog {
                         whole_name(krate, entry)
                     )));
                 }
-                item.choices.clone_from(choices);
+                if item.choices.is_empty() {
+                    item.choices.clone_from(choices);
+                    item.choice_help.clone_from(help);
+                } else if !help.is_empty() {
+                    // Stated on the field: what the type says of each, by
+                    // name, where the field says nothing.
+                    let said = |name: &String| {
+                        let at = choices.iter().position(|choice| choice == name)?;
+                        help.get(at).cloned()
+                    };
+                    let written = std::mem::take(&mut item.choice_help);
+                    item.choice_help = item
+                        .choices
+                        .iter()
+                        .enumerate()
+                        .map(|(at, name)| {
+                            let own = written.get(at).filter(|text| !text.is_empty());
+                            own.cloned().or_else(|| said(name)).unwrap_or_default()
+                        })
+                        .collect();
+                }
             }
         }
         item.vocabulary = draft

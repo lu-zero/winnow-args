@@ -327,6 +327,19 @@ fn term(doc: &mut Roff, tag: Vec<Inline>, body: &str) {
 
 fn item_tp(doc: &mut Roff, item: &Item) {
     term(doc, tag(item), &item.description());
+    if let Some(choices) = item.listed_choices() {
+        doc.control("sp", std::iter::empty::<&str>());
+        doc.text([roman("Possible values:")]);
+        for (name, help) in choices {
+            doc.control("br", std::iter::empty::<&str>());
+            let mut line = vec![roman("- "), bold(name)];
+            if !help.is_empty() {
+                line.push(roman(": "));
+                line.extend(prose(help));
+            }
+            doc.text(line);
+        }
+    }
     if let Some(vocabulary) = &item.vocabulary {
         // Indented, so that the next flag is not read as one more keyword.
         doc.control("RS", std::iter::empty::<&str>());
@@ -654,5 +667,33 @@ mod tests {
         ] {
             assert!(root.contains(expected), "{expected:?} in\n{root}");
         }
+    }
+}
+
+#[cfg(test)]
+mod choice_tests {
+    use super::*;
+
+    fn page(item: Item) -> String {
+        let command = Command {
+            name: "tool".to_owned(),
+            items: vec![item],
+            ..Command::default()
+        };
+        Manual::default().render(&pages(&command, "tool").unwrap()[0])
+    }
+
+    #[test]
+    fn each_choice_that_says_something_is_on_a_line() {
+        let page = page(Item {
+            long: Some("sort".to_owned()),
+            value_name: Some("KEY".to_owned()),
+            help: "What to sort by.".to_owned(),
+            choices: vec!["name".to_owned(), "size".to_owned()],
+            choice_help: vec!["The file's name".to_owned(), String::new()],
+            ..Item::default()
+        });
+        let list = ".sp\nPossible values:\n.br\n\\- \\fBname\\fR: The file\\*(Aqs name\n.br\n\\- \\fBsize\\fR\n";
+        assert!(page.contains(list), "{page}");
     }
 }
