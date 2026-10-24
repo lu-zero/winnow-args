@@ -6,6 +6,7 @@
 //!     cargo run --example gallery -- --help        # long help
 //!     cargo run --example gallery -- run --help    # a subcommand's help
 //!     cargo run --example gallery -- shapes --help # flattened subcommands
+//!     cargo run --example gallery -- brief --help  # `brief_help`: the short page
 //!     cargo run --example gallery -- -V            # version
 //!
 //! Its pages are built with
@@ -59,6 +60,25 @@ struct Gallery {
     /// A flag with a `warning`
     #[arg(long, warning = "The warning, on `--help` only.")]
     unsafe_mode: bool,
+    /// A `deprecated` flag
+    #[arg(
+        long,
+        deprecated = "the reason, in the long help and the warning",
+        deprecated_remove_at = "2.0"
+    )]
+    old: bool,
+    /// Choices that say what they mean, one a line on `--help`
+    #[arg(long)]
+    speed: Option<Speed>,
+    /// Choices written on the field, with what each means
+    #[arg(long, choices("name" = "The first choice's meaning", "size"))]
+    sort: Option<String>,
+    /// Choices that help leaves out (`hide_choices`)
+    #[arg(long, choices("a", "b"), hide_choices)]
+    mode: Option<String>,
+    /// A doc comment the pages show, where help shows a constant
+    #[arg(long, help = HELP_FROM_A_CONSTANT)]
+    made: bool,
     /// A flag listed first by `display_order`
     #[arg(long, display_order = 0)]
     first: bool,
@@ -113,6 +133,25 @@ enum When {
     Never,
 }
 
+/// Possible values that say what they mean
+#[derive(ValueEnum, Debug)]
+enum Speed {
+    /// A variant's doc comment
+    Fast,
+    /// Another
+    Slow,
+    /// A variant that says nothing is listed bare
+    #[arg(help = "")]
+    Steady,
+}
+
+/// A flag's help made by a constant, which may differ by target.
+const HELP_FROM_A_CONSTANT: &str = if cfg!(unix) {
+    "Help from a constant (`help = …`), here on unix"
+} else {
+    "Help from a constant (`help = …`)"
+};
+
 // Read only through `Debug`.
 #[allow(dead_code)]
 #[derive(Subcommand, Debug)]
@@ -128,6 +167,24 @@ enum Command {
     },
     /// A unit subcommand
     Unit,
+    /// A `deprecated` subcommand
+    #[arg(deprecated = "use `unit`")]
+    Old,
+    /// A subcommand whose `--help` is the short page (`brief_help`)
+    Brief(Brief),
+}
+
+/// A command with `brief_help`: `--help` shows `-h`'s page.
+///
+/// This paragraph is on neither.
+#[derive(Args, Debug)]
+#[arg(brief_help)]
+struct Brief {
+    /// A flag
+    ///
+    /// Its long text, not on `--help`.
+    #[arg(long)]
+    flag: bool,
 }
 
 /// The default subcommand's page.
@@ -178,7 +235,12 @@ fn main() {
         print!("{answer}");
         return;
     }
-    match Gallery::parse_from(&args) {
+    let parsed = Gallery::parse_from(&args);
+    // What was deprecated: `Gallery::parse()` prints these itself.
+    for warning in Gallery::warnings() {
+        eprint!("{}", warning.render());
+    }
+    match parsed {
         Ok(gallery) => println!("{gallery:#?}"),
         // `-h`, `--help`, `help …` and `-V` end up here too.
         Err(e) => std::process::exit(report(&e, "gallery")),
