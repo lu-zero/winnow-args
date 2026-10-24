@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.4.0 (2026-10-24)
 
 - **Added**: `#[arg(external)]` on a `Subcommand` variant holding a `Vec`:
   an external subcommand, as `cargo foo` runs `cargo-foo`. A word that names
