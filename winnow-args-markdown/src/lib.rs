@@ -276,6 +276,8 @@ fn escape_marked(text: &str, strong: &str) -> String {
             }
             Some(Mark::Emphasis) => "*",
             Some(Mark::Strong) => strong,
+            // A mark this renderer does not know is plain text.
+            Some(_) => "",
         };
         out.push_str(mark);
         push_escaped(&mut out, piece.text);

@@ -31,6 +31,10 @@ released together. Versions follow [semver](https://semver.org).
   `..Default::default()` is unaffected. `choice_help` is a function, `None`
   unless something describes the choices: mise's binary is 8 KB larger,
   with 2 more relocations, and parsing takes no more instructions.
+- **Changed**: `color::Depth`, and `winnow_args_spec`'s `Effect`, `Mark` and
+  `Word` are `#[non_exhaustive]`, so a later release can add to them: a
+  `match` on one needs a `_` arm. `token::Arg` and `Kind` stay exhaustive,
+  as every derived parser matches on them.
 
 ## 0.4.0 (2026-10-24)
 

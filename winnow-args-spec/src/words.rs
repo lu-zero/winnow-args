@@ -5,6 +5,7 @@ use crate::{Item, Page};
 
 /// What a piece of an example's line is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Word {
     /// The first word of a command: the program, or what follows an operator.
     Program,

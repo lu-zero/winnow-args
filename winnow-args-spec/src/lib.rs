@@ -113,6 +113,7 @@ pub struct Heading {
 
 /// What a command, or a flag, does to what it works on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Effect {
     /// It only reads.
     Read,

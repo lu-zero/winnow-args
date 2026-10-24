@@ -277,10 +277,11 @@ fn prose(text: &str) -> Vec<Inline> {
     pieces(text)
         .into_iter()
         .map(|piece| match piece.mark {
-            None => roman(piece.text),
             Some(Mark::Code) => bold(format!("`{}`", piece.text)),
             Some(Mark::Emphasis) => italic(piece.text),
             Some(Mark::Strong) => bold(piece.text),
+            // Plain, and a mark this renderer does not know.
+            _ => roman(piece.text),
         })
         .collect()
 }
@@ -295,7 +296,9 @@ fn example_line(line: &str, page: &Page<'_>) -> Vec<Inline> {
             .map(|(word, text)| match word {
                 Word::Program | Word::Command | Word::Flag => bold(text),
                 Word::Placeholder => italic(text),
-                Word::Operator | Word::Comment | Word::Plain => roman(text),
+                // An operator, a comment, plain text, and a word this
+                // renderer does not know.
+                _ => roman(text),
             }),
     );
     out

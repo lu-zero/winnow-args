@@ -10,6 +10,7 @@
 
 /// What a span is marked as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Mark {
     /// `` `code` ``.
     Code,

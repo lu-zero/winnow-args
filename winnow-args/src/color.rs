@@ -12,6 +12,7 @@ use std::fmt::Write as _;
 /// How many colors a terminal shows. Ordered: a deeper terminal shows
 /// everything a shallower one does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum Depth {
     /// No color and no attributes: a pipe, a file, `NO_COLOR`.
     None,
