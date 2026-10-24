@@ -252,8 +252,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] Binary size: mise is 72 % over usage's (1 678 048 bytes against
       974 824, `release-lto`, aarch64; PERF.md step 60). The lexer inlined
       into each struct is 1.4 KB of it, but out of line it costs 5–15 %
-      (step 32). `help::Item` with its rare fields behind one pointer would
-      save about 130 KB, and break code that reads or builds an `Item`
+      (step 32). `help::Item`'s and `Command`'s rare fields behind one
+      pointer saved 106 KB, but a relocation for each pointer made start-up
+      7 % more instructions and parsing 1–3 % slower: not taken
 - [ ] mise's shadow from usage's KDL spec rather than from usage's shadow
 - [ ] wild: its parser and integration tests, as for mold
 - [ ] brush: `dirs`/`pushd`/`popd` `+N` indices (parsed; brush implements them
