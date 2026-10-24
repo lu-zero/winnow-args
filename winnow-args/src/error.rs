@@ -223,7 +223,8 @@ impl Error {
         error
     }
 
-    /// `name` requires a member of `group`, and none has a value. The offset is the end of the line.
+    /// `name` requires a member of `group`, and none has a value. The offset
+    /// is the end of the line.
     pub fn one_of_required_by(
         offset: usize,
         group: impl Into<String>,
@@ -367,8 +368,8 @@ impl Error {
         self.render_help_styled(program, Style::PLAIN)
     }
 
-    /// `program version` for a [`ErrorKind::VersionRequested`], the long
-    /// version for a `--version` of a command that has one.
+    /// `program version` for a [`ErrorKind::VersionRequested`], or
+    /// `program long_version` for a `--version` of a command that has one.
     pub fn version_text(&self, program: &str) -> Option<String> {
         let request = self.detail.as_deref()?.request.as_ref()?;
         let version = request.command.version?;

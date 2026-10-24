@@ -84,8 +84,9 @@ derive's page lists every attribute it takes.
 | Flags kept in command-line order | ✓ | ~ | ~ |
 | Flag constraints checked at compile time | ✓ | – | – |
 | Help prose left out of the binary by a feature | ✓ | ~ | – |
-| A CLI built at runtime, external subcommands | – | ✓ | ✓ |
-| Conditional requirements (`required_if`) | – | ✓ | ✓ |
+| External subcommands, multicall | ✓ | ✓ | ✓ |
+| A CLI built at runtime | – | ✓ | ✓ |
+| Conditional requirements (`required_if`) | ✓ | ✓ | ✓ |
 | Man pages, markdown | ~ | ✓ | ~ |
 | "Did you mean" suggestions | ✓ | ✓ | ✓ |
 

@@ -468,10 +468,10 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 ///   an external subcommand. A word that names no variant and is not a
 ///   flag, where the parent has nothing else to take it, is its first
 ///   value, and every word after it the rest, as typed: `cargo foo --bar`
-///   holds `foo` and `--bar`. That is also a word that a `double_dash =
-///   "required"` positional would refuse before `--`. One variant at most;
-///   help does not list it, an enum with `run` has none, and a parent with
-///   `default_subcommand` cannot hold one.
+///   holds `foo` and `--bar`. A word a `double_dash = "required"`
+///   positional refuses before `--` is one too. An enum has one at most,
+///   and none with `run`. Help does not list it. A parent with
+///   `default_subcommand` cannot hold such an enum.
 ///
 /// A variant with named fields is a command. Its fields are declared as a
 /// struct's are, and its doc comment and other options (`example`,

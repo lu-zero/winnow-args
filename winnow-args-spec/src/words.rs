@@ -25,8 +25,9 @@ pub enum Word {
 /// `line` cut into pieces, in order, that join back into it.
 ///
 /// The program comes first, then the subcommands of `page`'s path from its
-/// second word on, then those of its command. Named as a `multicall`
-/// program, the program is followed by its [`Page::full_path`]'s. A flag is one the command or
+/// second word on, then those of its command. On a `multicall` program's
+/// command's page, a line may start with the program's name instead, and
+/// [`Page::full_path`]'s subcommands follow it. A flag is one the command or
 /// its parents' globals spell; a flag that takes a value makes the next word,
 /// or the next `values`, plain. After `--`, or a word that is neither,
 /// nothing is a subcommand; after `--` nothing is a flag either. A quoted or

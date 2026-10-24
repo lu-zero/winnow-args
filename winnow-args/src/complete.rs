@@ -755,11 +755,11 @@ pub fn script(bin: &str, shell: Shell) -> String {
     scripts(&[bin], shell)
 }
 
-/// One completion script for each of `bins` in `shell`, as one file: a
-/// `multicall` program's, the first, and the names of its commands it is
-/// linked as. Each asks the program, with the line as typed: a name that is
-/// not linked to it never runs, and the functions are named after it, so no
-/// shell's own completion for that name is replaced.
+/// One completion script, in one file, for every name in `bins`: the first
+/// is the program, the rest names it is linked as, a `multicall` program's
+/// commands. Each name asks the program, with the line as typed, so a name
+/// not linked to it never runs. The functions are `_prog` and `_prog_name`,
+/// so no shell's own completion for a name is replaced.
 ///
 /// # Panics
 ///
@@ -774,7 +774,7 @@ pub fn scripts(bins: &[&str], shell: Shell) -> String {
         if bin != program {
             function = format!("{function}_{}", function_name(bin));
         }
-        // `a-b` and `a_b` would share one.
+        // `a-b` and `a_b` give one function name: the later one is numbered.
         let base = function.clone();
         let mut n = 1;
         while functions.iter().any(|(other, _)| *other == function) {
@@ -789,9 +789,10 @@ pub fn scripts(bins: &[&str], shell: Shell) -> String {
     if shell != Shell::Zsh {
         return each.collect::<Vec<_>>().join("\n");
     }
-    // zsh loads one file for every name `#compdef` lists, and says which in
-    // `$service`. Loading it defines the functions, the first replacing the
-    // one zsh loaded it as, so each name is registered again.
+    // zsh loads this one file for every name `#compdef` lists, and sets
+    // `$service` to the one completed. Loading it replaces the function zsh
+    // loaded it as, so each name is registered again with `compdef`, and the
+    // `case` runs the function for `$service`.
     let mut out = format!("#compdef {}\n", bins.join(" "));
     out.extend(each);
     if let [(function, bin)] = &functions[..] {
@@ -811,7 +812,8 @@ pub fn scripts(bins: &[&str], shell: Shell) -> String {
     out
 }
 
-/// Whether `bin` can be named unquoted in a script: [`script`] panics otherwise.
+/// Whether `bin` is a plain word, which a script can name unquoted:
+/// [`script`] panics otherwise.
 pub(crate) fn plain_name(bin: &str) -> bool {
     !bin.is_empty()
         && bin

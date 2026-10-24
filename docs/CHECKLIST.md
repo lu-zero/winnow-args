@@ -51,10 +51,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Switch, `count` (saturating), `Option<T>`, required `T`, `Vec<T>` one
       value per occurrence; a repeated single value keeps the last;
       `bool_value` (`--flag=false`)
-- [x] `delimiter`, `values = N` (with `value_names`), `values = 1..` / `a..=b`
-      with `value_terminator`,
-      `choices(…)`, `ValueEnum` (`name`, `alias`,
-      `alias_hidden`, `hide`, `rename_all`)
+- [x] `delimiter`, `values = N` (with `value_names`), `values = 1..` /
+      `a..=b` with `value_terminator`, `choices(…)`, `ValueEnum` (`name`,
+      `alias`, `alias_hidden`, `hide`, `rename_all`)
 - [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
       `default_note`); `default_missing` for an optional value; an `Option`
       field with `require_equals` holds `None` for a bare flag; a bare `env`
@@ -256,7 +255,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       into each struct is 1.4 KB of it, but out of line it costs 5–15 %
       (step 32). `help::Item`'s and `Command`'s rare fields behind one
       pointer saved 106 KB, but a relocation for each pointer made start-up
-      7 % more instructions and parsing 1–3 % slower: not taken
+      7 % more instructions and parsing 1–3 % slower, so it was not done
 - [ ] mise's shadow from usage's KDL spec rather than from usage's shadow
 - [ ] wild: its parser and integration tests, as for mold
 - [ ] brush: `dirs`/`pushd`/`popd` `+N` indices (parsed; brush implements them

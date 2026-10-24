@@ -23,18 +23,16 @@ released together. Versions follow [semver](https://semver.org).
   follows the name typed, and `completion_script` completes each command's
   name and shown aliases too, asking the program itself, so a name not
   linked to it never runs. The pages say so.
-- **Added**: `complete::scripts`: one completion script for several names,
-  answered by the first.
+- **Added**: `complete::scripts(&[program, names…], shell)`: one script for
+  a program and the names it is linked as, each asking the program.
 - **Added**: a `multicall` program's commands have pages of their own name,
   `ls.1` and `ls.md` in place of `busybox-ls.1`, whose synopsis gives
   `ls` and `busybox ls`; in a man page, a shown alias is a page that sources
-  its command's. A `Page`'s `path` then starts at the command's name, and
-  the new `full_path` at the program's; `Page` has the methods `usage` and
-  `sub_stem`, and is `#[non_exhaustive]`. `applet_aliases` lists the
-  aliases.
-- **Changed**: smaller generated parsers: a non-ASCII short letter is decoded
-  out of line, and the lexer has no inlined panic paths. mise's binary is
-  5 % smaller, and no slower.
+  its command's with `.so`. Such a page's `path` starts at the command's
+  name, and its `full_path` at the program's. `Page` has the methods
+  `usage` and `sub_stem`. `applet_aliases(root, &pages)` lists the shown
+  aliases and the command each stands for, and is an error when one is a
+  page's name.
 - **Added**: `bool_value` on a `bool` flag: it also takes `--flag=true` and
   `--flag=false`, attached, and alone is true. Help shows `--flag[=<BOOL>]`
   and its two values. `Arg::switch_value` reads one.
@@ -46,12 +44,6 @@ released together. Versions follow [semver](https://semver.org).
   the description, in help and the pages.
 - **Added**: `usage = "…"` on a struct: the usage lines as written, in help
   and the pages, in place of the ones made from the fields.
-- **Changed**: `help::Command` has six more fields (`before_help`,
-  `before_long_help`, `usage`, `long_version`, `multicall`,
-  `external_subcommands`) and
-  `winnow_args_spec::Command` five (`before_help`, `before_long_help`,
-  `usage`, `external_subcommands`, `multicall`). A value written by hand
-  that ends in `..Command::EMPTY` or `..Command::default()` is unaffected.
 - **Added**: a bare `env` on a field reads the variable of the field's name
   in capitals: `jobs` reads `JOBS`.
 - **Added**: `default` repeated on a `Vec`, one value each, in order. Help
@@ -66,9 +58,6 @@ released together. Versions follow [semver](https://semver.org).
   field and `{1}` the members. The error is `Error::one_of_required_by`, of
   the kind `MissingOneOf`, with the group's name as its token. If a field has
   the group's name, the field is meant.
-- **Changed**: `help::Item` and `winnow_args_spec::Item` have two more
-  fields, `visible_aliases` and `value_names`. A value written by hand that
-  ends in `..Item::EMPTY` or `..Item::default()` is unaffected.
 - **Added**: `conflicts` and `requires` take `message = "…"` after their
   names, and `group` takes it among its options: the program's own words in
   place of the default error, `{0}` and `{1}` the two names. The error's kind
@@ -77,10 +66,24 @@ released together. Versions follow [semver](https://semver.org).
   wide character takes two and a combining mark none, as clap's does.
 - **Added**: `verbatim_doc_comment` keeps a doc comment's lines as written,
   on a field, a struct, a `Subcommand` enum or a variant.
+- **Changed**: smaller generated parsers: a non-ASCII short letter is decoded
+  out of line, and the lexer has no inlined panic paths. The bench's mise
+  binary is 5 % smaller, and no slower.
 - **Changed**: every required flag and positional left without a value is
   reported at once, under "the following required arguments were not
   provided", each as `--help` lists it: its spellings, value, description
   and possible values. The error's kind and token are the first one's.
+- **Changed**: `winnow_args_spec::Page` is `#[non_exhaustive]`, and has the
+  field `full_path`: it is no longer built by a struct literal.
+- **Changed**: `help::Command` has six more fields (`before_help`,
+  `before_long_help`, `usage`, `long_version`, `multicall`,
+  `external_subcommands`) and
+  `winnow_args_spec::Command` five (`before_help`, `before_long_help`,
+  `usage`, `external_subcommands`, `multicall`). A value written by hand
+  that ends in `..Command::EMPTY` or `..Command::default()` is unaffected.
+- **Changed**: `help::Item` and `winnow_args_spec::Item` have two more
+  fields, `visible_aliases` and `value_names`. A value written by hand that
+  ends in `..Item::EMPTY` or `..Item::default()` is unaffected.
 - **Fixed**: a doc comment's paragraph is wrapped to the terminal, not where
   its source lines break; an indented line is kept as written.
 

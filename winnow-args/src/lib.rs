@@ -336,8 +336,8 @@ pub trait Args: Sized {
 
     /// The completion script for `shell`, calling back the program named in
     /// the help data (`#[arg(name = "…")]`). A `multicall` command's also
-    /// completes each subcommand by its name and shown aliases, those that
-    /// are plain words, asking the program with the line as typed.
+    /// completes under each subcommand's name and shown aliases that are
+    /// plain words, asking the program with the line as typed.
     ///
     /// # Panics
     ///
