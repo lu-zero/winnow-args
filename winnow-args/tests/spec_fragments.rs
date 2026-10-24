@@ -401,6 +401,15 @@ fn external_and_multicall_are_in_the_fragments() {
         .collect();
     assert_eq!(names, ["ls"]);
     assert_eq!(command.notes().len(), 2);
+    let pages = winnow_args_spec::pages(&command, "spec-box").unwrap();
+    let paths: Vec<_> = pages.iter().map(|page| page.usage()).collect();
+    assert_eq!(
+        paths,
+        [
+            "spec-box [OPTIONS] <COMMAND>",
+            "ls [OPTIONS]\nspec-box ls [OPTIONS]",
+        ]
+    );
     let tools = catalog
         .stitch("SpecTools")
         .unwrap_or_else(|error| panic!("{error}"));

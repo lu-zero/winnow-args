@@ -136,6 +136,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] In a man page: a description's code and strong spans are bold, its
       emphasized ones italic, without their stars; in Markdown, they are
       Markdown's own spans
+- [x] A `multicall` program's commands paged under their own names, with
+      the usage under both; a man page for each shown alias, by `.so`
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
 - [x] Derives read every built field, so a flag accepted and ignored is not
       dead code in the user's crate

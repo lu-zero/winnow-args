@@ -19,7 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 A page is named after its command, `tool-use-add.md`, and a subcommand is a
-link to its own page. A description's `` `code` ``, `*emphasized*` and `**strong**`
+link to its own page. A `multicall` program's commands are named alone,
+`ls.md`, and their usage is given under both names. A description's `` `code` ``, `*emphasized*` and `**strong**`
 spans are written as Markdown's own, and other Markdown in it is escaped.
 
 The repository's

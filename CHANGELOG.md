@@ -11,18 +11,27 @@ released together. Versions follow [semver](https://semver.org).
   no other variant and is not a flag, where nothing else takes it, is its
   first value, and the words after it the rest, as typed.
   `Subcommand::EXTERNAL` says an enum has one. A struct with
-  `default_subcommand` cannot hold such an enum. The pages say a word that
-  names no command is an external one.
+  `default_subcommand` cannot hold such an enum. Completion offers nothing
+  after its name, and the pages say a word that names no command is an
+  external one.
 - **Added**: `multicall` on a struct or a `Subcommand` enum: run under the
   name of one of its subcommands, as busybox's applets are linked, the
-  program is that subcommand, its help names it alone, and an error's offset
-  counts from the first word after the name. Under any other
-  name the line is read as usual. `parse`, `try_parse` and
+  program is that subcommand. Its help names it by the name it was run as,
+  and an error's offset counts from the first word after that name. Under
+  any other name the line is read as usual. `parse`, `try_parse` and
   `parse_from_argv` do this; `parse_words` has no program name. Completion
-  follows the name typed, and `completion_script` registers each command's
-  name and shown aliases too, calling the program by that name; the pages
-  say so.
-- **Added**: `complete::scripts`: one completion script for several names.
+  follows the name typed, and `completion_script` completes each command's
+  name and shown aliases too, asking the program itself, so a name not
+  linked to it never runs. The pages say so.
+- **Added**: `complete::scripts`: one completion script for several names,
+  answered by the first.
+- **Added**: a `multicall` program's commands have pages of their own name,
+  `ls.1` and `ls.md` in place of `busybox-ls.1`, whose synopsis gives
+  `ls` and `busybox ls`; in a man page, a shown alias is a page that sources
+  its command's. A `Page`'s `path` then starts at the command's name, and
+  the new `full_path` at the program's; `Page` has the methods `usage` and
+  `sub_stem`, and is `#[non_exhaustive]`. `applet_aliases` lists the
+  aliases.
 - **Changed**: smaller generated parsers: a non-ASCII short letter is decoded
   out of line, and the lexer has no inlined panic paths. mise's binary is
   5 % smaller, and no slower.
@@ -37,8 +46,9 @@ released together. Versions follow [semver](https://semver.org).
   the description, in help and the pages.
 - **Added**: `usage = "…"` on a struct: the usage lines as written, in help
   and the pages, in place of the ones made from the fields.
-- **Changed**: `help::Command` has five more fields (`before_help`,
-  `before_long_help`, `usage`, `long_version`, `multicall`) and
+- **Changed**: `help::Command` has six more fields (`before_help`,
+  `before_long_help`, `usage`, `long_version`, `multicall`,
+  `external_subcommands`) and
   `winnow_args_spec::Command` five (`before_help`, `before_long_help`,
   `usage`, `external_subcommands`, `multicall`). A value written by hand
   that ends in `..Command::EMPTY` or `..Command::default()` is unaffected.

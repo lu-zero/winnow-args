@@ -4,7 +4,7 @@
 use roff::{Inline, Roff};
 use winnow_args_spec::marks::{Mark, pieces};
 use winnow_args_spec::words::{Word, example_words};
-use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, pages};
+use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, applet_aliases, pages};
 
 /// Header fields of a manual page. They are not part of the command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,19 +54,32 @@ impl Manual {
     /// The root page and one page per visible subcommand.
     ///
     /// Each pair is `(file name, roff)`. `tool use` in section 1 is
-    /// `tool-use.1`. Two paths that join to one name are an error.
+    /// `tool-use.1`. Two paths that join to one name are an error. A
+    /// `multicall` program's commands are pages of their own, `ls.1`, and
+    /// each of their shown aliases a page that sources the command's.
     pub fn render_pages(
         &self,
         root: &Command,
         bin: &str,
     ) -> Result<Vec<(String, String)>, winnow_args_spec::Error> {
-        Ok(pages(root, bin)?
+        let section = &self.section;
+        let pages = pages(root, bin)?;
+        let aliases = applet_aliases(root, &pages)?;
+        let mut out: Vec<(String, String)> = pages
             .iter()
-            .map(|page| {
-                let file = format!("{}.{}", page.stem(), self.section);
-                (file, self.render(page))
-            })
-            .collect())
+            .map(|page| (format!("{}.{section}", page.stem()), self.render(page)))
+            .collect();
+        // `man` reads `.so` from the top of the tree, in the directory of
+        // the section's number: `man1/ls.1`, `man3/ls.3x`.
+        let mut dir: String = section.chars().take_while(char::is_ascii_digit).collect();
+        if dir.is_empty() {
+            dir.clone_from(section);
+        }
+        for (alias, name) in aliases {
+            let page = format!(".so man{dir}/{name}.{section}\n");
+            out.push((format!("{alias}.{section}"), page));
+        }
+        Ok(out)
     }
 
     /// One page.
@@ -95,7 +108,7 @@ impl Manual {
         }
 
         doc.control("SH", ["SYNOPSIS"]);
-        for (n, line) in command.usage(&page.path).lines().enumerate() {
+        for (n, line) in page.usage().lines().enumerate() {
             if n > 0 {
                 doc.control("br", std::iter::empty::<&str>());
             }
@@ -375,6 +388,80 @@ mod tests {
         let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
         assert!(page.contains("is an external one"), "{page}");
         assert!(page.contains("it is that command."), "{page}");
+    }
+
+    #[test]
+    fn a_multicall_program_s_commands_are_pages_of_their_own() {
+        let list = Command {
+            items: vec![Item {
+                short: Some('l'),
+                help: "Long.".to_owned(),
+                ..Item::default()
+            }],
+            subcommands: vec![Sub {
+                name: "dir".to_owned(),
+                ..Sub::default()
+            }],
+            ..Command::default()
+        };
+        let command = Command {
+            name: "busybox".to_owned(),
+            multicall: true,
+            subcommands: vec![Sub {
+                name: "ls".to_owned(),
+                aliases: vec!["list".to_owned()],
+                hidden_aliases: vec!["l".to_owned()],
+                command: list,
+                ..Sub::default()
+            }],
+            ..Command::default()
+        };
+        let pages = Manual::default().render_pages(&command, "busybox").unwrap();
+        let names: Vec<&str> = pages.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["busybox.1", "ls.1", "ls-dir.1", "list.1"]);
+        let ls = &pages[1].1;
+        assert!(ls.contains(".TH LS 1\n.SH NAME\n\\fBls\\fR\n"), "{ls}");
+        assert!(
+            ls.contains("ls [OPTIONS] [COMMAND]\n.br\nbusybox ls [OPTIONS] [COMMAND]\n"),
+            "{ls}"
+        );
+        assert!(pages[2].1.contains("ls dir\n.br\nbusybox ls dir\n"));
+        assert_eq!(pages[3].1, ".so man1/ls.1\n");
+        let section = Manual {
+            section: "n".to_owned(),
+            ..Manual::default()
+        };
+        let pages = section.render_pages(&command, "busybox").unwrap();
+        assert_eq!(
+            pages[3],
+            ("list.n".to_owned(), ".so mann/ls.n\n".to_owned())
+        );
+    }
+
+    #[test]
+    fn an_alias_that_names_a_page_is_an_error() {
+        let command = Command {
+            multicall: true,
+            subcommands: vec![
+                Sub {
+                    name: "ls".to_owned(),
+                    ..Sub::default()
+                },
+                Sub {
+                    name: "dir".to_owned(),
+                    aliases: vec!["ls".to_owned()],
+                    ..Sub::default()
+                },
+            ],
+            ..Command::default()
+        };
+        let error = Manual::default().render_pages(&command, "busybox");
+        assert_eq!(
+            error.unwrap_err().to_string(),
+            "two pages would be named ls"
+        );
+        // Markdown has no page for an alias.
+        assert!(pages(&command, "busybox").is_ok());
     }
 
     #[test]

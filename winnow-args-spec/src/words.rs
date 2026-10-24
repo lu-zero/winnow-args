@@ -25,7 +25,8 @@ pub enum Word {
 /// `line` cut into pieces, in order, that join back into it.
 ///
 /// The program comes first, then the subcommands of `page`'s path from its
-/// second word on, then those of its command. A flag is one the command or
+/// second word on, then those of its command. Named as a `multicall`
+/// program, the program is followed by its [`Page::full_path`]'s. A flag is one the command or
 /// its parents' globals spell; a flag that takes a value makes the next word,
 /// or the next `values`, plain. After `--`, or a word that is neither,
 /// nothing is a subcommand; after `--` nothing is a flag either. A quoted or
@@ -35,6 +36,7 @@ pub fn example_words<'a>(line: &'a str, page: &Page<'_>) -> Vec<(Word, &'a str)>
     let mut command = Some(page.command);
     let mut ahead = page.path.get(1..).unwrap_or_default();
     let (mut program, mut flags, mut values) = (true, true, 0usize);
+    let mut first = true;
     let mut at = 0;
     for (start, end) in shell_words(line) {
         if at < start {
@@ -66,7 +68,11 @@ pub fn example_words<'a>(line: &'a str, page: &Page<'_>) -> Vec<(Word, &'a str)>
         }
         if program {
             out.push((Word::Program, word));
-            program = false;
+            // `busybox ls -l` on `ls`'s page.
+            if first && page.full_path.first().is_some_and(|name| name == word) {
+                ahead = &page.full_path[1..];
+            }
+            (program, first) = (false, false);
             continue;
         }
         if values > 0 {
@@ -240,6 +246,7 @@ mod tests {
         };
         let page = Page {
             path: vec!["t".to_owned()],
+            full_path: Vec::new(),
             command: &command,
             globals: Vec::new(),
         };
@@ -268,5 +275,32 @@ mod tests {
         );
         let all: String = example_words(line, &page).iter().map(|(_, t)| *t).collect();
         assert_eq!(all, line);
+    }
+
+    #[test]
+    fn a_multicall_command_s_page_reads_either_name() {
+        let ls = Command {
+            items: vec![Item {
+                short: Some('l'),
+                ..Item::default()
+            }],
+            ..Command::default()
+        };
+        let page = Page {
+            path: vec!["ls".to_owned()],
+            full_path: vec!["busybox".to_owned(), "ls".to_owned()],
+            command: &ls,
+            globals: Vec::new(),
+        };
+        let kinds = |line| -> Vec<Word> {
+            let words = example_words(line, &page).into_iter();
+            words
+                .filter(|(_, t)| !t.trim().is_empty())
+                .map(|(w, _)| w)
+                .collect()
+        };
+        assert_eq!(kinds("ls -l"), [Word::Program, Word::Flag]);
+        let full = [Word::Program, Word::Command, Word::Flag];
+        assert_eq!(kinds("busybox ls -l"), full);
     }
 }

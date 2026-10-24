@@ -18,7 +18,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-A page is named after its command, `tool-use-add.1`. `Manual` holds the
+A page is named after its command, `tool-use-add.1`. A `multicall`
+program's commands are named alone, `ls.1`, with the usage under both
+names, and each shown alias is a page that sources its command's. `Manual` holds the
 header's date, source and title; `Manual::date_of` turns
 `SOURCE_DATE_EPOCH` into the date. A description's `` `code` `` and `**strong**`
 spans are bold, its `*emphasized*` ones italic; the backticks are kept and

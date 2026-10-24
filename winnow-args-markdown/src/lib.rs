@@ -42,7 +42,7 @@ pub fn render(page: &Page<'_>) -> String {
 
     heading(&mut out, "Usage");
     out.push_str("```\n");
-    out.push_str(&command.usage(&page.path));
+    out.push_str(&page.usage());
     out.push_str("\n```\n\n");
 
     let subs: Vec<&Sub> = command.subcommands.iter().filter(|sub| !sub.hide).collect();
@@ -147,9 +147,9 @@ fn heading(out: &mut String, title: &str) {
 
 fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) {
     out.push_str(&format!(
-        "* [`{name}`]({stem}-{name}.md)",
+        "* [`{name}`]({stem}.md)",
         name = sub.name,
-        stem = page.stem()
+        stem = page.sub_stem(sub)
     ));
     for alias in &sub.aliases {
         out.push_str(", `");
@@ -353,6 +353,47 @@ mod tests {
         for note in command.notes() {
             assert!(page.contains(note), "{page}");
         }
+    }
+
+    #[test]
+    fn a_multicall_program_s_commands_are_pages_of_their_own() {
+        let list = Command {
+            items: vec![Item {
+                short: Some('l'),
+                help: "Long.".to_owned(),
+                ..Item::default()
+            }],
+            subcommands: vec![Sub {
+                name: "dir".to_owned(),
+                ..Sub::default()
+            }],
+            ..Command::default()
+        };
+        let command = Command {
+            name: "busybox".to_owned(),
+            multicall: true,
+            subcommands: vec![Sub {
+                name: "ls".to_owned(),
+                aliases: vec!["list".to_owned()],
+                hidden_aliases: vec!["l".to_owned()],
+                command: list,
+                ..Sub::default()
+            }],
+            ..Command::default()
+        };
+        let pages = render_pages(&command, "busybox").unwrap();
+        let names: Vec<&str> = pages.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(names, ["busybox.md", "ls.md", "ls-dir.md"]);
+        assert!(
+            pages[0].1.contains("* [`ls`](ls.md), `list`"),
+            "{}",
+            pages[0].1
+        );
+        let ls = &pages[1].1;
+        assert!(ls.starts_with("# ls\n"), "{ls}");
+        let usage = "```\nls [OPTIONS] [COMMAND]\nbusybox ls [OPTIONS] [COMMAND]\n```";
+        assert!(ls.contains(usage), "{ls}");
+        assert!(ls.contains("* [`dir`](ls-dir.md)"), "{ls}");
     }
 
     #[test]

@@ -261,9 +261,14 @@ pub struct Grouped<'a> {
 
 /// One command in a walk of the tree, with the global flags of its parents.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Page<'a> {
-    /// Program name, then each subcommand word.
+    /// Program name, then each subcommand word. A `multicall` program's
+    /// commands are programs of their own: their paths start at their name.
     pub path: Vec<String>,
+    /// For a `multicall` program's command, the path from the program's
+    /// name, which runs it too: `busybox ls` for `ls`. Empty otherwise.
+    pub full_path: Vec<String>,
     /// The command this page documents.
     pub command: &'a Command,
     /// Global flags inherited from parents, in the order they were declared.
@@ -905,9 +910,34 @@ impl Page<'_> {
     pub fn stem(&self) -> String {
         self.path.join("-")
     }
+
+    /// The stem of `sub`'s page: this one's and its name, or its name
+    /// alone under a `multicall` program.
+    pub fn sub_stem(&self, sub: &Sub) -> String {
+        if self.multicall_root() {
+            sub.name.clone()
+        } else {
+            format!("{}-{}", self.stem(), sub.name)
+        }
+    }
+
+    /// The usage lines, under each name that runs the command.
+    pub fn usage(&self) -> String {
+        let mut usage = self.command.usage(&self.path);
+        if !self.full_path.is_empty() && self.command.usage.is_empty() {
+            usage.push('\n');
+            usage.push_str(&self.command.usage(&self.full_path));
+        }
+        usage
+    }
+
+    fn multicall_root(&self) -> bool {
+        self.command.multicall && self.path.len() == 1 && self.full_path.is_empty()
+    }
 }
 
 /// The root page, then one page per visible subcommand, at every depth.
+/// A `multicall` program's commands are paged under their own names.
 ///
 /// A page is a file named after its path, so an empty word or one with a
 /// path separator is an error, and so are two paths that join to one name. `tool use add` and
@@ -915,11 +945,17 @@ impl Page<'_> {
 /// the first.
 pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
     let mut out = Vec::new();
-    walk(root, vec![bin.to_owned()], &[], &mut out);
+    let root_path = vec![bin.to_owned()];
+    walk(root, root_path, Vec::new(), &[], &mut out);
+    unique_stems(out.iter().map(|page| page.path.clone()))?;
+    Ok(out)
+}
+
+/// Whether each path is a file name, and no two join to one.
+fn unique_stems(paths: impl Iterator<Item = Vec<String>>) -> Result<(), Error> {
     let mut seen = HashSet::new();
-    for page in &out {
-        if let Some(word) = page
-            .path
+    for path in paths {
+        if let Some(word) = path
             .iter()
             .find(|word| word.is_empty() || word.contains(['/', '\\']))
         {
@@ -927,17 +963,43 @@ pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
                 "`{word}` cannot be part of a file name"
             )));
         }
-        let stem = page.stem();
+        let stem = path.join("-");
         if !seen.insert(stem.clone()) {
             return Err(Error::new(format!("two pages would be named {stem}")));
         }
     }
-    Ok(out)
+    Ok(())
+}
+
+/// The shown aliases of a `multicall` program's commands, each with the
+/// name it stands for: run under the alias, the program is that command,
+/// so a manual has a page by that name that points to the command's.
+/// `pages` are [`pages`]' for `root`: an alias that is a page's name, or
+/// no file name, is an error.
+pub fn applet_aliases<'a>(
+    root: &'a Command,
+    pages: &[Page<'_>],
+) -> Result<Vec<(&'a str, &'a str)>, Error> {
+    if !root.multicall {
+        return Ok(Vec::new());
+    }
+    let subs = root.subcommands.iter().filter(|sub| !sub.hide);
+    let aliases: Vec<(&str, &str)> = subs
+        .flat_map(|sub| {
+            sub.aliases
+                .iter()
+                .map(|alias| (alias.as_str(), sub.name.as_str()))
+        })
+        .collect();
+    let named = aliases.iter().map(|(alias, _)| vec![(*alias).to_owned()]);
+    unique_stems(pages.iter().map(|page| page.path.clone()).chain(named))?;
+    Ok(aliases)
 }
 
 fn walk<'a>(
     command: &'a Command,
     path: Vec<String>,
+    full_path: Vec<String>,
     ancestors: &[&'a Item],
     out: &mut Vec<Page<'a>>,
 ) {
@@ -948,15 +1010,27 @@ fn walk<'a>(
         .collect();
     let mut next = ancestors.to_vec();
     next.extend(command.items.iter().filter(|item| item.global));
-    out.push(Page {
-        path: path.clone(),
+    let page = Page {
+        path,
+        full_path,
         command,
         globals,
-    });
+    };
+    let multicall = page.multicall_root();
+    let (path, full_path) = (page.path.clone(), page.full_path.clone());
+    out.push(page);
     for sub in command.subcommands.iter().filter(|sub| !sub.hide) {
-        let mut child = path.clone();
+        // Under a `multicall` program a command's path starts at its name,
+        // and the full one at the program's.
+        let (mut child, mut full) = match multicall {
+            true => (Vec::new(), path.clone()),
+            false => (path.clone(), full_path.clone()),
+        };
         child.push(sub.name.clone());
-        walk(&sub.command, child, &next, out);
+        if !full.is_empty() {
+            full.push(sub.name.clone());
+        }
+        walk(&sub.command, child, full, &next, out);
     }
 }
 
