@@ -200,6 +200,7 @@ pub fn complete(root: &'static Command, words: &[&str]) -> Completions {
         owing: None,
         stopped: false,
         position: 0,
+        external: false,
     };
     for word in before {
         state.step(word);
@@ -228,6 +229,8 @@ struct Walk {
     stopped: bool,
     /// How many positionals were given.
     position: usize,
+    /// Past an external subcommand's name: the rest is its own.
+    external: bool,
 }
 
 impl Walk {
@@ -242,6 +245,7 @@ impl Walk {
             owing: None,
             stopped: false,
             position: 0,
+            external: false,
         }
     }
 
@@ -372,7 +376,7 @@ impl Walk {
     }
 
     fn step(&mut self, word: &str) {
-        if self.consume_owing(word) {
+        if self.external || self.consume_owing(word) {
             return;
         }
         if self.stopped {
@@ -411,12 +415,16 @@ impl Walk {
             *self = self.within(sub);
             self.position = 1;
         } else {
+            self.external = self.command.external_subcommands && !self.positional_left();
             self.position += 1;
         }
     }
 
     fn complete(&self, current: &str) -> Completions {
         let mut out = Completions::default();
+        if self.external {
+            return out;
+        }
         if let Some(owing) = self.owing {
             let as_value = owing.fixed > 0
                 || (owing.flexible && !crate::token::is_flag_like(current.as_bytes()));
@@ -474,6 +482,12 @@ impl Walk {
             self.within(sub).positional(current, &mut out);
         }
         out
+    }
+
+    /// Whether a positional takes the next word.
+    fn positional_left(&self) -> bool {
+        let mut positionals = self.command.items.iter().filter(|i| i.positional);
+        positionals.clone().nth(self.position).is_some() || positionals.any(|i| i.multiple)
     }
 
     /// The values of the positional the next word fills.
@@ -742,27 +756,44 @@ pub fn script(bin: &str, shell: Shell) -> String {
 }
 
 /// One completion script for each of `bins` in `shell`, as one file: a
-/// `multicall` program's, and the names of its commands it is linked as.
-/// Each name calls back the program by that name.
+/// `multicall` program's, the first, and the names of its commands it is
+/// linked as. Each asks the program, with the line as typed: a name that is
+/// not linked to it never runs, and the functions are named after it, so no
+/// shell's own completion for that name is replaced.
 ///
 /// # Panics
 ///
 /// If `bins` is empty, or a name is not one plain word, as for [`script`].
 pub fn scripts(bins: &[&str], shell: Shell) -> String {
-    assert!(!bins.is_empty(), "a completion script needs a program name");
+    let Some(&program) = bins.first() else {
+        panic!("a completion script needs a program name");
+    };
+    let mut functions: Vec<(String, &str)> = Vec::new();
+    for &bin in bins {
+        let mut function = function_name(program);
+        if bin != program {
+            function = format!("{function}_{}", function_name(bin));
+        }
+        // `a-b` and `a_b` would share one.
+        let base = function.clone();
+        let mut n = 1;
+        while functions.iter().any(|(other, _)| *other == function) {
+            n += 1;
+            function = format!("{base}{n}");
+        }
+        functions.push((function, bin));
+    }
+    let each = functions
+        .iter()
+        .map(|(function, bin)| one_script(bin, program, function, shell));
     if shell != Shell::Zsh {
-        let each: Vec<String> = bins.iter().map(|bin| one_script(bin, shell)).collect();
-        return each.join("\n");
+        return each.collect::<Vec<_>>().join("\n");
     }
     // zsh loads one file for every name `#compdef` lists, and says which in
     // `$service`. Loading it defines the functions, the first replacing the
     // one zsh loaded it as, so each name is registered again.
     let mut out = format!("#compdef {}\n", bins.join(" "));
-    for bin in bins {
-        out.push_str(&one_script(bin, shell));
-    }
-    let functions: Vec<(String, &str)> =
-        bins.iter().map(|bin| (function_name(bin), *bin)).collect();
+    out.extend(each);
     if let [(function, bin)] = &functions[..] {
         out.push_str(&format!(
             "if [[ $zsh_eval_context[-1] == loadautofunc ]]; then\n    _{function} \"$@\"\nelse\n    compdef _{function} {bin}\nfi\n"
@@ -780,6 +811,14 @@ pub fn scripts(bins: &[&str], shell: Shell) -> String {
     out
 }
 
+/// Whether `bin` can be named unquoted in a script: [`script`] panics otherwise.
+pub(crate) fn plain_name(bin: &str) -> bool {
+    !bin.is_empty()
+        && bin
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
+}
+
 /// The name of `bin`'s completion function, without its shell's prefix.
 fn function_name(bin: &str) -> String {
     bin.chars()
@@ -787,19 +826,17 @@ fn function_name(bin: &str) -> String {
         .collect()
 }
 
-/// [`script`] for one name; for zsh, its function alone.
-fn one_script(bin: &str, shell: Shell) -> String {
-    assert!(
-        !bin.is_empty()
-            && bin
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+')),
-        "a completion script needs a plain program name, not {bin:?}"
-    );
-    let function = function_name(bin);
+/// [`script`] for `bin`, answered by `program`; for zsh, its function alone.
+fn one_script(bin: &str, program: &str, function: &str, shell: Shell) -> String {
+    for name in [bin, program] {
+        assert!(
+            plain_name(name),
+            "a completion script needs a plain program name, not {name:?}"
+        );
+    }
     match shell {
         Shell::Bash => format!(
-            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{program} {REQUEST}`.
 _{function}_complete() {{
     local line ask= cur="${{COMP_WORDS[COMP_CWORD]}}"
     # Right after `--name=`, the current word is the `=` itself.
@@ -812,7 +849,7 @@ _{function}_complete() {{
             $'\001commands') ask=c ;;
             ?*) COMPREPLY+=("$line") ;;
         esac
-    done < <(command {bin} {REQUEST} --shell bash --line "${{COMP_LINE:0:COMP_POINT}}" \
+    done < <(command {program} {REQUEST} --shell bash --line "${{COMP_LINE:0:COMP_POINT}}" \
         --bash-word "${{COMP_WORDS[COMP_CWORD]}}" 2>/dev/null)
     if [[ -n $ask ]]; then
         [[ $ask == c ]] || compopt -o filenames 2>/dev/null
@@ -824,7 +861,7 @@ complete -F _{function}_complete {bin}
 "#
         ),
         Shell::Zsh => format!(
-            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{program} {REQUEST}`.
 _{function}() {{
     local -a candidates
     local line ask= before=
@@ -836,7 +873,7 @@ _{function}() {{
             ?*) candidates+=("$line"); continue ;;
         esac
         before=${{line#*$'\t'}}
-    done < <(command {bin} {REQUEST} --shell zsh --line "${{BUFFER[1,CURSOR]}}" 2>/dev/null)
+    done < <(command {program} {REQUEST} --shell zsh --line "${{BUFFER[1,CURSOR]}}" 2>/dev/null)
     (( ${{#candidates}} )) && _describe -t values '{bin}' candidates
     if [[ -n $ask ]]; then
         # `--name=`, when the value is attached: not a part of what is asked for.
@@ -851,10 +888,10 @@ _{function}() {{
 "#
         ),
         Shell::Fish => format!(
-            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{program} {REQUEST}`.
 function __{function}_complete
     set -l token (commandline -ct)
-    for line in (command {bin} {REQUEST} --shell fish --line (commandline -cp) 2>/dev/null)
+    for line in (command {program} {REQUEST} --shell fish --line (commandline -cp) 2>/dev/null)
         if not string match -q \u0001'*' -- $line
             test -n "$line"; and printf '%s\n' $line
             continue
@@ -877,11 +914,11 @@ complete -c {bin} -f -a '(__{function}_complete)'
 "#
         ),
         Shell::Elvish => format!(
-            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{program} {REQUEST}`.
 use str
 
 set edit:completion:arg-completer[{bin}] = {{|@words|
-    for answer [(e:{bin} {REQUEST} --shell elvish --words $@words 2>/dev/null | from-lines)] {{
+    for answer [(e:{program} {REQUEST} --shell elvish --words $@words 2>/dev/null | from-lines)] {{
         if (str:has-prefix $answer "\x01") {{
             # The mark, then `--name=` when the value is attached to its flag.
             var asked before = (str:split &max=2 "\t" $answer)
@@ -912,7 +949,7 @@ set edit:completion:arg-completer[{bin}] = {{|@words|
 "#
         ),
         Shell::PowerShell => format!(
-            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{program} {REQUEST}`.
 Register-ArgumentCompleter -Native -CommandName '{bin}' -ScriptBlock {{
     param($wordToComplete, $commandAst, $cursorPosition)
 
@@ -923,7 +960,7 @@ Register-ArgumentCompleter -Native -CommandName '{bin}' -ScriptBlock {{
     $line = $extent.Text.Substring(0, $offset)
     # The extent ends at the last token: a word not yet typed needs its space.
     if ($wordToComplete -eq '' -and -not $line.EndsWith(' ')) {{ $line += ' ' }}
-    $answers = @(& '{bin}' {REQUEST} --shell powershell --line $line 2>$null)
+    $answers = @(& '{program}' {REQUEST} --shell powershell --line $line 2>$null)
 
     foreach ($answer in $answers) {{
         if ([string]::IsNullOrEmpty($answer)) {{ continue }}

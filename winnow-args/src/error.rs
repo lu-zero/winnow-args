@@ -78,7 +78,7 @@ struct Request {
     /// its page lists the global flags of the commands above it.
     root: Option<&'static crate::help::Command>,
     /// The program was run under its subcommand's name (`multicall`): the
-    /// first name in `path` is the program's own, not one after it.
+    /// first name in `path` is the one the program was run by.
     applet: bool,
 }
 
@@ -591,12 +591,11 @@ impl Error {
         if self.kind != ErrorKind::HelpRequested {
             return None;
         }
-        // Run as a subcommand, the program's name is the subcommand's.
-        let mut path = match request.applet {
-            true => Vec::new(),
-            false => vec![program],
-        };
-        path.extend(&request.path);
+        // Run as a subcommand, `program` is the name it was run by, in
+        // place of the subcommand's, which may be an alias's.
+        let names = request.path.get(usize::from(request.applet)..);
+        let mut path = vec![program];
+        path.extend(names.unwrap_or_default());
         let width = crate::help::width();
         let inherited = request
             .root

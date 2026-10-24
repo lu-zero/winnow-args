@@ -729,6 +729,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
 
     // A name no variant has is the external one's, which takes the words left.
+    let has_external = external.is_some();
     let (external_const, external_arm, external_word) = match &external {
         Some((ident, ty)) => (
             quote!(
@@ -808,6 +809,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 help_flag: true,
                 help_short: true,
                 multicall: #multicall,
+                external_subcommands: #has_external,
                 ..::winnow_args::help::Command::EMPTY
             };
 
@@ -4262,15 +4264,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .into_iter()
         .filter(|f| !matches!(f.role, Role::Subcommand))
         .map(|f| f.help_item());
-    let (help_subcommands, subcommand_required) = match subcommand {
+    let (help_subcommands, subcommand_required, help_external) = match subcommand {
         Some(f) => {
             let ty = subcommand_type(f);
             (
                 quote!(<#ty as ::winnow_args::Args>::HELP.subcommands),
                 matches!(f.kind, Kind::Required(_)),
+                quote!(<#ty as ::winnow_args::Args>::HELP.external_subcommands),
             )
         }
-        None => (quote!(&[]), false),
+        None => (quote!(&[]), false, quote!(false)),
     };
     let displaced = rules.displaced_slots(&fields);
     let env_fallbacks: Vec<TokenStream2> = fields
@@ -4745,6 +4748,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 examples: &[#(#help_examples),*],
                 headings: #help_headings,
                 multicall: #multicall,
+                external_subcommands: #help_external,
             };
 
             fn parse_argv_with(

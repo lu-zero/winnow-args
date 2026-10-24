@@ -162,3 +162,24 @@ fn help_does_not_list_it() {
     let names: Vec<_> = Cargo::HELP.subcommands.iter().map(|s| s.name).collect();
     assert_eq!(names, ["build"]);
 }
+
+/// What a completion callback answers, for `line` typed up to the cursor.
+fn complete<T: Args>(line: &str) -> String {
+    let args: Vec<OsString> = ["__complete_word__", "--shell", "fish", "--line", line]
+        .into_iter()
+        .map(OsString::from)
+        .collect();
+    T::completion_request(&args).unwrap()
+}
+
+#[test]
+fn completion_leaves_its_words_alone() {
+    assert!(complete::<Cargo>("cargo ").contains("build"));
+    assert!(complete::<Cargo>("cargo -").contains("--quiet"));
+    assert_eq!(complete::<Cargo>("cargo foo "), "");
+    assert_eq!(complete::<Cargo>("cargo foo -"), "");
+    assert_eq!(complete::<Cargo>("cargo -q foo --bar "), "");
+    // A positional takes the first word.
+    assert!(complete::<WithPositional>("w a ").contains("build"));
+    assert_eq!(complete::<WithPositional>("w a foo "), "");
+}

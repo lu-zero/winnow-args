@@ -86,6 +86,10 @@ fn help_names_the_subcommand_alone() {
     let e = Busybox::parse_from_argv(["ls", "--help"]).unwrap_err();
     let help = e.render_help("ls").unwrap();
     assert!(help.contains("Usage: ls [OPTIONS]"), "{help}");
+    // By an alias, help names the alias.
+    let e = Busybox::parse_from_argv(["dir", "--help"]).unwrap_err();
+    let help = e.render_help("dir").unwrap();
+    assert!(help.contains("Usage: dir [OPTIONS]"), "{help}");
     let e = Busybox::parse_from_argv(["busybox", "ls", "--help"]).unwrap_err();
     let help = e.render_help("busybox").unwrap();
     assert!(help.contains("Usage: busybox ls [OPTIONS]"), "{help}");
@@ -101,6 +105,31 @@ fn complete(line: &str) -> String {
 }
 
 #[test]
+fn names_a_script_cannot_hold_are_left_out() {
+    #[derive(Subcommand)]
+    enum Tool {
+        #[arg(name = "[", alias = "test")]
+        Test,
+        #[arg(name = "a-b")]
+        Dash,
+        #[arg(name = "a_b")]
+        Underscore,
+    }
+    #[derive(Args)]
+    #[arg(multicall, name = "box")]
+    struct Box {
+        #[arg(subcommand)]
+        tool: Tool,
+    }
+    let _ = |b: Box| b.tool;
+    let bash = Box::completion_script(Shell::Bash);
+    assert!(!bash.contains(" [\n") && bash.contains("_box_test_complete test\n"));
+    // `a-b` and `a_b` are one function name apart.
+    assert!(bash.contains("_box_a_b_complete a-b\n"), "{bash}");
+    assert!(bash.contains("_box_a_b2_complete a_b\n"), "{bash}");
+}
+
+#[test]
 fn completion_follows_the_name_typed() {
     assert!(complete("ls -").contains("-l"), "{}", complete("ls -"));
     assert!(complete("/bin/ls -").contains("-l"));
@@ -113,16 +142,25 @@ fn completion_follows_the_name_typed() {
 #[test]
 fn the_script_completes_each_name() {
     let bash = Busybox::completion_script(Shell::Bash);
-    for name in ["busybox", "ls", "echo", "dir"] {
-        let call = format!("command {name} __complete_word__");
-        assert!(bash.contains(&call), "{name}: {bash}");
-        assert!(bash.contains(&format!("complete -F _{name}_complete {name}\n")));
+    // Each name asks busybox: an `ls` not linked to it never runs.
+    assert_eq!(bash.matches("command busybox __complete_word__").count(), 4);
+    assert!(!bash.contains("command ls"), "{bash}");
+    for (name, function) in [
+        ("busybox", "busybox"),
+        ("ls", "busybox_ls"),
+        ("echo", "busybox_echo"),
+        ("dir", "busybox_dir"),
+    ] {
+        let line = format!("complete -F _{function}_complete {name}\n");
+        assert!(bash.contains(&line), "{name}: {bash}");
     }
     let zsh = Busybox::completion_script(Shell::Zsh);
     assert!(zsh.starts_with("#compdef busybox ls echo dir\n"), "{zsh}");
     assert_eq!(zsh.matches("#compdef").count(), 1);
-    assert!(zsh.contains("        ls) _ls \"$@\" ;;\n"), "{zsh}");
-    assert!(zsh.contains("\ncompdef _dir dir\n"), "{zsh}");
+    // zsh's own `_ls` is left alone.
+    assert!(!zsh.contains("\n_ls()"), "{zsh}");
+    assert!(zsh.contains("        ls) _busybox_ls \"$@\" ;;\n"), "{zsh}");
+    assert!(zsh.contains("\ncompdef _busybox_dir dir\n"), "{zsh}");
     // Without `multicall`, the one name.
     #[derive(Args)]
     #[arg(name = "busybox")]

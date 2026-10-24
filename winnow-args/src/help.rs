@@ -65,6 +65,9 @@ pub struct Command {
     /// Whether a program run under a subcommand's name (a link to it, as
     /// busybox's applets are) is that subcommand.
     pub multicall: bool,
+    /// Whether a word that names no subcommand, where nothing else takes
+    /// it, is an external one, with the rest of the line its own.
+    pub external_subcommands: bool,
 }
 
 impl Command {
@@ -94,6 +97,7 @@ impl Command {
         examples: &[],
         headings: &[],
         multicall: false,
+        external_subcommands: false,
     };
 
     /// The subcommand a line that names none runs.

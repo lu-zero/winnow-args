@@ -336,8 +336,8 @@ pub trait Args: Sized {
 
     /// The completion script for `shell`, calling back the program named in
     /// the help data (`#[arg(name = "…")]`). A `multicall` command's also
-    /// completes each subcommand by its name and shown aliases, calling the
-    /// program back by that name: the links to it should be installed.
+    /// completes each subcommand by its name and shown aliases, those that
+    /// are plain words, asking the program with the line as typed.
     ///
     /// # Panics
     ///
@@ -350,7 +350,12 @@ pub trait Args: Sized {
         // Each command it may be linked as, by every name help shows.
         let shown = help.subcommands.iter().filter(|sub| !sub.hide);
         let names = shown.flat_map(|sub| std::iter::once(&sub.name).chain(sub.aliases));
-        let bins: Vec<&str> = std::iter::once(&help.name).chain(names).copied().collect();
+        let mut bins = vec![help.name];
+        for &name in names {
+            if complete::plain_name(name) && !bins.contains(&name) {
+                bins.push(name);
+            }
+        }
         complete::scripts(&bins, shell)
     }
 
@@ -467,17 +472,22 @@ pub trait Args: Sized {
 }
 
 /// The spelling of `command`'s subcommand that `argv0`, the program's path,
-/// is named: `/bin/ls` and `ls.exe` on Windows are `ls`.
+/// is named: `/bin/ls` and, on Windows, `ls.exe` and `LS.EXE` are `ls`.
 pub(crate) fn applet(
     command: &'static help::Command,
     argv0: &std::ffi::OsStr,
 ) -> Option<&'static str> {
     let name = std::path::Path::new(argv0).file_name()?.to_str()?;
-    let name = name
-        .strip_suffix(std::env::consts::EXE_SUFFIX)
-        .unwrap_or(name);
+    // Windows names files in any case.
+    let same = |a: &str, b: &str| a == b || (cfg!(windows) && a.eq_ignore_ascii_case(b));
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let at = name.len().saturating_sub(suffix.len());
+    let name = match name.get(at..) {
+        Some(end) if same(end, suffix) => &name[..at],
+        _ => name,
+    };
     let mut names = command.subcommands.iter().flat_map(|sub| sub.names);
-    names.find(|spelling| **spelling == name).copied()
+    names.find(|spelling| same(spelling, name)).copied()
 }
 
 /// Print what a failed parse means, and give the exit status: help and version
