@@ -77,6 +77,9 @@ struct Request {
     /// The command the names start from, once [`Error::suggested`] says:
     /// its page lists the global flags of the commands above it.
     root: Option<&'static crate::help::Command>,
+    /// The program was run under its subcommand's name (`multicall`): the
+    /// first name in `path` is the program's own, not one after it.
+    applet: bool,
 }
 
 #[derive(Debug, Default)]
@@ -254,6 +257,7 @@ impl Error {
                     bare,
                     path: Vec::new(),
                     root: None,
+                    applet: false,
                 }),
                 ..Detail::default()
             })),
@@ -290,6 +294,20 @@ impl Error {
                 Some(request) => request.path.insert(0, name),
                 None => detail.path.insert(0, name),
             }
+        }
+        self
+    }
+
+    /// Record that the program was run under the name of the subcommand
+    /// this came from within (`multicall`): its help is the program's own,
+    /// and the offset counts from the first word after the name, which the
+    /// line was given `name` in front of.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn applet(mut self, name: &str) -> Self {
+        self.offset = self.offset.saturating_sub(name.len() + 1);
+        if let Some(request) = self.detail.as_deref_mut().and_then(|d| d.request.as_mut()) {
+            request.applet = true;
         }
         self
     }
@@ -573,7 +591,11 @@ impl Error {
         if self.kind != ErrorKind::HelpRequested {
             return None;
         }
-        let mut path = vec![program];
+        // Run as a subcommand, the program's name is the subcommand's.
+        let mut path = match request.applet {
+            true => Vec::new(),
+            false => vec![program],
+        };
         path.extend(&request.path);
         let width = crate::help::width();
         let inherited = request

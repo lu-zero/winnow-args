@@ -335,13 +335,23 @@ pub trait Args: Sized {
     }
 
     /// The completion script for `shell`, calling back the program named in
-    /// the help data (`#[arg(name = "…")]`).
+    /// the help data (`#[arg(name = "…")]`). A `multicall` command's also
+    /// completes each subcommand by its name and shown aliases, calling the
+    /// program back by that name: the links to it should be installed.
     ///
     /// # Panics
     ///
     /// If the command has no name, or one that is not a plain word.
     fn completion_script(shell: complete::Shell) -> String {
-        complete::script(Self::HELP.name, shell)
+        let help = Self::help_data();
+        if !help.multicall {
+            return complete::script(help.name, shell);
+        }
+        // Each command it may be linked as, by every name help shows.
+        let shown = help.subcommands.iter().filter(|sub| !sub.hide);
+        let names = shown.flat_map(|sub| std::iter::once(&sub.name).chain(sub.aliases));
+        let bins: Vec<&str> = std::iter::once(&help.name).chain(names).copied().collect();
+        complete::scripts(&bins, shell)
     }
 
     /// Parse `words`, the arguments after the program name, already borrowed
@@ -355,13 +365,24 @@ pub trait Args: Sized {
     }
 
     /// Parse `argv`, the whole command line, program name first. The name is
-    /// skipped.
+    /// skipped, unless the command is `multicall` and the name is one of its
+    /// subcommands': the line is then that subcommand's.
     fn parse_from_argv<I, S>(argv: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<std::ffi::OsStr>,
     {
-        Self::parse_from(argv.into_iter().skip(1))
+        let mut argv = argv.into_iter();
+        let first = argv.next();
+        if Self::HELP.multicall
+            && let Some(name) = first.and_then(|first| applet(Self::help_data(), first.as_ref()))
+        {
+            let rest: Vec<S> = argv.collect();
+            let mut words = words(&rest);
+            words.insert(0, BStr::new(name));
+            return Self::parse_words(&words).map_err(|error| error.applet(name));
+        }
+        Self::parse_from(argv)
     }
 
     /// Parse `args`, the arguments after the program name.
@@ -426,17 +447,37 @@ pub trait Args: Sized {
     }
 
     /// The program's name, as messages give it: `#[arg(name = "…")]`, else
-    /// the file name the process was run as.
+    /// the file name the process was run as. A `multicall` program run under
+    /// a subcommand's name is that name.
     fn program() -> String {
+        let argv0 = || std::env::args_os().next().unwrap_or_default();
+        if Self::HELP.multicall
+            && let Some(name) = applet(Self::help_data(), &argv0())
+        {
+            return name.to_owned();
+        }
         if !Self::HELP.name.is_empty() {
             return Self::HELP.name.to_owned();
         }
-        let argv0 = std::env::args_os().next().unwrap_or_default();
-        std::path::Path::new(&argv0)
+        std::path::Path::new(&argv0())
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default()
     }
+}
+
+/// The spelling of `command`'s subcommand that `argv0`, the program's path,
+/// is named: `/bin/ls` and `ls.exe` on Windows are `ls`.
+pub(crate) fn applet(
+    command: &'static help::Command,
+    argv0: &std::ffi::OsStr,
+) -> Option<&'static str> {
+    let name = std::path::Path::new(argv0).file_name()?.to_str()?;
+    let name = name
+        .strip_suffix(std::env::consts::EXE_SUFFIX)
+        .unwrap_or(name);
+    let mut names = command.subcommands.iter().flat_map(|sub| sub.names);
+    names.find(|spelling| **spelling == name).copied()
 }
 
 /// Print what a failed parse means, and give the exit status: help and version
@@ -560,6 +601,11 @@ pub trait Subcommand: Sized {
     /// Whether `name` names a subcommand. Asked of every eligible word, so kept
     /// apart from [`Subcommand::parse_subcommand`] and cheap to inline.
     fn has(name: &[u8]) -> bool;
+
+    /// Whether a word that names no subcommand, where nothing else takes
+    /// it, is one all the same: an external subcommand, as `cargo foo` runs
+    /// `cargo-foo`. [`Subcommand::parse_subcommand`] then takes any name.
+    const EXTERNAL: bool = false;
 
     /// Parse the rest of `input` as the subcommand `name`, which [`Subcommand::has`];
     /// `globals` binds its ancestors' global flags.
@@ -833,6 +879,36 @@ pub mod __private {
             });
             Error::invalid_value(at, flag, keyword.as_bytes(), e)
         })
+    }
+
+    /// Whether `word` reads as a flag (`-x`, `--name`), and so names no
+    /// external subcommand.
+    #[inline]
+    pub fn flag_like(word: &[u8]) -> bool {
+        is_flag_like(word)
+    }
+
+    /// An external subcommand's words: `name`, which has been read, then
+    /// every word left, as typed, flags and `--` among them. `display` is how
+    /// an error names a word that does not convert.
+    pub fn external<T: FromArg>(
+        name: &[u8],
+        input: &mut Argv<'_>,
+        display: &str,
+    ) -> Result<Vec<T>, Error> {
+        let mut values = Vec::with_capacity(input.words_left() + 1);
+        let mut offset = input.offset().saturating_sub(name.len() + 1);
+        let mut word = BStr::new(name);
+        loop {
+            let value = T::from_arg(word)
+                .map_err(|cause| Error::invalid_value(offset, display, word, cause))?;
+            values.push(value);
+            if input.is_empty() {
+                return Ok(values);
+            }
+            offset = input.offset();
+            word = input.take_word();
+        }
     }
 
     /// The end of a unit subcommand: only inherited global flags may follow,

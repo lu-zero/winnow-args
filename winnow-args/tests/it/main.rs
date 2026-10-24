@@ -14,6 +14,7 @@ mod default_rules;
 mod default_subcommand;
 mod delimiter;
 mod double_dash;
+mod external;
 mod fallbacks;
 mod flags;
 mod flatten;
@@ -31,6 +32,7 @@ mod keep_equals;
 mod keywords;
 mod ld_values;
 mod long_only;
+mod multicall;
 mod negate;
 mod negative;
 #[cfg(not(feature = "help-text"))]

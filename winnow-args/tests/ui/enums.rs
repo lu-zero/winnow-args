@@ -92,4 +92,26 @@ enum FieldsMisspelled {
     },
 }
 
+#[derive(Subcommand)]
+enum ExternalNotVec {
+    Build,
+    #[arg(external)]
+    Other(String),
+}
+
+#[derive(Subcommand)]
+enum ExternalTwice {
+    #[arg(external)]
+    One(Vec<String>),
+    #[arg(external)]
+    Two(Vec<String>),
+}
+
+#[derive(Subcommand)]
+enum ExternalNamed {
+    Build,
+    #[arg(external, name = "x")]
+    Other(Vec<String>),
+}
+
 fn main() {}

@@ -54,6 +54,7 @@ pub(crate) struct ArgsDoc {
     pub help_short: bool,
     pub long_only: bool,
     pub unknown_flags_value: bool,
+    pub multicall: bool,
     pub default_subcommand: Option<String>,
     /// Each a line, its header and what it does.
     pub examples: Vec<[String; 3]>,
@@ -129,18 +130,24 @@ pub(crate) fn write_args(span: Span, doc: &ArgsDoc) -> syn::Result<()> {
     write_at(span, &doc.ident, &args_toml(doc))
 }
 
-pub(crate) fn write_subcommands(
-    span: Span,
-    ident: &str,
-    about: &str,
-    long_about: &str,
-    variants: &[VariantDoc],
-) -> syn::Result<()> {
+/// A `Subcommand` enum, for its fragment.
+pub(crate) struct SubsDoc<'a> {
+    pub about: &'a str,
+    pub long_about: &'a str,
+    pub variants: &'a [VariantDoc],
+    /// A word that names no variant is an external subcommand.
+    pub external: bool,
+    pub multicall: bool,
+}
+
+pub(crate) fn write_subcommands(span: Span, ident: &str, doc: &SubsDoc<'_>) -> syn::Result<()> {
     let mut out = String::new();
     header(&mut out, "subcommands", ident);
-    field(&mut out, "about", about);
-    field(&mut out, "long_about", long_about);
-    for variant in variants {
+    field(&mut out, "about", doc.about);
+    field(&mut out, "long_about", doc.long_about);
+    flag(&mut out, "external", doc.external);
+    flag(&mut out, "multicall", doc.multicall);
+    for variant in doc.variants {
         out.push('\n');
         out.push_str("[[variant]]\n");
         field(&mut out, "name", &variant.name);
@@ -191,6 +198,7 @@ fn args_toml(doc: &ArgsDoc) -> String {
     flag(&mut out, "help_short", doc.help_short);
     flag(&mut out, "long_only", doc.long_only);
     flag(&mut out, "unknown_flags_value", doc.unknown_flags_value);
+    flag(&mut out, "multicall", doc.multicall);
     opt(&mut out, "default_subcommand", &doc.default_subcommand);
     opt(&mut out, "effect", &doc.effect);
     for item in &doc.items {

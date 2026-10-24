@@ -211,8 +211,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `default_subcommand_help`; completion of the default subcommand's flags
       before it is named
 - [x] `default_subcommand_on_empty`
-- [ ] External subcommands (`cargo foo`), multicall (`argv[0]` selects),
-      executable views
+- [x] External subcommands (`cargo foo`), multicall (`argv[0]` selects)
+- [ ] Executable views
 - [ ] Sigil arguments (`+node@22`), clauses (repeated groups split by `:::`)
 - [ ] Mounts: subcommands from a plugin's spec at runtime
 - [ ] Deprecation: `deprecated` flags, commands and variables, with a warnings

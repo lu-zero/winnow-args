@@ -340,6 +340,22 @@ mod tests {
     }
 
     #[test]
+    fn external_commands_and_multicall_are_noted() {
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            external_subcommands: true,
+            multicall: true,
+            ..Command::default()
+        };
+        let page = &render_pages(&command, "tool").unwrap()[0].1;
+        assert_eq!(command.notes().len(), 2);
+        for note in command.notes() {
+            assert!(page.contains(note), "{page}");
+        }
+    }
+
+    #[test]
     fn before_help_leads_and_usage_lines_are_the_usage() {
         let command = Command {
             name: "tool".to_owned(),

@@ -104,6 +104,13 @@ struct NothingToFlatten {
 }
 
 #[derive(Args)]
+#[arg(multicall)]
+struct NothingToCall {
+    #[arg(long)]
+    verbose: bool,
+}
+
+#[derive(Args)]
 #[arg(heading("Roots", about = "Which tree is read."))]
 struct HeadingMisspelled {
     #[arg(long)]

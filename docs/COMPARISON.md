@@ -59,7 +59,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | Global flags | ✓ | ✓ | – (0.10: ✓) | ✓ |
 | Shared flags (`flatten`) | ✓ | ✓ | ✓ | ✓ |
 | Default subcommand | ✓ | ✓ | ~ | ~ |
-| External subcommands, multicall | – | ✓ | ~ | ✓ |
+| External subcommands, multicall | ✓ | ✓ | ~ | ✓ |
 | Subcommands discovered at runtime | – | ✓ | ~ | ~ |
 
 ## Rules

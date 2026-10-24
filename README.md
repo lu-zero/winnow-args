@@ -31,7 +31,8 @@ crate docs; this page is about the repository.
 | Flags kept in command-line order | ✓ | ~ | ~ |
 | Flag constraints checked at compile time | ✓ | – | – |
 | Help prose left out of the binary by a feature | ✓ | ~ | – |
-| A CLI built at runtime, external subcommands | – | ✓ | ✓ |
+| External subcommands, multicall | ✓ | ✓ | ✓ |
+| A CLI built at runtime | – | ✓ | ✓ |
 | Conditional requirements (`required_if`) | ✓ | ✓ | ✓ |
 | Man pages, markdown | ~ | ✓ | ~ |
 | "Did you mean" suggestions | ✓ | ✓ | ✓ |

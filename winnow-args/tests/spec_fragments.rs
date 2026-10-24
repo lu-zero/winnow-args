@@ -138,12 +138,14 @@ fn types_of_one_name_are_told_apart() {
         catalog.roots(),
         [
             "SpecBoth",
+            "SpecBox",
             "SpecChange",
             "SpecCli",
             "SpecDupA",
             "SpecDupB",
             "SpecPages",
-            "SpecPlace"
+            "SpecPlace",
+            "SpecTools"
         ]
     );
     // `self::SpecInner` and `super::Opts` of an inline module, below a `use<>`.
@@ -355,4 +357,52 @@ fn emitted_fragments_stitch() {
         assert_eq!(command.items[0].help, "say \"hi\"");
         assert_eq!(command.about, "Root.");
     }
+}
+
+/// A `multicall` program whose commands take an external one too.
+#[derive(Args)]
+#[arg(name = "spec-box", multicall)]
+struct SpecBox {
+    #[arg(subcommand)]
+    applet: SpecApplet,
+}
+
+#[derive(Subcommand)]
+enum SpecApplet {
+    /// List.
+    Ls,
+    #[arg(external)]
+    Other(Vec<String>),
+}
+
+/// An enum that is the whole line, `multicall` itself.
+#[derive(Subcommand)]
+#[arg(multicall)]
+enum SpecTools {
+    /// List.
+    Ls,
+}
+
+#[test]
+fn external_and_multicall_are_in_the_fragments() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecBox")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(command.multicall && command.external_subcommands);
+    // The external variant is no command of its own.
+    let names: Vec<_> = command
+        .subcommands
+        .iter()
+        .map(|s| s.name.as_str())
+        .collect();
+    assert_eq!(names, ["ls"]);
+    assert_eq!(command.notes().len(), 2);
+    let tools = catalog
+        .stitch("SpecTools")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(tools.multicall && !tools.external_subcommands);
 }

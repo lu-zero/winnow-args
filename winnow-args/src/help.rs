@@ -62,6 +62,9 @@ pub struct Command {
     pub examples: &'static [Example],
     /// What `--help` says under a heading, before its entries.
     pub headings: &'static [Heading],
+    /// Whether a program run under a subcommand's name (a link to it, as
+    /// busybox's applets are) is that subcommand.
+    pub multicall: bool,
 }
 
 impl Command {
@@ -90,6 +93,7 @@ impl Command {
         flatten_help: false,
         examples: &[],
         headings: &[],
+        multicall: false,
     };
 
     /// The subcommand a line that names none runs.

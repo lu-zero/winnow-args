@@ -617,8 +617,14 @@ pub fn answer(root: &'static Command, args: &[OsString]) -> Option<String> {
     }
     let shell = shell?;
     let mut words = given.unwrap_or_else(|| split_line(&line));
-    if !words.is_empty() {
-        words.remove(0);
+    // A `multicall` program typed as one of its commands is that command.
+    let applet = words.first().filter(|_| root.multicall);
+    match applet.and_then(|first| crate::applet(root, std::ffi::OsStr::new(first))) {
+        Some(name) => words[0] = name.to_owned(),
+        None if !words.is_empty() => {
+            words.remove(0);
+        }
+        None => {}
     }
     if words.is_empty() {
         words.push(String::new());
@@ -732,6 +738,57 @@ fn split_line(line: &str) -> Vec<String> {
 /// If `bin` is not one plain word (letters, digits, `-`, `_`, `.`, `+`): the
 /// scripts name it unquoted where no shell allows quotes.
 pub fn script(bin: &str, shell: Shell) -> String {
+    scripts(&[bin], shell)
+}
+
+/// One completion script for each of `bins` in `shell`, as one file: a
+/// `multicall` program's, and the names of its commands it is linked as.
+/// Each name calls back the program by that name.
+///
+/// # Panics
+///
+/// If `bins` is empty, or a name is not one plain word, as for [`script`].
+pub fn scripts(bins: &[&str], shell: Shell) -> String {
+    assert!(!bins.is_empty(), "a completion script needs a program name");
+    if shell != Shell::Zsh {
+        let each: Vec<String> = bins.iter().map(|bin| one_script(bin, shell)).collect();
+        return each.join("\n");
+    }
+    // zsh loads one file for every name `#compdef` lists, and says which in
+    // `$service`. Loading it defines the functions, the first replacing the
+    // one zsh loaded it as, so each name is registered again.
+    let mut out = format!("#compdef {}\n", bins.join(" "));
+    for bin in bins {
+        out.push_str(&one_script(bin, shell));
+    }
+    let functions: Vec<(String, &str)> =
+        bins.iter().map(|bin| (function_name(bin), *bin)).collect();
+    if let [(function, bin)] = &functions[..] {
+        out.push_str(&format!(
+            "if [[ $zsh_eval_context[-1] == loadautofunc ]]; then\n    _{function} \"$@\"\nelse\n    compdef _{function} {bin}\nfi\n"
+        ));
+        return out;
+    }
+    for (function, bin) in &functions {
+        out.push_str(&format!("compdef _{function} {bin}\n"));
+    }
+    out.push_str("if [[ $zsh_eval_context[-1] == loadautofunc ]]; then\n    case $service in\n");
+    for (function, bin) in &functions {
+        out.push_str(&format!("        {bin}) _{function} \"$@\" ;;\n"));
+    }
+    out.push_str("    esac\nfi\n");
+    out
+}
+
+/// The name of `bin`'s completion function, without its shell's prefix.
+fn function_name(bin: &str) -> String {
+    bin.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+/// [`script`] for one name; for zsh, its function alone.
+fn one_script(bin: &str, shell: Shell) -> String {
     assert!(
         !bin.is_empty()
             && bin
@@ -739,10 +796,7 @@ pub fn script(bin: &str, shell: Shell) -> String {
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+')),
         "a completion script needs a plain program name, not {bin:?}"
     );
-    let function: String = bin
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
+    let function = function_name(bin);
     match shell {
         Shell::Bash => format!(
             r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
@@ -770,8 +824,7 @@ complete -F _{function}_complete {bin}
 "#
         ),
         Shell::Zsh => format!(
-            r#"#compdef {bin}
-# Completion for {bin}, answered by `{bin} {REQUEST}`.
+            r#"# Completion for {bin}, answered by `{bin} {REQUEST}`.
 _{function}() {{
     local -a candidates
     local line ask= before=
@@ -795,11 +848,6 @@ _{function}() {{
     fi
     return 0
 }}
-if [[ $zsh_eval_context[-1] == loadautofunc ]]; then
-    _{function} "$@"
-else
-    compdef _{function} {bin}
-fi
 "#
         ),
         Shell::Fish => format!(

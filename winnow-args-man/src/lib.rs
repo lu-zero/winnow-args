@@ -364,6 +364,20 @@ mod tests {
     }
 
     #[test]
+    fn external_commands_and_multicall_are_noted() {
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            external_subcommands: true,
+            multicall: true,
+            ..Command::default()
+        };
+        let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
+        assert!(page.contains("is an external one"), "{page}");
+        assert!(page.contains("it is that command."), "{page}");
+    }
+
+    #[test]
     fn an_empty_header_field_keeps_its_place_and_a_quote_is_escaped() {
         let flag = Item {
             long: Some("file".to_owned()),

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: `default_subcommand` takes every word an `external` variant would take
+  --> tests/ui/external_default.rs:12:10
+   |
+12 | #[derive(Args)]
+   |          ^^^^ evaluation of `_` failed here

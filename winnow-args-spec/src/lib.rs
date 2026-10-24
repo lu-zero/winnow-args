@@ -83,6 +83,10 @@ pub struct Command {
     pub outputs: Vec<Output>,
     /// What each exit status means.
     pub exit_codes: Vec<ExitCode>,
+    /// A word that names no subcommand is an external one (`#[arg(external)]`).
+    pub external_subcommands: bool,
+    /// Run under a subcommand's name, the program is that subcommand.
+    pub multicall: bool,
 }
 
 /// A command line to try.
@@ -329,6 +333,7 @@ struct ArgsFrag {
     help_short: bool,
     long_only: bool,
     unknown_flags_value: bool,
+    multicall: bool,
     package_version: Option<String>,
     default_subcommand: Option<String>,
     examples: Vec<Example>,
@@ -343,6 +348,8 @@ struct SubsFrag {
     about: String,
     long_about: String,
     variants: Vec<VariantFrag>,
+    external: bool,
+    multicall: bool,
 }
 
 #[derive(Debug)]
@@ -722,7 +729,8 @@ impl Command {
     }
 
     /// What the rows of a page do not say about how this command reads its
-    /// words: `long_only`, and `unknown_flags = "value"`.
+    /// words: `long_only`, `unknown_flags = "value"`, an external subcommand
+    /// and `multicall`.
     pub fn notes(&self) -> Vec<&'static str> {
         let mut notes = Vec::new();
         if self.long_only {
@@ -730,6 +738,13 @@ impl Command {
         }
         if self.unknown_flags_value {
             notes.push("A word that looks like a flag and names none is a positional value.");
+        }
+        if self.external_subcommands {
+            notes
+                .push("A word that names no command is an external one, given the words after it.");
+        }
+        if self.multicall {
+            notes.push("Run under the name of one of its commands, it is that command.");
         }
         notes
     }
@@ -990,6 +1005,8 @@ fn parse_fragment(text: &str) -> Result<Entry, Error> {
             about: opt_str(&table, "about")?,
             long_about: opt_str(&table, "long_about")?,
             variants: parse_variants(&table)?,
+            external: flag(&table, "external")?,
+            multicall: flag(&table, "multicall")?,
         }),
         "occurrence" => Fragment::Occurrence(parse_items(&table)?),
         "choices" => Fragment::Choices(strings(&table, "choices")?),
@@ -1027,6 +1044,7 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
         help_short: flag(table, "help_short")?,
         long_only: flag(table, "long_only")?,
         unknown_flags_value: flag(table, "unknown_flags_value")?,
+        multicall: flag(table, "multicall")?,
         package_version: opt_present(table, "package_version")?,
         default_subcommand: opt_present(table, "default_subcommand")?,
         examples: rows(table, "example", |row| {
@@ -1266,6 +1284,8 @@ impl Catalog {
                     subcommand_required: true,
                     help_flag: true,
                     help_short: true,
+                    external_subcommands: subs.external,
+                    multicall: subs.multicall,
                     ..Command::default()
                 });
             }
@@ -1276,7 +1296,7 @@ impl Catalog {
         for draft in &args.items {
             items.push(self.item(at, draft, stack)?);
         }
-        let mut subcommands = self.subs(at, args.subcommand.as_deref(), stack)?;
+        let (mut subcommands, mut external) = self.subs(at, args.subcommand.as_deref(), stack)?;
         // What this command says of a heading is read before what a
         // flattened one does.
         let mut headings = args.headings.clone();
@@ -1286,6 +1306,7 @@ impl Catalog {
             let flattened = self.command(at, name, stack)?;
             items.extend(flattened.items);
             subcommands.extend(flattened.subcommands);
+            external |= flattened.external_subcommands;
             headings.extend(flattened.headings);
             outputs.extend(flattened.outputs);
             exit_codes.extend(flattened.exit_codes);
@@ -1329,17 +1350,20 @@ impl Catalog {
             effect: args.effect,
             outputs,
             exit_codes,
+            external_subcommands: external,
+            multicall: args.multicall,
         })
     }
 
+    /// The subcommands of the enum `name`, and whether it has an external one.
     fn subs(
         &self,
         at: At<'_>,
         name: Option<&str>,
         stack: &mut Vec<*const Entry>,
-    ) -> Result<Vec<Sub>, Error> {
+    ) -> Result<(Vec<Sub>, bool), Error> {
         let Some(name) = name else {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), false));
         };
         let (krate, entry) = self.fragment(at, name, SUBCOMMANDS, "a subcommand enum")?;
         let Fragment::Subcommands(subs) = &entry.fragment else {
@@ -1349,7 +1373,7 @@ impl Catalog {
             krate,
             file: &entry.file,
         };
-        self.variants(at, subs, stack)
+        Ok((self.variants(at, subs, stack)?, subs.external))
     }
 
     fn variants(

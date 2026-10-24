@@ -70,20 +70,26 @@ error: `flatten_help` needs an `#[arg(subcommand)]` field
 101 | struct NothingToFlatten {
     |        ^^^^^^^^^^^^^^^^
 
-error: expected `help`
-   --> tests/ui/roles.rs:107:24
+error: `multicall` needs an `#[arg(subcommand)]` field
+   --> tests/ui/roles.rs:108:8
     |
-107 | #[arg(heading("Roots", about = "Which tree is read."))]
+108 | struct NothingToCall {
+    |        ^^^^^^^^^^^^^
+
+error: expected `help`
+   --> tests/ui/roles.rs:114:24
+    |
+114 | #[arg(heading("Roots", about = "Which tree is read."))]
     |                        ^^^^^
 
 error: expected `header` or `help`
-   --> tests/ui/roles.rs:114:27
+   --> tests/ui/roles.rs:121:27
     |
-114 | #[arg(example("tool run", title = "Run it"))]
+121 | #[arg(example("tool run", title = "Run it"))]
     |                           ^^^^^
 
 error: `long_version` needs `version`
-   --> tests/ui/roles.rs:122:8
+   --> tests/ui/roles.rs:129:8
     |
-122 | struct LongVersionAlone {
+129 | struct LongVersionAlone {
     |        ^^^^^^^^^^^^^^^^

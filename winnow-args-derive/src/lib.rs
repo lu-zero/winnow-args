@@ -179,6 +179,11 @@ mod spec;
 ///   `tool run -p pkg`). The words and flags after that one are the
 ///   subcommand's, and a word that names another subcommand is one of those
 ///   words. A flag of this struct without `global` comes first (`tool -qp pkg`).
+/// - `multicall`: run under the name of one of its subcommands, as busybox's
+///   applets are linked, the program is that subcommand: `ls -l` is
+///   `tool ls -l`, and its help and version name `ls`. Under any other name
+///   it reads the line as usual. It needs a `subcommand` field. Only
+///   `parse`, `try_parse` and `parse_from_argv` see the program's name.
 /// - `group("name", required, multiple, message = "…")`: a group. A field
 ///   joins it with `group = "name"`. `required` means at least one member is
 ///   present. Without `multiple`, a second member conflicts with the first.
@@ -442,6 +447,8 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 ///   calling that method on the held type. Every variant holds a type that
 ///   implements the trait, two may hold the same type, and all share one
 ///   `Output`. The enum implements it for every context those types take.
+/// - `multicall`: run under the name of one of its variants, the program is
+///   that subcommand, as a struct's `multicall` makes it.
 ///
 /// # Variants
 ///
@@ -457,6 +464,14 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 /// - `long_help = "…"`: on a variant with named fields, that command's
 ///   `long_about`. The command list still shows one line. On a unit, or a
 ///   variant that holds a type, `long_help` is unused.
+/// - `external`, alone, on a variant holding a `Vec`, as `Other(Vec<String>)`:
+///   an external subcommand. A word that names no variant and is not a
+///   flag, where the parent has nothing else to take it, is its first
+///   value, and every word after it the rest, as typed: `cargo foo --bar`
+///   holds `foo` and `--bar`. That is also a word that a `double_dash =
+///   "required"` positional would refuse before `--`. One variant at most;
+///   help does not list it, an enum with `run` has none, and a parent with
+///   `default_subcommand` cannot hold one.
 ///
 /// A variant with named fields is a command. Its fields are declared as a
 /// struct's are, and its doc comment and other options (`example`,
@@ -493,8 +508,9 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Subcommand` can only be derived for enums",
         ));
     };
-    let mut runs = None;
-    let case = rename_all(input, Some(&mut runs))?;
+    let mut options = EnumOptions::default();
+    let case = rename_all(input, Some(&mut options))?;
+    let EnumOptions { runs, multicall } = options;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
@@ -508,8 +524,25 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut spec_checks = Vec::new();
     // The struct each variant with fields is parsed as.
     let mut structs = Vec::new();
+    // The `external` variant and the type of its words.
+    let mut external: Option<(&Ident, Type)> = None;
     for variant in &data.variants {
         let ident = &variant.ident;
+        if let Some(ty) = external_variant(variant)? {
+            if runs.is_some() {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "`run` calls the type a variant holds, and an `external` variant holds words",
+                ));
+            }
+            if external.replace((ident, ty)).is_some() {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    "one variant at most is `external`",
+                ));
+            }
+            continue;
+        }
         let info = variant_names(variant, &mut names, case)?;
         let pattern = byte_patterns(&info.names);
         let primary = LitStr::new(&info.names[0], Span::call_site());
@@ -685,12 +718,49 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         spec::write_subcommands(
             input.ident.span(),
             &filed,
-            &about_text,
-            &long_about_text,
-            &spec_variants,
+            &spec::SubsDoc {
+                about: &about_text,
+                long_about: &long_about_text,
+                variants: &spec_variants,
+                external: external.is_some(),
+                multicall,
+            },
         )?;
     }
 
+    // A name no variant has is the external one's, which takes the words left.
+    let (external_const, external_arm, external_word) = match &external {
+        Some((ident, ty)) => (
+            quote!(
+                const EXTERNAL: bool = true;
+            ),
+            quote! {
+                _ => __wa::external::<#ty>(__name, __input, "<COMMAND>").map(Self::#ident),
+            },
+            quote! {
+                if !__word.after_separator {
+                    return <Self as __wa::Subcommand>::parse_subcommand(
+                        &**__word.value, __input, __globals,
+                    );
+                }
+            },
+        ),
+        None => (
+            quote!(),
+            quote! {
+                _ => ::core::result::Result::Err(__wa::Error::unexpected_arg(
+                    __input.offset(),
+                    ::std::string::String::from_utf8_lossy(__name),
+                )),
+            },
+            quote!(),
+        ),
+    };
+    // An enum whose one variant is `external` names none.
+    let has_body = match patterns.is_empty() {
+        true => quote!(false),
+        false => quote!(matches!(__name, #(#patterns)|*)),
+    };
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let run_impl = runs.map(|runs| run_impl(input, runs, &held));
@@ -700,10 +770,11 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         #run_impl
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
+            #external_const
 
             #[inline]
             fn has(__name: &[u8]) -> bool {
-                matches!(__name, #(#patterns)|*)
+                #has_body
             }
 
             fn parse_subcommand(
@@ -714,10 +785,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 use ::winnow_args::__private as __wa;
                 match __name {
                     #(#arms)*
-                    _ => ::core::result::Result::Err(__wa::Error::unexpected_arg(
-                        __input.offset(),
-                        ::std::string::String::from_utf8_lossy(__name),
-                    )),
+                    #external_arm
                 }
             }
         }
@@ -739,6 +807,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 subcommand_required: true,
                 help_flag: true,
                 help_short: true,
+                multicall: #multicall,
                 ..::winnow_args::help::Command::EMPTY
             };
 
@@ -766,6 +835,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             if &**__word.value == b"help" {
                                 return ::core::result::Result::Err(__wa::help_word(__help, __input));
                             }
+                            #external_word
                         }
                         __wa::Arg::Long(_) | __wa::Arg::Short(_)
                             if __globals.bind(&__arg, __input)? =>
@@ -869,6 +939,53 @@ fn variant_struct(
         #args
     };
     Ok((name, tokens, stated, validate))
+}
+
+/// Why a struct with `default_subcommand` cannot hold an enum with an
+/// `external` variant.
+const DEFAULT_AND_EXTERNAL: &str =
+    "`default_subcommand` takes every word an `external` variant would take";
+
+/// The `T` of an `#[arg(external)]` variant, `Other(Vec<T>)`; `None` for
+/// any other variant.
+fn external_variant(variant: &syn::Variant) -> syn::Result<Option<Type>> {
+    let mut found = None;
+    let mut others = Vec::new();
+    for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
+        let metas = attr.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+        )?;
+        for meta in metas {
+            match meta {
+                syn::Meta::Path(path) if path.is_ident("external") => found = Some(path),
+                other => others.push(other),
+            }
+        }
+    }
+    let Some(path) = found else {
+        return Ok(None);
+    };
+    if let Some(other) = others.first() {
+        return Err(syn::Error::new_spanned(
+            other,
+            "`external` takes no other option",
+        ));
+    }
+    let words = match &variant.fields {
+        Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+            let ty = &fields.unnamed[0].ty;
+            last_segment(ty)
+                .filter(|s| s.ident == "Vec")
+                .and_then(inner)
+        }
+        _ => None,
+    };
+    words.cloned().map(Some).ok_or_else(|| {
+        syn::Error::new_spanned(
+            path,
+            "an `external` variant holds the words in a `Vec`, as `Other(Vec<String>)`",
+        )
+    })
 }
 
 /// `Run` or `RunAsync` for a `Subcommand` enum: the command it holds is run,
@@ -1971,15 +2088,28 @@ enum Runs {
     Async,
 }
 
+/// A `Subcommand` enum's own options, besides `rename_all`.
+#[derive(Default)]
+struct EnumOptions {
+    runs: Option<Runs>,
+    /// Run under a variant's name, the program is that subcommand.
+    multicall: bool,
+}
+
 /// An enum's `#[arg(rename_all = "…")]`, kebab-case if absent, and for a
-/// `Subcommand` its `run` or `run_async`.
-fn rename_all(input: &DeriveInput, runs: Option<&mut Option<Runs>>) -> syn::Result<Case> {
+/// `Subcommand` its other options.
+fn rename_all(input: &DeriveInput, options: Option<&mut EnumOptions>) -> syn::Result<Case> {
     let mut case = Case::Kebab;
     let mut found = None;
-    let may_run = runs.is_some();
+    let mut multicall = false;
+    let may_run = options.is_some();
     for attr in input.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if skip_spec(&meta)? || (may_run && meta.path.is_ident("verbatim_doc_comment")) {
+                return Ok(());
+            }
+            if may_run && meta.path.is_ident("multicall") {
+                multicall = true;
                 return Ok(());
             }
             let run = match () {
@@ -1995,7 +2125,7 @@ fn rename_all(input: &DeriveInput, runs: Option<&mut Option<Runs>>) -> syn::Resu
             }
             if !meta.path.is_ident("rename_all") {
                 return Err(meta.error(match may_run {
-                    true => "expected `rename_all`, `run`, `run_async` or `spec`",
+                    true => "expected `rename_all`, `run`, `run_async`, `multicall` or `spec`",
                     false => "expected `rename_all` or `spec`",
                 }));
             }
@@ -2016,8 +2146,9 @@ fn rename_all(input: &DeriveInput, runs: Option<&mut Option<Runs>>) -> syn::Resu
             Ok(())
         })?;
     }
-    if let Some(runs) = runs {
-        *runs = found;
+    if let Some(options) = options {
+        options.runs = found;
+        options.multicall = multicall;
     }
     Ok(case)
 }
@@ -3028,6 +3159,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         unknown_flags_value,
         long_only,
         plus_options,
+        multicall,
     } = struct_options(input)?;
     let mut fields = named
         .iter()
@@ -3361,6 +3493,31 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         None => unexpected.clone(),
     };
+    // Or the subcommand's, when it has an external one: that takes a word
+    // left over that names no subcommand and is not a flag, and every word
+    // after it as typed, so it needs no globals.
+    let overflow = match subcommand {
+        Some(f) => {
+            let ident = slot(&f.ident);
+            let ty = subcommand_type(f);
+            quote! {
+                if <#ty as __wa::Subcommand>::EXTERNAL
+                    && !__word.after_separator
+                    && !__wa::flag_like(&__word.value)
+                    && !<#ty as __wa::Subcommand>::has(&**__word.value)
+                {
+                    #ident = ::core::option::Option::Some(
+                        <#ty as __wa::Subcommand>::parse_subcommand(
+                            &**__word.value, __input, &mut (),
+                        )?,
+                    );
+                    break;
+                }
+                #overflow
+            }
+        }
+        None => overflow,
+    };
     let positional_match = if positionals.is_empty() {
         quote!({ #overflow; })
     } else {
@@ -3544,7 +3701,13 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         // Any other word selects the default subcommand, which reads it again as its own.
         let fallback = default_subcommand.as_ref().map(|name| {
             let name = LitByteStr::new(name.as_bytes(), Span::call_site());
+            // A generic struct's is checked here; any other's beside it.
+            let refused = (!input.generics.params.is_empty()).then(|| {
+                let message = DEFAULT_AND_EXTERNAL;
+                quote!(const { assert!(!<#ty as __wa::Subcommand>::EXTERNAL, #message) };)
+            });
             quote! {
+                #refused
                 let __sub = {
                     #inherit
                     *__input = __start;
@@ -3875,6 +4038,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new(
             input.ident.span(),
             "`flatten_help` needs an `#[arg(subcommand)]` field",
+        ));
+    }
+    if multicall && subcommand.is_none() {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`multicall` needs an `#[arg(subcommand)]` field",
         ));
     }
     if default_subcommand_flags && (unknown_flags_value || unknown.is_some() || sequence_unknown) {
@@ -4455,6 +4624,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         })
     };
     let mut spec_checks = Vec::new();
+    if let Some(f) = subcommand.filter(|_| default_subcommand.is_some())
+        && input.generics.params.is_empty()
+    {
+        let (ty, message) = (subcommand_type(f), DEFAULT_AND_EXTERNAL);
+        spec_checks.push(quote! {
+            const _: () = assert!(!<#ty as ::winnow_args::Subcommand>::EXTERNAL, #message);
+        });
+    }
     let filed = filed(input)?;
     let identity = spec::identity(input.ident.span(), &filed);
     if spec::enabled() {
@@ -4522,6 +4699,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 help_short: help_short_flag,
                 long_only,
                 unknown_flags_value,
+                multicall,
                 default_subcommand,
                 examples,
                 headings,
@@ -4566,6 +4744,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 flatten_help: #flatten_help,
                 examples: &[#(#help_examples),*],
                 headings: #help_headings,
+                multicall: #multicall,
             };
 
             fn parse_argv_with(
@@ -4699,6 +4878,8 @@ struct StructOptions {
     long_only: bool,
     /// `+abc` is a bundle of `+` options (`set +eu`), for fields with `plus`.
     plus_options: bool,
+    /// Run under a subcommand's name, the program is that subcommand.
+    multicall: bool,
 }
 
 fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
@@ -4821,6 +5002,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.plus_options = true;
                 return Ok(());
             }
+            if meta.path.is_ident("multicall") {
+                options.multicall = true;
+                return Ok(());
+            }
             if meta.path.is_ident("unknown_flags") {
                 let mode = meta.value()?.parse::<LitStr>()?;
                 options.unknown_flags_value = match mode.value().as_str() {
@@ -4894,7 +5079,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
-                     `plus_options`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
+                     `plus_options`, `multicall`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
