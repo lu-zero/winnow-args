@@ -142,6 +142,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecChange",
             "SpecChoices",
             "SpecCli",
+            "SpecDeprecated",
             "SpecDupA",
             "SpecDupB",
             "SpecPages",
@@ -475,6 +476,83 @@ fn what_each_choice_means_is_in_the_fragments() {
                 .map(|s| matches!(s, SpecSpeed::Fast | SpecSpeed::Slow)),
             c.sort,
             c.log,
+        )
+    };
+}
+
+#[derive(Subcommand)]
+enum SpecOldCommand {
+    Build,
+    #[arg(deprecated = "use build", deprecated_remove_at = "3.0")]
+    Make,
+}
+
+#[derive(Args)]
+struct SpecDeprecated {
+    #[arg(long, deprecated = "use --new", deprecated_warn_at = "1.0")]
+    old: bool,
+    #[arg(
+        long,
+        env = "JOBS",
+        env_fallback = "MAKE_JOBS",
+        deprecated_env = "OLD_JOBS"
+    )]
+    jobs: Option<u32>,
+    #[arg(subcommand)]
+    command: SpecOldCommand,
+}
+
+#[test]
+fn deprecations_and_fallbacks_are_in_the_fragments() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecDeprecated")
+        .unwrap_or_else(|error| panic!("{error}"));
+    let item = |long: &str| {
+        let items = command.items.iter();
+        items
+            .into_iter()
+            .find(|i| i.long.as_deref() == Some(long))
+            .unwrap()
+    };
+    let old = item("old").deprecated.clone().unwrap();
+    assert_eq!(
+        (old.message.as_str(), old.warn_at.as_deref()),
+        ("use --new", Some("1.0"))
+    );
+    assert!(
+        item("old").description().ends_with("Deprecated: use --new"),
+        "{}",
+        item("old").description()
+    );
+    let jobs = item("jobs").description();
+    assert!(
+        jobs.contains("[env: JOBS, MAKE_JOBS] [deprecated env: OLD_JOBS]"),
+        "{jobs}"
+    );
+    let make = &command.subcommands[1];
+    assert_eq!(command.sub_about(make), "(deprecated)");
+    assert_eq!(
+        make.deprecated.as_ref().unwrap().note(),
+        "Deprecated: use build. Removed at 3.0."
+    );
+    // Its own page says so too.
+    let pages = winnow_args_spec::pages(&command, "tool").unwrap();
+    let make_page = pages
+        .iter()
+        .find(|page| page.path.last().map(String::as_str) == Some("make"));
+    assert_eq!(
+        make_page.and_then(|page| page.deprecated),
+        make.deprecated.as_ref()
+    );
+    let _ = |c: SpecDeprecated| {
+        (
+            c.old,
+            c.jobs,
+            matches!(c.command, SpecOldCommand::Build | SpecOldCommand::Make),
         )
     };
 }

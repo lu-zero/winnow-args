@@ -49,7 +49,7 @@ pub fn render(page: &Page<'_>) -> String {
     if !subs.is_empty() {
         heading(&mut out, "Commands");
         for sub in subs {
-            push_subcommand(&mut out, page, sub, command.is_default(sub));
+            push_subcommand(&mut out, page, sub, &command.sub_about(sub));
         }
         out.push('\n');
     }
@@ -91,7 +91,8 @@ pub fn render(page: &Page<'_>) -> String {
         }
         out.push('\n');
     }
-    for note in command.notes() {
+    let deprecated = page.deprecated.map(winnow_args_spec::Deprecated::note);
+    for note in command.notes().into_iter().chain(deprecated.as_deref()) {
         out.push_str(note);
         out.push_str("\n\n");
     }
@@ -145,7 +146,7 @@ fn heading(out: &mut String, title: &str) {
     out.push_str("\n\n");
 }
 
-fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) {
+fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, about: &str) {
     out.push_str(&format!(
         "* [`{name}`]({stem}.md)",
         name = sub.name,
@@ -156,12 +157,9 @@ fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, default: bool) 
         out.push_str(alias);
         out.push('`');
     }
-    if !sub.about.is_empty() {
+    if !about.is_empty() {
         out.push_str(" — ");
-        out.push_str(&escape(&sub.about));
-    }
-    if default {
-        out.push_str(" (default)");
+        out.push_str(&escape(about));
     }
     out.push('\n');
 }

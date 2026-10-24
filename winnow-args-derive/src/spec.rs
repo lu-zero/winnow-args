@@ -86,6 +86,8 @@ pub(crate) struct VariantDoc {
     pub long_about: String,
     pub hide: bool,
     pub ty: Option<String>,
+    /// `(message, warn_at, remove_at)`.
+    pub deprecated: Option<(String, Option<String>, Option<String>)>,
 }
 
 #[derive(Default)]
@@ -114,6 +116,10 @@ pub(crate) struct ItemDoc {
     pub choices: Vec<String>,
     pub choice_help: Vec<String>,
     pub hide_choices: bool,
+    pub env_fallback: Vec<String>,
+    pub deprecated_env: Vec<String>,
+    /// `(message, warn_at, remove_at)`.
+    pub deprecated: Option<(String, Option<String>, Option<String>)>,
     pub choices_ty: Option<String>,
     pub require_equals: bool,
     pub global: bool,
@@ -159,6 +165,7 @@ pub(crate) fn write_subcommands(span: Span, ident: &str, doc: &SubsDoc<'_>) -> s
         field(&mut out, "about", &variant.about);
         field(&mut out, "long_about", &variant.long_about);
         flag(&mut out, "hide", variant.hide);
+        deprecated(&mut out, &variant.deprecated);
         opt(&mut out, "ty", &variant.ty);
     }
     write_at(span, ident, &out)
@@ -265,6 +272,9 @@ fn item_toml(item: &ItemDoc) -> String {
     strings(&mut out, "choices", &item.choices);
     strings(&mut out, "choice_help", &item.choice_help);
     flag(&mut out, "hide_choices", item.hide_choices);
+    strings(&mut out, "env_fallback", &item.env_fallback);
+    strings(&mut out, "deprecated_env", &item.deprecated_env);
+    deprecated(&mut out, &item.deprecated);
     opt(&mut out, "choices_ty", &item.choices_ty);
     flag(&mut out, "require_equals", item.require_equals);
     flag(&mut out, "global", item.global);
@@ -327,6 +337,16 @@ fn opt_char(out: &mut String, key: &str, value: Option<char>) {
 fn chars(out: &mut String, key: &str, values: &[char]) {
     let owned: Vec<String> = values.iter().map(char::to_string).collect();
     strings(out, key, &owned);
+}
+
+/// `deprecated = "…"` (empty when no reason is given), and its releases.
+fn deprecated(out: &mut String, doc: &Option<(String, Option<String>, Option<String>)>) {
+    let Some((message, warn_at, remove_at)) = doc else {
+        return;
+    };
+    pair(out, "deprecated", message);
+    opt(out, "deprecated_warn_at", warn_at);
+    opt(out, "deprecated_remove_at", remove_at);
 }
 
 fn strings(out: &mut String, key: &str, values: &[String]) {

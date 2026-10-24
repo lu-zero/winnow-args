@@ -15,6 +15,7 @@ mod count;
 mod default_rules;
 mod default_subcommand;
 mod delimiter;
+mod deprecation;
 mod double_dash;
 mod external;
 mod fallbacks;

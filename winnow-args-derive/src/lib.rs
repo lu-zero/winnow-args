@@ -283,6 +283,11 @@ mod spec;
 ///   in capitals: `jobs` reads `JOBS`. A switch is true unless the
 ///   variable is empty, `0`, `false`, `no` or `off`. A `count` variable that
 ///   does not parse is left unset.
+/// - `env_fallback("A", "B")` or `env_fallback = "A"`: more variables, read
+///   in order when `env` is unset. Without `env`, the first is `env`. The
+///   pages list them all; help shows `env`.
+/// - `deprecated_env("OLD")`: old names of `env`, read last. A value from one
+///   records a `winnow_args::warn::Warning` naming `env` as the one to use.
 /// - `default = "…"`: parsed as the field's value when the command line, `env`
 ///   and `default_if` left it unset. On `Option<T>` the field is then `Some`.
 ///   A `Vec` takes it repeated, one value each, in order.
@@ -373,6 +378,13 @@ mod spec;
 /// - `help_heading = "…"`: list the field under this heading. Fields with none
 ///   are listed under "Options", or under the struct's `next_help_heading`.
 /// - `warning = "…"`: `--help` shows it as `Warning: …`.
+/// - `deprecated`, or `deprecated = "use --new"`: giving it records a
+///   `winnow_args::warn::Warning`, which `Args::parse` prints and
+///   `Args::warnings` returns. Help marks it `[deprecated]`, and the long help
+///   and the pages say why. `deprecated_warn_at = "2.0"` keeps it quiet
+///   before the program's `version` reaches that release; a program with no
+///   `version` warns. `deprecated_remove_at = "3.0"` says when it goes.
+///   Either implies `deprecated`.
 /// - `hide_default_value`, `hide_env`: help and the pages leave out the
 ///   default, or the environment variable; both still apply.
 /// - `display_order = n`: list the flag at place `n` among the fields, which
@@ -471,6 +483,11 @@ fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
 /// - `alias = "…"`, or `alias("…", …)`: other words, shown in the list.
 ///   `alias_hidden` is not shown.
 /// - `hide`: left out of help and of completion.
+/// - `deprecated`, `deprecated = "…"`, `deprecated_warn_at = "…"`,
+///   `deprecated_remove_at = "…"`: as on a field. Naming it, by any of its
+///   words, records a warning, and so does a line that runs it as the
+///   `default_subcommand` without naming it. The list marks it
+///   `(deprecated)`, and its own page says why.
 /// - `spec = "…"`: the name the pages find this variant's type under. A unit
 ///   holds nothing, and `spec` there is an error.
 /// - `help = "…"`: the one line the list shows. It replaces the first
@@ -650,8 +667,10 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 long_about: unit_long_about.unwrap_or_default(),
                 hide: info.hide,
                 ty,
+                deprecated: info.deprecation.as_ref().map(DeprecationDoc::spec),
             });
         }
+        let deprecated = DeprecationDoc::tokens(info.deprecation.as_ref());
         subs.push(quote! {
             ::winnow_args::help::Sub {
                 name: #primary,
@@ -660,6 +679,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 command: #command,
                 about: #about,
                 hide: #hide,
+                deprecated: #deprecated,
             }
         });
         // Read here, so a payload only printed is not dead code.
@@ -724,7 +744,14 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 ));
             }
         };
-        arms.push(quote!(#pattern => (#parse).map_err(|e| e.within(#primary)),));
+        let record = info.deprecation.as_ref().map(|_| {
+            quote! {
+                if let ::core::option::Option::Some(__deprecation) = #deprecated {
+                    __wa::deprecated_command(__name, __deprecation);
+                }
+            }
+        });
+        arms.push(quote!(#pattern => { #record (#parse).map_err(|e| e.within(#primary)) },));
         patterns.push(pattern);
     }
     let (about_text, long_about_text) = docs(&input.attrs);
@@ -901,8 +928,20 @@ fn variant_struct(
         for meta in metas {
             let key = meta.path().get_ident().map(Ident::to_string);
             match (key.as_deref(), &meta) {
-                // Its name among the subcommands, which the enum reads.
-                (Some("name" | "alias" | "alias_hidden" | "hide"), _) => {}
+                // Its name among the subcommands, and whether naming it is
+                // deprecated, which the enum reads.
+                (
+                    Some(
+                        "name"
+                        | "alias"
+                        | "alias_hidden"
+                        | "hide"
+                        | "deprecated"
+                        | "deprecated_warn_at"
+                        | "deprecated_remove_at",
+                    ),
+                    _,
+                ) => {}
                 (Some("validate"), syn::Meta::NameValue(pair)) => {
                     if validate.is_some() {
                         return Err(syn::Error::new_spanned(
@@ -1702,6 +1741,7 @@ fn occurrence_item(
         choices: #choices,
         choice_help: #choice_help,
         hide_choices: false,
+        deprecated: ::core::option::Option::None,
         require_equals: #require_equals,
         global: false,
         more_shorts: &[],
@@ -2022,6 +2062,9 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         choices: field.choices.clone().unwrap_or_default(),
         choice_help: field.choice_help.clone(),
         hide_choices: field.hide_choices,
+        env_fallback: field.env_fallback.clone(),
+        deprecated_env: field.deprecated_env.clone(),
+        deprecated: field.deprecation.as_ref().map(DeprecationDoc::spec),
         choices_ty: choices_link(field),
         require_equals: field.require_equals,
         global: field.is_global(),
@@ -2077,8 +2120,15 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             names: spellings,
             hide,
             about: doc,
+            deprecation,
             ..
         } = variant_names(variant, &mut names, case)?;
+        if deprecation.is_some() {
+            return Err(syn::Error::new(
+                variant.span(),
+                "`deprecated` is for a flag, a positional or a subcommand, not a value",
+            ));
+        }
         let name = LitStr::new(&spellings[0], Span::call_site());
         if !hide {
             if spec_on {
@@ -2163,6 +2213,8 @@ struct Variant {
     shown: usize,
     hide: bool,
     about: String,
+    /// A subcommand that is deprecated.
+    deprecation: Option<DeprecationDoc>,
 }
 
 /// How a variant's name is spelled when it gives none: an enum's
@@ -2276,9 +2328,11 @@ fn variant_names<'a>(
     let holds_type = !matches!(variant.fields, Fields::Unit);
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
+    let mut deprecation = None;
     for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("name") {
+            if DeprecationDoc::option(&meta, &mut deprecation)? {
+            } else if meta.path.is_ident("name") {
                 name = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
@@ -2309,7 +2363,7 @@ fn variant_names<'a>(
                 }
             } else {
                 return Err(meta.error(
-                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`; \
+                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help`, `long_help` or `deprecated`; \
                      a command's options, such as `validate`, go on a variant with fields or on the struct it holds",
                 ));
             }
@@ -2336,6 +2390,7 @@ fn variant_names<'a>(
         names,
         shown,
         hide,
+        deprecation,
         about: help
             .map(|h| {
                 h.split("\n\n")
@@ -2647,6 +2702,13 @@ struct Field {
     /// `help = EXPR`, not a literal: the `&'static str` help shows in place
     /// of the doc comment, which the pages keep.
     help_expr: Option<syn::Expr>,
+    /// Giving it records a warning, and help marks it.
+    deprecation: Option<DeprecationDoc>,
+    /// More variables after `env`, read in order.
+    env_fallback: Vec<String>,
+    /// Old names of the variable, read last; a value from one records a
+    /// warning naming `env`.
+    deprecated_env: Vec<String>,
     /// Environment variable consulted when the command line gave nothing.
     env: Option<String>,
     /// Value used when neither the command line nor the environment did.
@@ -2832,6 +2894,7 @@ impl Field {
         };
         let choice_help = choice_help_fn(&self.choice_help, self.choices.as_deref(), value_ty);
         let hide_choices = self.hide_choices;
+        let deprecated = DeprecationDoc::tokens(self.deprecation.as_ref());
         quote! {
             ::winnow_args::help::Item {
                 short: #short,
@@ -2854,6 +2917,7 @@ impl Field {
                 choices: #choices,
                 choice_help: #choice_help,
                 hide_choices: #hide_choices,
+                deprecated: #deprecated,
                 require_equals: #require_equals,
                 global: #global,
                 more_shorts: &[#(#more_shorts),*],
@@ -3092,8 +3156,7 @@ impl Field {
         self.env
             .as_ref()
             .map(|var| {
-                let name = LitStr::new(var, Span::call_site());
-                let apply = match &self.kind {
+                let apply_from = |var: &str| match &self.kind {
                     Kind::Switch => quote!(#slot = __wa::env::truthy(&__raw);),
                     Kind::Count(ty) => quote! {
                         if let ::core::option::Option::Some(::core::result::Result::Ok(__n)) =
@@ -3110,15 +3173,35 @@ impl Field {
                         }
                     }
                 };
-                quote! {
-                    if #unset {
-                        if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
-                            #apply
-                        }
-                    }
-                }
+                let chain = self.env_chain(var, &apply_from);
+                quote!(if #unset { #chain })
             })
             .unwrap_or_default()
+    }
+
+    /// Read `env`, then each `env_fallback`, then each `deprecated_env`, the
+    /// first set one applied with `apply`; a deprecated one records that
+    /// `env` is the name to use.
+    fn env_chain(&self, env: &str, apply: &dyn Fn(&str) -> TokenStream2) -> TokenStream2 {
+        let current = LitStr::new(env, Span::call_site());
+        let names = std::iter::once((env, false))
+            .chain(self.env_fallback.iter().map(|name| (name.as_str(), false)))
+            .chain(self.deprecated_env.iter().map(|name| (name.as_str(), true)));
+        let branches = names.map(|(name, deprecated)| {
+            let lit = LitStr::new(name, Span::call_site());
+            let apply = apply(name);
+            let record = deprecated.then(
+                || quote!(__wa::deprecated_env(#lit, ::core::option::Option::Some(#current));),
+            );
+            quote! {
+                if let ::core::option::Option::Some(__raw) = __wa::env::var(#lit) {
+                    #record
+                    #apply
+                }
+            }
+        });
+        let branches: Vec<_> = branches.collect();
+        quote!(#(#branches)else*)
     }
 
     /// A negatable switch's fallback: only when neither spelling was given.
@@ -3128,12 +3211,9 @@ impl Field {
             let Some(var) = &self.env else {
                 return quote!();
             };
-            let name = LitStr::new(var, Span::call_site());
-            quote! {
-                if let ::core::option::Option::Some(__raw) = __wa::env::var(#name) {
-                    #slot = ::core::option::Option::Some(__wa::env::truthy(&__raw));
-                }
-            }
+            let apply =
+                |_: &str| quote!(#slot = ::core::option::Option::Some(__wa::env::truthy(&__raw)););
+            self.env_chain(var, &apply)
         } else {
             match (&self.default_fn, self.defaults.first()) {
                 (Some(function), _) => quote!(#slot = ::core::option::Option::Some(#function());),
@@ -3590,8 +3670,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             fields
                 .iter()
                 .filter(|f| keep(f))
-                .filter_map(part)
-                .map(|(pattern, body)| quote!(#pattern => { #body #tail }))
+                .filter_map(|f| {
+                    let (pattern, body) = part(f)?;
+                    let record =
+                        DeprecationDoc::record_argument(f.deprecation.as_ref(), &f.display());
+                    Some(quote!(#pattern => { #record #body #tail }))
+                })
                 .collect()
         };
         let mut long = of(&|f| Some((f.long_pattern()?, store(f))));
@@ -3661,6 +3745,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let arms = positionals.iter().enumerate().map(|(i, f)| {
             let ident = slot(&f.ident);
             let display = LitStr::new(&f.display(), Span::call_site());
+            // Named as errors name a positional.
+            let record = DeprecationDoc::record_argument(
+                f.deprecation.as_ref(),
+                &format!("<{}>", f.display()),
+            );
             let stop = (f.double_dash() == DoubleDash::Automatic || f.stop_flags)
                 .then(|| quote!(__input.stop_flags();));
             // Flags may have stopped at the positional before this one. A
@@ -3681,6 +3770,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     let value = f.word_value(ty, quote!(__word), &display);
                     quote! {
                         #i => {
+                            #record
                             #ident = ::core::option::Option::Some(#value);
                             __position += 1;
                             #filled
@@ -3712,6 +3802,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     };
                     quote! {
                         #i => {
+                            #record
                             #push
                             #filled
                             #stop
@@ -6118,6 +6209,80 @@ fn slot(ident: &Ident) -> Ident {
     }
 }
 
+/// `deprecated`, `deprecated = "…"`, `deprecated_warn_at = "…"` and
+/// `deprecated_remove_at = "…"`: the last two imply the first.
+#[derive(Clone, Default)]
+struct DeprecationDoc {
+    message: String,
+    warn_at: Option<String>,
+    remove_at: Option<String>,
+}
+
+impl DeprecationDoc {
+    /// Read one of the options into `slot`; `false` when `meta` is none.
+    fn option(
+        meta: &syn::meta::ParseNestedMeta<'_>,
+        slot: &mut Option<DeprecationDoc>,
+    ) -> syn::Result<bool> {
+        let key = ["deprecated", "deprecated_warn_at", "deprecated_remove_at"]
+            .into_iter()
+            .find(|key| meta.path.is_ident(key));
+        let Some(key) = key else {
+            return Ok(false);
+        };
+        let doc = slot.get_or_insert_with(Self::default);
+        let text = |meta: &syn::meta::ParseNestedMeta<'_>| -> syn::Result<String> {
+            Ok(meta.value()?.parse::<LitStr>()?.value())
+        };
+        match key {
+            "deprecated" if meta.input.peek(syn::Token![=]) => doc.message = text(meta)?,
+            "deprecated" => {}
+            "deprecated_warn_at" => doc.warn_at = Some(text(meta)?),
+            _ => doc.remove_at = Some(text(meta)?),
+        }
+        Ok(true)
+    }
+
+    /// The help data's `Option<&'static Deprecation>`.
+    fn tokens(doc: Option<&Self>) -> TokenStream2 {
+        let Some(doc) = doc else {
+            return quote!(::core::option::Option::None);
+        };
+        let message = &doc.message;
+        let (warn_at, remove_at) = (
+            opt_str(doc.warn_at.as_deref()),
+            opt_str(doc.remove_at.as_deref()),
+        );
+        quote!(::core::option::Option::Some({
+            const __DEPRECATION: ::winnow_args::warn::Deprecation =
+                ::winnow_args::warn::Deprecation::new(#message, #warn_at, #remove_at);
+            &__DEPRECATION
+        }))
+    }
+
+    /// What the fragments write: `(message, warn_at, remove_at)`.
+    fn spec(&self) -> (String, Option<String>, Option<String>) {
+        (
+            self.message.clone(),
+            self.warn_at.clone(),
+            self.remove_at.clone(),
+        )
+    }
+
+    /// The statement that records a use, `name` being what help calls it.
+    fn record_argument(doc: Option<&Self>, name: &str) -> TokenStream2 {
+        let Some(doc) = doc else {
+            return quote!();
+        };
+        let deprecation = Self::tokens(Some(doc));
+        quote! {
+            if let ::core::option::Option::Some(__deprecation) = #deprecation {
+                __wa::deprecated_argument(#name, __deprecation);
+            }
+        }
+    }
+}
+
 /// One of `choices(…)`: `"fast"`, or `"fast" = "what it means"`.
 struct Choice {
     name: LitStr,
@@ -6153,6 +6318,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut choice_help = Vec::new();
     let mut hide_choices = false;
     let mut help_expr = None;
+    let mut deprecation = None;
+    let mut env_fallback = Vec::new();
+    let mut deprecated_env = Vec::new();
     let mut env = None;
     let mut defaults = Vec::new();
     let mut double_dash = None;
@@ -6258,6 +6426,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 hide = true;
             } else if meta.path.is_ident("hide_choices") {
                 hide_choices = true;
+            } else if DeprecationDoc::option(&meta, &mut deprecation)? {
+            } else if meta.path.is_ident("env_fallback") {
+                env_fallback.extend(aliases(&meta)?);
+            } else if meta.path.is_ident("deprecated_env") {
+                deprecated_env.extend(aliases(&meta)?);
             } else if meta.path.is_ident("from_str") {
                 from_str = true;
             } else if meta.path.is_ident("hide_default_value") {
@@ -6457,11 +6630,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
-                     `delimiter`, `choices`, `hide_choices`, `env`, `default`, `default_missing`, `allow_negative_numbers`, \
+                     `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
-                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -6734,6 +6907,18 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if hide_choices && choices.is_none() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`hide_choices` is for a value with choices".into());
     }
+    // With no `env`, the first fallback is the name the variable has now.
+    if env.is_none() && !env_fallback.is_empty() {
+        env = Some(env_fallback.remove(0));
+    }
+    if env.is_none() && !deprecated_env.is_empty() {
+        return error(
+            "`deprecated_env` names the old names of `env`, which this field has none of".into(),
+        );
+    }
+    if deprecation.is_some() && matches!(role, Role::Subcommand) {
+        return error("`deprecated` is for a flag, a positional or a subcommand variant".into());
+    }
     Ok(Field {
         ident,
         spec,
@@ -6744,6 +6929,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         choice_help,
         hide_choices,
         help_expr,
+        deprecation,
+        env_fallback,
+        deprecated_env,
         env,
         defaults,
         conflicts,

@@ -80,4 +80,36 @@ struct HiddenChoicesOfNone {
     verbose: bool,
 }
 
+const HELP: &str = "help";
+
+#[derive(Args)]
+struct ConstantHelpBesideLongHelp {
+    #[arg(long, help = HELP, long_help = "more")]
+    flag: bool,
+}
+
+#[derive(Args)]
+struct DeprecatedEnvOfNone {
+    #[arg(long, deprecated_env = "OLD")]
+    jobs: Option<u32>,
+}
+
+#[derive(winnow_args::Subcommand)]
+enum Command {
+    Run,
+}
+
+#[derive(Args)]
+struct DeprecatedSubcommandField {
+    #[arg(subcommand, deprecated)]
+    command: Option<Command>,
+}
+
+#[derive(winnow_args::ValueEnum)]
+enum DeprecatedValue {
+    Fast,
+    #[arg(deprecated)]
+    Slow,
+}
+
 fn main() {}

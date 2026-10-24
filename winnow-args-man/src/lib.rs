@@ -4,7 +4,9 @@
 use roff::{Inline, Roff};
 use winnow_args_spec::marks::{Mark, pieces};
 use winnow_args_spec::words::{Word, example_words};
-use winnow_args_spec::{Command, Item, Page, Sub, append_sentence, applet_aliases, pages};
+use winnow_args_spec::{
+    Command, Deprecated, Item, Page, Sub, append_sentence, applet_aliases, pages,
+};
 
 /// Header fields of a manual page. They are not part of the command.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,8 +122,9 @@ impl Manual {
         let effect = command
             .effect
             .map(|effect| format!("Effect: {}.", effect.label()));
+        let deprecated = page.deprecated.map(Deprecated::note);
         let notes = command.notes().into_iter().chain(effect.as_deref());
-        let notes: Vec<&str> = notes.collect();
+        let notes: Vec<&str> = notes.chain(deprecated.as_deref()).collect();
         if !before.is_empty() || !body.is_empty() || !notes.is_empty() {
             doc.control("SH", ["DESCRIPTION"]);
             if !before.is_empty() {
@@ -150,16 +153,7 @@ impl Manual {
                     tag.push(roman(", "));
                     tag.push(bold(alias));
                 }
-                if command.is_default(sub) {
-                    let default = if sub.about.is_empty() {
-                        "(default)"
-                    } else {
-                        " (default)"
-                    };
-                    term(&mut doc, tag, &format!("{}{default}", sub.about));
-                } else {
-                    term(&mut doc, tag, &sub.about);
-                }
+                term(&mut doc, tag, &command.sub_about(sub));
             }
         }
 

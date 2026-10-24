@@ -84,7 +84,7 @@ the word. That default is a decision in [`CHECKLIST.md`](./CHECKLIST.md).
 | Completion scripts | ✓ | ✓ | ✓ | ~ `clap_complete` |
 | Completion of values by hint or function | ✓ | ✓ | ✓ | ~ |
 | Man pages, markdown | ~ `winnow-args-man`, `-markdown` | ✓ | ✓ | ~ `clap_mangen` |
-| Deprecated flags with warnings | – | ✓ | – | – |
+| Deprecated flags with warnings | ✓ | ✓ | – | – |
 
 ## Around the parser
 

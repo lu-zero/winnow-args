@@ -142,6 +142,7 @@ pub mod run;
 pub mod stream;
 pub mod token;
 pub mod value;
+pub mod warn;
 
 pub use env::with_env;
 pub use error::{Error, ErrorKind};
@@ -420,11 +421,27 @@ pub trait Args: Sized {
     /// Parse the process's arguments; on help, version or a failure, print
     /// and exit as [`report`] does. It answers no completion callback: call
     /// [`Args::completion_request`] first if the program has [`complete`] scripts.
+    ///
+    /// The [`warn::Warning`]s due are printed on standard error first.
     fn parse() -> Self {
-        match Self::try_parse() {
+        let parsed = Self::try_parse();
+        for warning in Self::warnings() {
+            eprint!("{}", warning.render_styled(help::Style::auto_stderr()));
+        }
+        match parsed {
             Ok(parsed) => parsed,
             Err(error) => std::process::exit(report(&error, &Self::program())),
         }
+    }
+
+    /// What the parses on this thread used that this program says not to
+    /// use any more, since the last call: deprecated flags, positionals and
+    /// subcommands, and values read from deprecated variables. Those whose
+    /// `deprecated_warn_at` is a later release than this program's `version`
+    /// are left out. [`Args::parse`] prints them; after any other entry
+    /// point the program reports them its own way, or not at all.
+    fn warnings() -> Vec<warn::Warning> {
+        warn::take(Self::help_data().version)
     }
 
     /// Parse the process's arguments, leaving help, version and failures to
@@ -906,6 +923,43 @@ pub mod __private {
     #[inline]
     pub fn flag_like(word: &[u8]) -> bool {
         is_flag_like(word)
+    }
+
+    /// A deprecated flag or positional, `name` as help spells it, was given.
+    #[cold]
+    #[inline(never)]
+    pub fn deprecated_argument(name: &str, deprecation: &'static crate::warn::Deprecation) {
+        crate::warn::record(crate::warn::Warning {
+            kind: crate::warn::WarningKind::Argument,
+            name: name.to_owned(),
+            deprecation: Some(*deprecation),
+            replacement: None,
+        });
+    }
+
+    /// A deprecated subcommand was named, as `name`.
+    #[cold]
+    #[inline(never)]
+    pub fn deprecated_command(name: &[u8], deprecation: &'static crate::warn::Deprecation) {
+        crate::warn::record(crate::warn::Warning {
+            kind: crate::warn::WarningKind::Command,
+            name: String::from_utf8_lossy(name).into_owned(),
+            deprecation: Some(*deprecation),
+            replacement: None,
+        });
+    }
+
+    /// A value was read from `name`, a deprecated name of a variable whose
+    /// current one is `instead`.
+    #[cold]
+    #[inline(never)]
+    pub fn deprecated_env(name: &'static str, instead: Option<&'static str>) {
+        crate::warn::record(crate::warn::Warning {
+            kind: crate::warn::WarningKind::Env,
+            name: name.to_owned(),
+            deprecation: None,
+            replacement: instead,
+        });
     }
 
     /// An external subcommand's words: `name`, which has been read, then

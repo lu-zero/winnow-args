@@ -16,7 +16,7 @@ error: `same` is already used by `One`
 21 |     Two,
    |     ^^^
 
-error: expected `name`, `alias`, `alias_hidden`, `hide`, `help` or `long_help`; a command's options, such as `validate`, go on a variant with fields or on the struct it holds
+error: expected `name`, `alias`, `alias_hidden`, `hide`, `help`, `long_help` or `deprecated`; a command's options, such as `validate`, go on a variant with fields or on the struct it holds
   --> tests/ui/enums.rs:26:11
    |
 26 |     #[arg(short = 'r')]

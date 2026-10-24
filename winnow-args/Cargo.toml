@@ -54,6 +54,11 @@ name = "ld"
 path = "../examples/ld.rs"
 required-features = ["derive"]
 
+[[example]]
+name = "deprecated"
+path = "../examples/deprecated.rs"
+required-features = ["derive"]
+
 [dev-dependencies]
 trybuild = "1"
 winnow-args-spec.workspace = true

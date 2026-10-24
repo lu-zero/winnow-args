@@ -200,7 +200,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Defaults and rules
 
-- [ ] `env_fallback`, `deprecated_env`
+- [x] `env_fallback`, `deprecated_env`
 - [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime
@@ -218,7 +218,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] Executable views
 - [ ] Sigil arguments (`+node@22`), clauses (repeated groups split by `:::`)
 - [ ] Mounts: subcommands from a plugin's spec at runtime
-- [ ] Deprecation: `deprecated` flags, commands and variables, with a warnings
+- [x] Deprecation: `deprecated` flags, commands and variables, with a warnings
       channel and `deprecated_warn_at` / `deprecated_remove_at`
 
 ### Help and errors

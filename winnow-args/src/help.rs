@@ -194,6 +194,9 @@ pub struct Item {
     /// The choices are left out of help and the pages, though still
     /// accepted and completed.
     pub hide_choices: bool,
+    /// Why, and until when, it is deprecated: help marks it, and giving it
+    /// records a [`Warning`](crate::warn::Warning).
+    pub deprecated: Option<&'static crate::warn::Deprecation>,
     /// The value is only taken attached (`--name=value`), never the next word.
     pub require_equals: bool,
     /// Also accepted by every subcommand below.
@@ -242,6 +245,7 @@ impl Item {
         choices: &[],
         choice_help: None,
         hide_choices: false,
+        deprecated: None,
         require_equals: false,
         global: false,
         more_shorts: &[],
@@ -437,6 +441,9 @@ pub struct Sub {
     pub about: &'static str,
     /// Left out of the list.
     pub hide: bool,
+    /// Why, and until when, it is deprecated: the list marks it, and
+    /// naming it records a [`Warning`](crate::warn::Warning).
+    pub deprecated: Option<&'static crate::warn::Deprecation>,
 }
 
 /// The command a `help a b …` line asks about: follow each word through
@@ -819,6 +826,13 @@ fn page(
                     }
                     // As the value of a `[default: …]` is.
                     push_painted(&mut about, style.default(), "(default)");
+                }
+                if s.deprecated.is_some() {
+                    if !about.is_empty() {
+                        about.push(' ');
+                    }
+                    // As `(default)` is, beside it.
+                    push_painted(&mut about, style.error(), "(deprecated)");
                 }
                 (name, about)
             })
@@ -1368,7 +1382,32 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
         let label = Style::paint(style.error(), "Warning:");
         add(format!("{label} {}", painted_marks(item.warning, style)));
     }
+    if let Some(deprecation) = item.deprecated {
+        add(deprecated_note(deprecation, long, style));
+    }
     text
+}
+
+/// `[deprecated]`, and in the long help why and until when: `Deprecated:
+/// use --new. Removed at 2.0.`
+fn deprecated_note(deprecation: &crate::warn::Deprecation, long: bool, style: Style) -> String {
+    if !long {
+        return Style::paint(style.error(), "[deprecated]");
+    }
+    let mut note = Style::paint(style.error(), "Deprecated");
+    let message = painted_marks(deprecation.message, style);
+    if message.is_empty() {
+        note.push('.');
+    } else {
+        note.push_str(&format!(": {message}"));
+    }
+    if let Some(at) = deprecation.remove_at {
+        if !message.is_empty() && !message.ends_with(['.', '!', '?']) {
+            note.push('.');
+        }
+        note.push_str(&format!(" Removed at {at}."));
+    }
+    note
 }
 
 /// A heading: painted as one, and a marked span of it as both a heading and
@@ -1704,6 +1743,16 @@ mod tests {
     }
 
     #[test]
+    fn an_item_of_a_list_goes_on_under_its_text() {
+        let text = "- fast: as fast as it goes, and no faster\n- slow";
+        let wrapped = super::wrap_text(text, 20);
+        assert_eq!(
+            wrapped,
+            "- fast: as fast as\n  it goes, and no\n  faster\n- slow"
+        );
+    }
+
+    #[test]
     fn a_long_word_stands_alone() {
         assert_eq!(wrap("a verylongword b", 5), ["a", "verylongword", "b"]);
     }
@@ -1724,16 +1773,6 @@ mod tests {
                 format!("[possible values: {},", green("auto")),
                 format!("{}]", green("never"))
             ]
-        );
-    }
-
-    #[test]
-    fn an_item_of_a_list_goes_on_under_its_text() {
-        let text = "- fast: as fast as it goes, and no faster\n- slow";
-        let wrapped = super::wrap_text(text, 20);
-        assert_eq!(
-            wrapped,
-            "- fast: as fast as\n  it goes, and no\n  faster\n- slow"
         );
     }
 

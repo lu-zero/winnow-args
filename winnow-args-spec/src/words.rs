@@ -251,6 +251,7 @@ mod tests {
             full_path: Vec::new(),
             command: &command,
             globals: Vec::new(),
+            deprecated: None,
         };
         let line = "t -vj 2 --cd=src run <FILE>... -x -- 'a b' | wc # count";
         let words: Vec<_> = example_words(line, &page)
@@ -293,6 +294,7 @@ mod tests {
             full_path: vec!["busybox".to_owned(), "ls".to_owned()],
             command: &ls,
             globals: Vec::new(),
+            deprecated: None,
         };
         let kinds = |line| -> Vec<Word> {
             let words = example_words(line, &page).into_iter();

@@ -179,8 +179,41 @@ pub struct Sub {
     pub about: String,
     /// Left out of the rendered pages.
     pub hide: bool,
+    /// Why, and until when, it is deprecated.
+    pub deprecated: Option<Deprecated>,
     /// The command itself.
     pub command: Command,
+}
+
+/// Why a flag, a positional or a subcommand is deprecated, and when.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Deprecated {
+    /// The author's reason; empty when none is given.
+    pub message: String,
+    /// The release warnings start at.
+    pub warn_at: Option<String>,
+    /// The release it goes away in.
+    pub remove_at: Option<String>,
+}
+
+impl Deprecated {
+    /// What a page says of it, as the long help does: `Deprecated: use
+    /// --new. Removed at 2.0.`
+    pub fn note(&self) -> String {
+        let mut note = String::from("Deprecated");
+        if self.message.is_empty() {
+            note.push('.');
+        } else {
+            note.push_str(&format!(": {}", self.message));
+        }
+        if let Some(at) = &self.remove_at {
+            if !self.message.is_empty() && !self.message.ends_with(['.', '!', '?']) {
+                note.push('.');
+            }
+            note.push_str(&format!(" Removed at {at}."));
+        }
+        note
+    }
 }
 
 /// A flag or positional.
@@ -228,6 +261,12 @@ pub struct Item {
     pub choice_help: Vec<String>,
     /// The pages leave the choices out.
     pub hide_choices: bool,
+    /// More environment variables after `env`, read in order.
+    pub env_fallback: Vec<String>,
+    /// Old names of `env`, read last.
+    pub deprecated_env: Vec<String>,
+    /// Why, and until when, it is deprecated.
+    pub deprecated: Option<Deprecated>,
     /// The value must be attached (`--name=value`).
     pub require_equals: bool,
     /// Also accepted on subcommands of this command.
@@ -280,6 +319,8 @@ pub struct Page<'a> {
     pub command: &'a Command,
     /// Global flags inherited from parents, in the order they were declared.
     pub globals: Vec<&'a Item>,
+    /// Why, and until when, the command is deprecated, as its parent says.
+    pub deprecated: Option<&'a Deprecated>,
 }
 
 /// Fragments loaded from a directory or from strings, by crate.
@@ -375,6 +416,7 @@ struct VariantFrag {
     long_about: String,
     hide: bool,
     ty: Option<String>,
+    deprecated: Option<Deprecated>,
 }
 
 #[derive(Debug)]
@@ -719,6 +761,23 @@ impl Command {
         Some(heading.help.as_str()).filter(|help| !help.is_empty())
     }
 
+    /// What the list of commands says of `sub`: its line, then
+    /// `(default)` and `(deprecated)` when they apply.
+    pub fn sub_about(&self, sub: &Sub) -> String {
+        let marks = [
+            self.is_default(sub).then_some("(default)"),
+            sub.deprecated.as_ref().map(|_| "(deprecated)"),
+        ];
+        let mut about = sub.about.clone();
+        for mark in marks.into_iter().flatten() {
+            if !about.is_empty() {
+                about.push(' ');
+            }
+            about.push_str(mark);
+        }
+        about
+    }
+
     /// Whether a line that names no subcommand runs `sub`.
     pub fn is_default(&self, sub: &Sub) -> bool {
         self.default_subcommand.as_deref().is_some_and(|name| {
@@ -824,7 +883,14 @@ impl Item {
     pub fn description(&self) -> String {
         let mut text = self.prose().to_owned();
         if let Some(env) = &self.env {
-            append_note(&mut text, &format!("[env: {env}]"));
+            let names: Vec<&str> = std::iter::once(env.as_str())
+                .chain(self.env_fallback.iter().map(String::as_str))
+                .collect();
+            append_note(&mut text, &format!("[env: {}]", names.join(", ")));
+        }
+        if !self.deprecated_env.is_empty() {
+            let old = self.deprecated_env.join(", ");
+            append_note(&mut text, &format!("[deprecated env: {old}]"));
         }
         if let Some(default) = &self.default {
             append_note(&mut text, &format!("[default: {default}]"));
@@ -849,6 +915,9 @@ impl Item {
         }
         if !self.warning.is_empty() {
             append_note(&mut text, &format!("Warning: {}", self.warning));
+        }
+        if let Some(deprecated) = &self.deprecated {
+            append_note(&mut text, &deprecated.note());
         }
         text
     }
@@ -968,7 +1037,7 @@ impl Page<'_> {
 pub fn pages<'a>(root: &'a Command, bin: &str) -> Result<Vec<Page<'a>>, Error> {
     let mut out = Vec::new();
     let root_path = vec![bin.to_owned()];
-    walk(root, root_path, Vec::new(), &[], &mut out);
+    walk(root, root_path, Vec::new(), &[], None, &mut out);
     unique_stems(out.iter().map(|page| page.path.clone()))?;
     Ok(out)
 }
@@ -1023,6 +1092,7 @@ fn walk<'a>(
     path: Vec<String>,
     full_path: Vec<String>,
     ancestors: &[&'a Item],
+    deprecated: Option<&'a Deprecated>,
     out: &mut Vec<Page<'a>>,
 ) {
     let globals = ancestors
@@ -1037,6 +1107,7 @@ fn walk<'a>(
         full_path,
         command,
         globals,
+        deprecated,
     };
     let multicall = page.multicall_root();
     let (path, full_path) = (page.path.clone(), page.full_path.clone());
@@ -1052,7 +1123,14 @@ fn walk<'a>(
         if !full.is_empty() {
             full.push(sub.name.clone());
         }
-        walk(&sub.command, child, full, &next, out);
+        walk(
+            &sub.command,
+            child,
+            full,
+            &next,
+            sub.deprecated.as_ref(),
+            out,
+        );
     }
 }
 
@@ -1194,6 +1272,18 @@ fn rows<T>(
     Ok(out)
 }
 
+/// `deprecated = "…"` and its releases, when the row has it.
+fn deprecated(table: &Table) -> Result<Option<Deprecated>, Error> {
+    let Some(message) = opt_present(table, "deprecated")? else {
+        return Ok(None);
+    };
+    Ok(Some(Deprecated {
+        message,
+        warn_at: opt_present(table, "deprecated_warn_at")?,
+        remove_at: opt_present(table, "deprecated_remove_at")?,
+    }))
+}
+
 fn effect(table: &Table) -> Result<Option<Effect>, Error> {
     opt_present(table, "effect")?
         .map(|name| Effect::named(&name))
@@ -1214,6 +1304,7 @@ fn parse_variants(table: &Table) -> Result<Vec<VariantFrag>, Error> {
             long_about: opt_str(row, "long_about")?,
             hide: flag(row, "hide")?,
             ty: opt_present(row, "ty")?,
+            deprecated: deprecated(row)?,
         });
     }
     Ok(variants)
@@ -1249,6 +1340,9 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 choices: strings(row, "choices")?,
                 choice_help: strings(row, "choice_help")?,
                 hide_choices: flag(row, "hide_choices")?,
+                env_fallback: strings(row, "env_fallback")?,
+                deprecated_env: strings(row, "deprecated_env")?,
+                deprecated: deprecated(row)?,
                 require_equals: flag(row, "require_equals")?,
                 global: flag(row, "global")?,
                 optional_value: flag(row, "optional_value")?,
@@ -1509,6 +1603,7 @@ impl Catalog {
                 hidden_aliases: variant.hidden_aliases.clone(),
                 about,
                 hide: variant.hide,
+                deprecated: variant.deprecated.clone(),
                 command,
             });
         }

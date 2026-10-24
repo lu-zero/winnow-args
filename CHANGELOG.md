@@ -31,6 +31,25 @@ released together. Versions follow [semver](https://semver.org).
   `..Default::default()` is unaffected. `choice_help` is a function, `None`
   unless something describes the choices: mise's binary is 8 KB larger,
   with 2 more relocations, and parsing takes no more instructions.
+- **Added**: `deprecated`, or `deprecated = "use --new"`, on a flag, a
+  positional or a subcommand variant, with `deprecated_warn_at` and
+  `deprecated_remove_at`. Giving it records a `warn::Warning`: `Args::parse`
+  prints those due on standard error, and `Args::warnings` returns them
+  after any other entry point. One whose `deprecated_warn_at` is a later
+  release than the program's `version` is quiet. Help marks a flag or a
+  positional `[deprecated]`, and its long help and the pages say why and
+  until when; a command is `(deprecated)` in the list, and its own page
+  says why. The `warn` module has `Warning`, `WarningKind` and
+  `Deprecation`; `winnow_args_spec` has `Deprecated`, and
+  `Command::sub_about` gives a command's line with `(default)` and
+  `(deprecated)`.
+- **Added**: `env_fallback("A", "B")` on a field: more variables, read in
+  order after `env`; and `deprecated_env("OLD")`, read last, whose value
+  records a warning naming `env`. The pages list every name.
+- **Changed**: `help::Item` and `help::Sub` have the field `deprecated`, and
+  `winnow_args_spec::Item` the fields `deprecated`, `env_fallback` and
+  `deprecated_env`, and `Sub` `deprecated`. mise's binary is 8 KB larger
+  for it, the pointer on each item; parsing takes no more instructions.
 - **Changed**: `color::Depth`, and `winnow_args_spec`'s `Effect`, `Mark` and
   `Word` are `#[non_exhaustive]`, so a later release can add to them: a
   `match` on one needs a `_` arm. `token::Arg` and `Kind` stay exhaustive,
