@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.5.0 (2026-10-24)
 
 - **Added**: what a choice means. A `ValueEnum` variant's doc comment or
   `help = "…"`, and `choices("fast" = "…", "slow")` on a field: the long

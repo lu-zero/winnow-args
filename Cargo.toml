@@ -22,7 +22,7 @@ exclude = ["benchmarks/bpaf010"]
 default-members = ["winnow-args", "winnow-args-derive"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.88"
@@ -31,11 +31,11 @@ repository = "https://github.com/lu-zero/winnow-args"
 [workspace.dependencies]
 winnow = { version = "1.0.4", default-features = false, features = ["std", "parser"] }
 bpaf = { version = "0.9", features = ["derive"] }
-winnow-args = { path = "winnow-args", version = "0.4.0", default-features = false, features = ["derive"] }
-winnow-args-derive = { path = "winnow-args-derive", version = "=0.4.0" }
-winnow-args-spec = { path = "winnow-args-spec", version = "0.4.0" }
-winnow-args-markdown = { path = "winnow-args-markdown", version = "0.4.0" }
-winnow-args-man = { path = "winnow-args-man", version = "0.4.0" }
+winnow-args = { path = "winnow-args", version = "0.5.0", default-features = false, features = ["derive"] }
+winnow-args-derive = { path = "winnow-args-derive", version = "=0.5.0" }
+winnow-args-spec = { path = "winnow-args-spec", version = "0.5.0" }
+winnow-args-markdown = { path = "winnow-args-markdown", version = "0.5.0" }
+winnow-args-man = { path = "winnow-args-man", version = "0.5.0" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full"] }
