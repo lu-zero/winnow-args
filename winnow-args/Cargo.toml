@@ -59,6 +59,26 @@ name = "deprecated"
 path = "../examples/deprecated.rs"
 required-features = ["derive"]
 
+[[example]]
+name = "rules"
+path = "../examples/rules.rs"
+required-features = ["derive"]
+
+[[example]]
+name = "values"
+path = "../examples/values.rs"
+required-features = ["derive"]
+
+[[example]]
+name = "subcommands"
+path = "../examples/subcommands.rs"
+required-features = ["derive"]
+
+[[example]]
+name = "multicall"
+path = "../examples/multicall.rs"
+required-features = ["derive"]
+
 [dev-dependencies]
 trybuild = "1"
 winnow-args-spec.workspace = true
