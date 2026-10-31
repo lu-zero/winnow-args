@@ -320,6 +320,9 @@ pub const fn items_clash(parts: &[&[Item]]) -> bool {
         if a.positional || b.positional {
             return false;
         }
+        if matches!((a.plus, b.plus), (Some(x), Some(y)) if x == y) {
+            return true;
+        }
         if matches!(a.short, Some(c) if has_short(b, c)) {
             return true;
         }

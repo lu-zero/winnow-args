@@ -37,7 +37,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `keep_equals`, `prefix` (`-lfoo`), `two_dashes`
 - [x] `--no-name` negation (`negate`): last spelling wins
 - [x] `+x` options (`plus_options`, `plus`): `Option<bool>` tri-state, bundles,
-      `+o NAME`
+      `+o NAME`; `-x` and `+x` in order, as `Vec<bool>`, as `Vec<(bool, T)>`
+      with a value, or as `plus` variants of a `sequence` enum, one holding
+      the sign of both
 - [x] GNU dash rules (`long_only`): one dash or two, a single-dash word tried
       as a long name before a short takes the rest of it
 - [x] Unknown flags kept as words (`unknown_flags = "value"`), collected

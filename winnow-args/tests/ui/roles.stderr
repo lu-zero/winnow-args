@@ -93,3 +93,15 @@ error: `long_version` needs `version`
     |
 129 | struct LongVersionAlone {
     |        ^^^^^^^^^^^^^^^^
+
+error: with `plus` equal to `short`, the variant holds the sign of `-x` and `+x`: `bool`, `(bool, T)`, or `bool` and a value
+   --> tests/ui/roles.rs:150:5
+    |
+150 |     #[arg(short = 'o', plus = 'o')]
+    |     ^
+
+error[E0080]: evaluation panicked: the sequence enum has a `plus` variant: `+x` is read only with `#[arg(plus_options)]` on this struct
+   --> tests/ui/roles.rs:142:10
+    |
+142 | #[derive(Args)]
+    |          ^^^^ evaluation of `<PlusWithoutPlusOptions as winnow_args::Args>::HELP::_` failed here

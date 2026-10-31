@@ -131,4 +131,24 @@ struct LongVersionAlone {
     verbose: bool,
 }
 
+#[derive(Occurrence)]
+enum Toggle {
+    #[arg(short = 'e')]
+    On,
+    #[arg(plus = 'e')]
+    Off,
+}
+
+#[derive(Args)]
+struct PlusWithoutPlusOptions {
+    #[arg(sequence)]
+    items: Vec<Toggle>,
+}
+
+#[derive(Occurrence)]
+enum SameLetterNoSign {
+    #[arg(short = 'o', plus = 'o')]
+    Named(String),
+}
+
 fn main() {}

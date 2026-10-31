@@ -162,4 +162,11 @@ struct EachWithPlus {
     trace: Vec<Option<bool>>,
 }
 
+#[derive(Args)]
+#[arg(plus_options)]
+struct SignedWithoutPlus {
+    #[arg(short = 'o')]
+    options: Vec<(bool, String)>,
+}
+
 fn main() {}

@@ -113,6 +113,7 @@ mod spec;
 /// | `Vec<T>` | one value each time the flag is given | every word left |
 /// | `Option<bool>`, `plus` equal to `short` | `-x` is `Some(true)`, `+x` is `Some(false)` | |
 /// | `Vec<bool>`, `plus` equal to `short` | `true` for each `-x` and `false` for each `+x`, in order | |
+/// | `Vec<(bool, T)>`, `plus` equal to `short` | `(true, v)` for each `-x v` and `(false, v)` for each `+x v`, in order; a `delimiter`'s pieces each have the occurrence's sign | |
 ///
 /// A flag whose value may be left out (`Option<Option<T>>`, `Vec<Option<T>>`)
 /// takes the next word unless it is flag-like, as clap does, even a
@@ -254,7 +255,8 @@ mod spec;
 ///   takes a value.
 /// - `plus = 'c'`: also `+c`, on a struct with `plus_options`. On `Option<bool>`
 ///   whose `short` is the same letter, `-c` is `Some(true)` and `+c` is
-///   `Some(false)`; on `Vec<bool>`, each pushes `true` or `false`.
+///   `Some(false)`; on `Vec<bool>`, each pushes `true` or `false`; on
+///   `Vec<(bool, T)>`, each pushes its sign and its value.
 /// - `global`: accepted after a subcommand word, at any depth.
 ///
 /// # Values
@@ -1144,7 +1146,8 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
 /// Derive `Occurrence` for an enum of flags and positionals. An
 /// `#[arg(sequence)]` field of an `Args` struct keeps them in command-line order.
 ///
-/// A variant is a unit (a switch) or holds one value. `Spanned<T>` records the
+/// A variant is a unit (a switch) or holds one value, or the sign of `-x`
+/// and `+x` (see `plus`) and a value. `Spanned<T>` records the
 /// offset and whether the value was attached. With no `short`, `long` or
 /// `alias`, the name is kebab case (`AsNeeded` is `--as-needed`). The doc
 /// comment is the help. A spelling used twice, here or on the parent, is a
@@ -1200,6 +1203,10 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
 /// # Names
 ///
 /// - `short = 'x'`: `-x`. One letter.
+/// - `plus = 'x'`: `+x`, on a parent with `plus_options`, in command-line
+///   order with the rest of the sequence. With `short` the same letter, the
+///   variant holds the sign, `true` for `-x` and `false` for `+x`: `V(bool)`,
+///   or with a value `V(bool, T)` or `V((bool, T))`. Help shows `-x, +x`.
 /// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
 ///   the variant's name in kebab case. A second `long` is another name, and
 ///   help lists the first.
@@ -1298,7 +1305,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`Occurrence` can only be derived for enums",
         ));
     };
-    let (mut long_arms, mut short_arms) = (Vec::new(), Vec::new());
+    let (mut long_arms, mut short_arms, mut plus_arms) = (Vec::new(), Vec::new(), Vec::new());
     let (mut single_dash, mut prefixes) = (Vec::new(), Vec::new());
     let mut letters = Vec::new();
     let (mut word, mut unknown, mut bundle) = (None, None, None);
@@ -1332,6 +1339,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = &variant.ident;
         let (mut short, mut longs, mut visible, mut positional) =
             (None, Vec::new(), Vec::new(), false);
+        let mut plus = None;
         let (mut two_dashes, mut prefix, mut value_name) = (false, false, None);
         let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
         let (mut require_equals, mut default_missing) = (false, None);
@@ -1361,6 +1369,11 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         return Err(meta.error("an `Occurrence` variant has one `short`"));
                     }
                     short = Some(meta.value()?.parse::<LitChar>()?.value());
+                } else if meta.path.is_ident("plus") {
+                    if plus.is_some() {
+                        return Err(meta.error("an `Occurrence` variant has one `plus`"));
+                    }
+                    plus = Some(meta.value()?.parse::<LitChar>()?.value());
                 } else if meta.path.is_ident("long") {
                     longs.push(if meta.input.peek(syn::Token![=]) {
                         meta.value()?.parse::<LitStr>()?.value()
@@ -1382,7 +1395,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
                 } else {
                     return Err(meta.error(
-                        "expected `short`, `long`, `alias`, `visible_alias`, `positional`, `two_dashes`, `prefix`, \
+                        "expected `short`, `plus`, `long`, `alias`, `visible_alias`, `positional`, `two_dashes`, `prefix`, \
                          `value_name`, `verbatim_doc_comment`, `allow_hyphen_values`, `allow_negative_numbers`, \
                          `require_equals`, `keep_equals`, `default_missing`, `skip`, `unknown` or `bundle`",
                     ));
@@ -1390,16 +1403,42 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 Ok(())
             })?;
         }
-        let takes = match &variant.fields {
-            Fields::Unit => None,
-            Fields::Unnamed(f) if f.unnamed.len() == 1 => Some(&f.unnamed[0].ty),
-            _ => {
-                return Err(syn::Error::new(
-                    variant.span(),
-                    "an `Occurrence` variant is a unit (a switch) or holds one value",
-                ));
-            }
+        let held: Vec<&Type> = match &variant.fields {
+            Fields::Unit => Vec::new(),
+            Fields::Unnamed(f) => f.unnamed.iter().map(|f| &f.ty).collect(),
+            Fields::Named(_) => Vec::new(),
         };
+        // `-x` and `+x` as one variant: it holds the sign, as the fields do.
+        let same_letter = plus.is_some() && plus == short;
+        let (sign, takes) = match (held.as_slice(), &variant.fields) {
+            (_, Fields::Named(_)) => (Sign::None, None::<Type>),
+            ([], _) => (Sign::None, None),
+            ([ty], _) if same_letter && is_bool(ty) => (Sign::Alone, None),
+            ([ty], _) if same_letter && signed(ty).is_some() => (Sign::Tuple, signed(ty)),
+            ([ty], _) => (Sign::None, Some((*ty).clone())),
+            ([sign, ty], _) if same_letter && is_bool(sign) => (Sign::Pair, Some((*ty).clone())),
+            _ => (Sign::None, None),
+        };
+        let shape_ok = match (&variant.fields, held.len()) {
+            (Fields::Unit, _) | (Fields::Unnamed(_), 1) => true,
+            (Fields::Unnamed(_), 2) => sign == Sign::Pair,
+            _ => false,
+        };
+        if !shape_ok {
+            return Err(syn::Error::new(
+                variant.span(),
+                "an `Occurrence` variant is a unit (a switch) or holds one value; with `plus` \
+                 equal to `short`, it holds the sign (`bool`) and may hold a value after it",
+            ));
+        }
+        if same_letter && sign == Sign::None {
+            return Err(syn::Error::new(
+                variant.span(),
+                "with `plus` equal to `short`, the variant holds the sign of `-x` and `+x`: \
+                 `bool`, `(bool, T)`, or `bool` and a value",
+            ));
+        }
+        let takes = takes.as_ref();
         if skip {
             // Built by the program itself (from a `-z` keyword, say), never parsed.
             continue;
@@ -1456,6 +1495,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 help_items.push(occurrence_item(
                     variant,
                     None,
+                    None,
                     &[],
                     &[],
                     Some(&name),
@@ -1494,12 +1534,25 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }));
             continue;
         }
-        if short.is_none() && longs.is_empty() {
+        if (positional || is_unknown || is_bundle) && plus.is_some() {
+            return Err(syn::Error::new(
+                variant.span(),
+                "a positional, `unknown` or `bundle` variant has no `plus`",
+            ));
+        }
+        if plus.is_some() && prefix {
+            return Err(syn::Error::new(
+                variant.span(),
+                "`prefix` is for a `short` letter, not `plus`",
+            ));
+        }
+        if short.is_none() && longs.is_empty() && plus.is_none() {
             longs.push(kebab_case(&ident.to_string()));
         }
         let spelled = short
             .map(|c| format!("-{c}"))
             .into_iter()
+            .chain(plus.map(|c| format!("+{c}")))
             .chain(longs.iter().chain(&visible).map(|l| format!("--{l}")));
         for name in spelled {
             if let Some(other) = seen.insert(name.clone(), ident.clone()) {
@@ -1513,6 +1566,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         help_items.push(occurrence_item(
             variant,
             short,
+            plus,
             &longs,
             &visible,
             takes
@@ -1529,6 +1583,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 variant,
                 spec::ItemDoc {
                     short,
+                    plus,
                     long: longs.first().cloned(),
                     aliases: longs.iter().skip(1).cloned().collect(),
                     visible_aliases: visible.clone(),
@@ -1543,7 +1598,26 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 },
             ));
         }
+        // `true` for `-x` (or a long name), `false` for `+x`.
+        let sign_of = (sign != Sign::None).then(|| {
+            quote!(let __sign = !matches!(__arg, ::winnow_args::Arg::Short(__flag) if __flag.plus);)
+        });
+        // The variant, given its value.
+        let build = |value: TokenStream2| match sign {
+            Sign::Pair => quote!(Self::#ident(__sign, #value)),
+            Sign::Tuple => quote!(Self::#ident((__sign, #value))),
+            Sign::None | Sign::Alone => quote!(Self::#ident(#value)),
+        };
+        let read_pattern = match sign {
+            Sign::Pair => quote!(Self::#ident(_, __read)),
+            _ => quote!(Self::#ident(__read)),
+        };
         let body = match takes {
+            None if sign == Sign::Alone => quote! {
+                __arg.check_switch()?;
+                #sign_of
+                ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident(__sign)))
+            },
             None => quote! {
                 __arg.check_switch()?;
                 ::core::result::Result::Ok(::core::option::Option::Some(Self::#ident))
@@ -1567,13 +1641,15 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     quote!(__attached),
                 );
                 let item = if optional.is_some() && require_equals && default_missing.is_none() {
+                    let some = build(quote!(::core::option::Option::Some(#value)));
+                    let none = build(quote!(::core::option::Option::None));
                     quote! {
                         if let ::core::option::Option::Some(__value) =
                             __arg.read_value_opt_with(__input, #options)
                         {
-                            Self::#ident(::core::option::Option::Some(#value))
+                            #some
                         } else {
-                            Self::#ident(::core::option::Option::None)
+                            #none
                         }
                     }
                 } else {
@@ -1590,17 +1666,19 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         }
                         None => quote!(__arg.read_value_with(__input, #options)?),
                     };
+                    let built = build(value);
                     quote! {{
                         let __value = #read;
-                        Self::#ident(#value)
+                        #built
                     }}
                 };
                 quote! {
                     #attached
+                    #sign_of
                     let __item = #item;
                     // Read here, so a value only printed is not dead code.
                     match &__item {
-                        Self::#ident(__read) => {
+                        #read_pattern => {
                             let _ = __read;
                         }
                         #[allow(unreachable_patterns)]
@@ -1635,7 +1713,26 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             letters.push(quote!(#letter => ::core::option::Option::Some(#takes_value),));
             short_arms.push(quote!(#letter => { #body }));
         }
+        if let Some(c) = plus {
+            let letter = LitChar::new(c, Span::call_site());
+            plus_arms.push(quote!(#letter => { #body }));
+        }
     }
+    // `+x` variants, read only where the parent has `plus_options`.
+    let has_plus = !plus_arms.is_empty();
+    let plus_match = has_plus.then(|| {
+        quote! {
+            ::winnow_args::Arg::Short(__flag) if __flag.plus => match __flag.letter {
+                #(#plus_arms)*
+                _ => ::core::result::Result::Ok(::core::option::Option::None),
+            },
+        }
+    });
+    let plus_const = has_plus.then(|| {
+        quote!(
+            const PLUS: bool = true;
+        )
+    });
     let has_positional = word.is_some();
     let word =
         word.unwrap_or_else(|| quote!(::core::result::Result::Ok(::core::option::Option::None)));
@@ -1674,6 +1771,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
             const POSITIONAL: bool = #has_positional;
 
+            #plus_const
+
             const ITEMS: &'static [::winnow_args::help::Item] = &[#(#help_items),*];
 
             fn from_arg<'__i>(
@@ -1690,6 +1789,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #(#short_arms)*
                         _ => ::core::result::Result::Ok(::core::option::Option::None),
                     },
+                    #plus_match
                     _ => ::core::result::Result::Ok(::core::option::Option::None),
                 }
             }
@@ -1725,6 +1825,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
 fn occurrence_item(
     variant: &syn::Variant,
     short: Option<char>,
+    plus: Option<char>,
     longs: &[String],
     visible: &[String],
     value_name: Option<&str>,
@@ -1747,8 +1848,9 @@ fn occurrence_item(
             quote!(::winnow_args::complete::Hint::Nothing),
         ),
     };
-    let positional = short.is_none() && longs.is_empty();
+    let positional = short.is_none() && plus.is_none() && longs.is_empty();
     let short = opt_char(short);
+    let plus = opt_char(plus);
     let long = opt_str(longs.first().map(String::as_str));
     let aliases = longs.iter().skip(1);
     let value_name = opt_str(value_name);
@@ -1777,7 +1879,7 @@ fn occurrence_item(
         require_equals: #require_equals,
         global: false,
         more_shorts: &[],
-        plus: ::core::option::Option::None,
+        plus: #plus,
         optional_value: #optional_value,
         values: 1,
         more_values: false,
@@ -2589,6 +2691,32 @@ fn is_ours(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("winnow_args")
 }
 
+/// How an `Occurrence` variant whose `plus` equals its `short` holds the sign
+/// of `-x` (`true`) and `+x` (`false`).
+#[derive(Clone, Copy, PartialEq)]
+enum Sign {
+    /// It has no `plus` of its `short`'s letter.
+    None,
+    /// `V(bool)`.
+    Alone,
+    /// `V(bool, T)`.
+    Pair,
+    /// `V((bool, T))`.
+    Tuple,
+}
+
+/// `T` of a `(bool, T)` tuple: the sign and the value of a `Vec<(bool, T)>`.
+fn signed(ty: &Type) -> Option<Type> {
+    let Type::Tuple(tuple) = ty else {
+        return None;
+    };
+    let mut elems = tuple.elems.iter();
+    match (elems.next(), elems.next(), elems.next()) {
+        (Some(sign), Some(value), None) if is_bool(sign) => Some(value.clone()),
+        _ => None,
+    }
+}
+
 /// Whether `ty` is `u8`, which a `Vec` of makes `Vec<u8>`, a value of its own.
 fn is_bytes(ty: &Type) -> bool {
     last_segment(ty).is_some_and(|s| s.ident == "u8" && s.arguments.is_none())
@@ -2706,6 +2834,9 @@ enum Shape {
     /// `Vec<Option<T>>`, a `Many(T)`: each occurrence's value, `None` for a
     /// bare flag.
     Each,
+    /// `Vec<(bool, T)>`, a `Many(T)` with `plus` equal to `short`: `true` and
+    /// the value for each `-c`, `false` and the value for each `+c`, in order.
+    Signed,
 }
 
 enum Role {
@@ -3120,24 +3251,38 @@ impl Field {
                 let value = self.source_value(ty, value, source);
                 quote!(#slot.push(::core::option::Option::Some(#value));)
             }
-            Kind::Many(_) => self.pushing(|into| self.push_value(&into, value, source)),
+            Kind::Many(_) if self.shape == Shape::Signed => {
+                self.push_value(&quote!(#slot), value, source, Some(quote!(true)))
+            }
+            Kind::Many(_) => self.pushing(|into| self.push_value(&into, value, source, None)),
             Kind::Switch | Kind::Count(_) => unreachable!("a switch or a count takes no value"),
         }
     }
 
     /// Push `value` (a `&BStr`) of a `Many` field, converted, to `into`: split
-    /// at its `delimiter` if it has one.
-    fn push_value(&self, into: &TokenStream2, value: TokenStream2, source: &str) -> TokenStream2 {
+    /// at its `delimiter` if it has one. With a `sign`, each item is
+    /// `(sign, value)`, as a `Vec<(bool, T)>` holds it.
+    fn push_value(
+        &self,
+        into: &TokenStream2,
+        value: TokenStream2,
+        source: &str,
+        sign: Option<TokenStream2>,
+    ) -> TokenStream2 {
         let Kind::Many(ty) = &self.kind else {
             unreachable!("only a `Many` field pushes");
         };
+        let item = |value: TokenStream2| match &sign {
+            Some(sign) => quote!((#sign, #value)),
+            None => value,
+        };
         match self.delimiter {
             None => {
-                let value = self.source_value(ty, value, source);
+                let value = item(self.source_value(ty, value, source));
                 quote!(#into.push(#value);)
             }
             Some(d) => {
-                let piece = self.source_value(ty, quote!(__piece), source);
+                let piece = item(self.source_value(ty, quote!(__piece), source));
                 quote!(for __piece in __wa::split(#value, #d) { #into.push(#piece); })
             }
         }
@@ -3217,6 +3362,7 @@ impl Field {
             (Kind::Many(ty), Shape::OptionalVec) => quote!(#option<#vec<#ty>>),
             (Kind::Many(ty), Shape::Grouped) => quote!(#vec<#vec<#ty>>),
             (Kind::Many(ty), Shape::Each) => quote!(#vec<#option<#ty>>),
+            (Kind::Many(ty), Shape::Signed) => quote!(#vec<(bool, #ty)>),
             (Kind::Many(ty), _) => quote!(#vec<#ty>),
         }
     }
@@ -3260,7 +3406,9 @@ impl Field {
                     #slot.push(__into);
                 })
             }
-            Shape::Each | Shape::MaybeValue => unreachable!("not a `Vec` of values"),
+            Shape::Each | Shape::MaybeValue | Shape::Signed => {
+                unreachable!("not a `Vec` of values")
+            }
         }
     }
 
@@ -3309,13 +3457,15 @@ impl Field {
                 quote!(__wa::BStr::new(#bytes))
             };
             // A `Vec`'s defaults are one occurrence's values: one group.
-            if matches!(self.kind, Kind::Many(_)) && self.shape != Shape::Each {
+            if matches!(self.kind, Kind::Many(_))
+                && !matches!(self.shape, Shape::Each | Shape::Signed)
+            {
                 let display = self.display();
                 let assigns = self.pushing(|into| {
                     let pushes = self
                         .defaults
                         .iter()
-                        .map(|v| self.push_value(&into, bytes(v), &display));
+                        .map(|v| self.push_value(&into, bytes(v), &display, None));
                     quote!(#(#pushes)*)
                 });
                 return quote!(if #unset { #assigns });
@@ -3764,6 +3914,32 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             Kind::Many(ty) if f.shape == Shape::Each => {
                 let read = f.optional_read(ty);
                 quote!(#ident.push(#read);)
+            }
+            // `-c` and `+c` share this arm: the occurrence says which.
+            Kind::Many(ty) if f.shape == Shape::Signed => {
+                let read = f.read();
+                let push = match f.delimiter {
+                    None => {
+                        let value = f.flag_value(ty, quote!(__value));
+                        quote! {
+                            let __value = #read;
+                            #ident.push((!__plus, #value));
+                        }
+                    }
+                    // Each piece has the occurrence's sign.
+                    Some(d) => {
+                        let value = f.flag_value(ty, quote!(__piece));
+                        quote! {
+                            for __piece in __wa::split(#read, #d) {
+                                #ident.push((!__plus, #value));
+                            }
+                        }
+                    }
+                };
+                quote! {
+                    let __plus = matches!(&__arg, __wa::Arg::Short(__flag) if __flag.plus);
+                    #push
+                }
             }
             Kind::Many(ty) => match f.delimiter {
                 None => f.pushing(|ident| {
@@ -4422,7 +4598,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote! {
             __wa::Arg::Short(__flag) if __flag.plus => match __flag.letter {
                 #(#plus_arms)*
-                _ => #flatten_arg if !__globals.bind(&__arg, __input)? { #plus_unknown }
+                _ => #sequence_arg #flatten_arg if !__globals.bind(&__arg, __input)? { #plus_unknown }
             },
         }
     });
@@ -5031,6 +5207,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     });
     let own_items = quote!(&[#(#help_items),*]);
+    // A `+x` variant is read only with `plus_options`.
+    let plus_needed = sequence_ty.filter(|_| !plus_options).map(|ty| {
+        quote! {
+            const _: () = assert!(
+                !<#ty as ::winnow_args::Occurrence>::PLUS,
+                "the sequence enum has a `plus` variant: `+x` is read only with `#[arg(plus_options)]` on this struct",
+            );
+        }
+    });
     // A sequence enum with a positional variant takes every word.
     let positional_clash = sequence_ty
         .filter(|_| !positionals.is_empty() || trailing.is_some())
@@ -5062,6 +5247,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 "a flattened struct or the sequence enum declares a flag that this struct, or another of them, also declares",
             );
             #positional_clash
+            #plus_needed
             const __N: usize = __OWN.len() #(+ #more.len())*;
             const __ALL: [::winnow_args::help::Item; __N] = ::winnow_args::__private::concat_items::<__N>(
                 &[__OWN, #(#more),*],
@@ -6415,6 +6601,10 @@ fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
             let is = is(ty, equals);
             quote!(#other_slot.iter().any(#is))
         }
+        (Some(equals), Kind::Many(ty)) if other.shape == Shape::Signed => {
+            let is = is(ty, equals);
+            quote!(#other_slot.iter().map(|(_, __v)| __v).any(#is))
+        }
         (Some(equals), Kind::Many(ty)) => {
             let is = is(ty, equals);
             quote!(#other_slot.iter().flatten().any(#is))
@@ -6927,16 +7117,32 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             (None, Some(value)) => (Kind::Many(value), Shape::OptionalVec),
             (None, None) => (Kind::Optional(ty), Shape::Plain),
         },
-        Kind::Many(ty) => match (wrapped(&ty, "Vec"), wrapped(&ty, "Option")) {
-            (Some(value), _) => (Kind::Many(value), Shape::Grouped),
-            (None, Some(value)) => (Kind::Many(value), Shape::Each),
-            (None, None) => (Kind::Many(ty), Shape::Plain),
+        Kind::Many(ty) => match (wrapped(&ty, "Vec"), wrapped(&ty, "Option"), signed(&ty)) {
+            (Some(value), _, _) => (Kind::Many(value), Shape::Grouped),
+            (None, Some(value), _) => (Kind::Many(value), Shape::Each),
+            (None, None, Some(value)) => (Kind::Many(value), Shape::Signed),
+            (None, None, None) => (Kind::Many(ty), Shape::Plain),
         },
         kind => (kind, Shape::Plain),
     };
+    if shape == Shape::Signed
+        && (plus.is_none()
+            || plus != short
+            || positional
+            || subcommand
+            || values != 1
+            || values_max.is_some()
+            || keywords)
+    {
+        return error(
+            "a `Vec<(bool, T)>` is a flag with `plus` equal to `short`, one value each time: \
+             not a positional, and not with `values` or `keywords`"
+                .into(),
+        );
+    }
     if delimiter.is_some() && (count || !matches!(kind, Kind::Many(_)) || shape == Shape::Each) {
         return error(
-            "`delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in"
+            "`delimiter` needs a `Vec<T>`, `Option<Vec<T>>`, `Vec<Vec<T>>` or `Vec<(bool, T)>` field to put the pieces in"
                 .into(),
         );
     }

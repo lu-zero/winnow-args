@@ -591,6 +591,11 @@ pub trait Occurrence: Sized {
     /// Whether there is a positional variant: each plain word is that variant.
     const POSITIONAL: bool = false;
 
+    /// Whether a variant is a `+x` spelling, which only a parent with
+    /// `plus_options` reads.
+    #[doc(hidden)]
+    const PLUS: bool = false;
+
     /// Whether there is an `#[arg(bundle)]` variant.
     const BUNDLES: bool = false;
 

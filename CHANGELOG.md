@@ -24,6 +24,13 @@ released together. Versions follow [semver](https://semver.org).
   function or closure returning `Result<T, E>`, as clap's `value_parser`.
   Flags, positionals, `env`, defaults and the values rules compare against
   all go through it.
+- **Added**: `-o v` and `+o v` in command-line order, as bash's `set`
+  applies them: a `Vec<(bool, T)>` with `plus` equal to `short` holds
+  `(true, v)` for each `-o v` and `(false, v)` for each `+o v`, a
+  `delimiter`'s pieces each with their occurrence's sign; an
+  `Occurrence` variant takes `plus = 'o'`, so a `sequence` keeps `+x`
+  spellings in order with the rest. With `short` the same letter, one
+  variant holds the sign: `Errexit(bool)`, `Named(bool, String)`.
 - **Changed**: a `Vec<bool>` with `plus` equal to `short` takes no value.
   Before, it took one each time (`-x true`), as any `Vec<bool>`.
 - **Fixed**: a negative number with a default subcommand. It goes to the

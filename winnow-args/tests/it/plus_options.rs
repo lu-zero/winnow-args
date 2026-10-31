@@ -122,3 +122,200 @@ fn a_bool_list_keeps_every_spelling_in_order() {
     assert_eq!((d.export, d.readonly), (vec![false], Some(false)));
     assert!(Declare::parse_from(["v"]).unwrap().export.is_empty());
 }
+
+/// `set -o NAME` and `set +o NAME` in one field, in order, as bash applies
+/// them.
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct SetOrdered {
+    #[arg(short = 'o', plus = 'o', default_missing = "")]
+    options: Vec<(bool, String)>,
+    #[arg(positional)]
+    args: Vec<String>,
+}
+
+fn on(name: &str) -> (bool, String) {
+    (true, name.into())
+}
+
+fn off(name: &str) -> (bool, String) {
+    (false, name.into())
+}
+
+#[test]
+fn set_o_and_plus_o_keep_their_order() {
+    let set = SetOrdered::parse_from(["-o", "noglob", "+o", "noglob"]).unwrap();
+    assert_eq!(set.options, [on("noglob"), off("noglob")]);
+    let set = SetOrdered::parse_from(["-o", "noglob", "-o", "noclobber", "+o", "noglob"]).unwrap();
+    assert_eq!(set.options, [on("noglob"), on("noclobber"), off("noglob")]);
+    let set = SetOrdered::parse_from(["+onoglob", "-onoglob", "x"]).unwrap();
+    assert_eq!(
+        (&set.options[..], &set.args[..]),
+        (&[off("noglob"), on("noglob")][..], &["x".to_owned()][..])
+    );
+    // A bare `-o` or `+o` lists the options.
+    let set = SetOrdered::parse_from(["+o"]).unwrap();
+    assert_eq!(set.options, [off("")]);
+}
+
+/// The single letters and `-o NAME` of `set`, all in one order: `-o errexit
+/// +e` leaves it off, as in bash.
+#[derive(winnow_args::Occurrence, Debug, PartialEq)]
+enum SetItem {
+    #[arg(short = 'e')]
+    Errexit,
+    #[arg(plus = 'e')]
+    NoErrexit,
+    #[arg(short = 'o', default_missing = "")]
+    Enable(String),
+    #[arg(plus = 'o', default_missing = "")]
+    Disable(String),
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct SetSequence {
+    #[arg(short = 'x', plus = 'x')]
+    xtrace: Option<bool>,
+    #[arg(sequence)]
+    items: Vec<SetItem>,
+}
+
+#[test]
+fn occurrence_variants_take_plus_spellings() {
+    let set = SetSequence::parse_from(["-o", "errexit", "+e", "+x", "+o", "noglob", "-e"]).unwrap();
+    assert_eq!(set.xtrace, Some(false));
+    assert_eq!(
+        set.items,
+        [
+            SetItem::Enable("errexit".into()),
+            SetItem::NoErrexit,
+            SetItem::Disable("noglob".into()),
+            SetItem::Errexit,
+        ]
+    );
+    // `+e` bundled with the struct's own `+x`.
+    let set = SetSequence::parse_from(["+ex"]).unwrap();
+    assert_eq!(
+        (set.xtrace, &set.items[..]),
+        (Some(false), &[SetItem::NoErrexit][..])
+    );
+}
+
+#[cfg(feature = "help-text")]
+#[test]
+fn help_lists_plus_variants() {
+    let help = winnow_args::help::render(SetSequence::HELP, &["set"], false);
+    assert!(help.contains("+e"), "{help}");
+    assert!(help.contains("+o [<VALUE>]"), "{help}");
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct Features {
+    #[arg(short = 'F', plus = 'F', delimiter = ',', default = "std,alloc")]
+    features: Vec<(bool, String)>,
+}
+
+#[test]
+fn a_delimiter_gives_each_piece_its_sign() {
+    let features = Features::parse_from(["-Fa,b", "+F", "b,c", "-Fd"]).unwrap();
+    assert_eq!(
+        features.features,
+        [on("a"), on("b"), off("b"), off("c"), on("d")]
+    );
+    // The default's pieces are turned on.
+    let features = Features::parse_from([""; 0]).unwrap();
+    assert_eq!(features.features, [on("std"), on("alloc")]);
+}
+
+/// One variant an option: it holds the sign of `-x` (`true`) and `+x`
+/// (`false`), as brush's `set` reads them.
+#[derive(winnow_args::Occurrence, Debug, PartialEq)]
+enum SetOption {
+    /// Exit on nonzero command exit.
+    #[arg(short = 'e', plus = 'e')]
+    Errexit(bool),
+    /// Disable filename globbing.
+    #[arg(short = 'f', plus = 'f')]
+    Noglob(bool),
+    /// Set or unset the option NAME; alone, list them.
+    #[arg(short = 'o', plus = 'o', value_name = "OPT", default_missing = "\u{0}")]
+    Named(bool, String),
+    /// The same, its sign and value as one tuple.
+    #[arg(short = 'O', plus = 'O')]
+    Paired((bool, String)),
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct SetSigned {
+    #[arg(sequence)]
+    options: Vec<SetOption>,
+    #[arg(positional, double_dash = "preserve", stop_flags)]
+    args: Vec<String>,
+}
+
+fn items(line: &[&str]) -> Vec<SetOption> {
+    SetSigned::parse_from(line).unwrap().options
+}
+
+fn named(on: bool, name: &str) -> SetOption {
+    SetOption::Named(on, name.into())
+}
+
+#[test]
+fn a_variant_holds_the_sign() {
+    use SetOption::*;
+    // bash's answers come from applying these in order.
+    assert_eq!(
+        items(&["-o", "noglob", "+o", "noglob"]),
+        [named(true, "noglob"), named(false, "noglob")]
+    );
+    assert_eq!(
+        items(&["-o", "noglob", "-o", "noclobber", "+o", "noglob"]),
+        [
+            named(true, "noglob"),
+            named(true, "noclobber"),
+            named(false, "noglob")
+        ]
+    );
+    assert_eq!(
+        items(&["+o", "noglob", "-o", "noglob"]),
+        [named(false, "noglob"), named(true, "noglob")]
+    );
+    // Letters and names in one order: `-o noglob +f` leaves it off.
+    assert_eq!(
+        items(&["-o", "noglob", "+f"]),
+        [named(true, "noglob"), Noglob(false)]
+    );
+    // A bundle whose last letter takes the next word.
+    assert_eq!(
+        items(&["-eo", "pipefail"]),
+        [Errexit(true), named(true, "pipefail")]
+    );
+    assert_eq!(
+        items(&["+eo", "pipefail"]),
+        [Errexit(false), named(false, "pipefail")]
+    );
+    // A bare `-o` after a name: set it, then list.
+    assert_eq!(
+        items(&["-o", "noglob", "-o"]),
+        [named(true, "noglob"), named(true, "\0")]
+    );
+    // What follows a bad name is still there, in order, for the program to stop at.
+    assert_eq!(
+        items(&["-o", "nosuch", "-f"]),
+        [named(true, "nosuch"), Noglob(true)]
+    );
+    assert_eq!(items(&["+O", "x"]), [Paired((false, "x".into()))]);
+}
+
+#[cfg(feature = "help-text")]
+#[test]
+fn help_has_one_row_a_signed_variant() {
+    let help = winnow_args::help::render(SetSigned::HELP, &["set"], false);
+    assert!(help.contains("-e, +e"), "{help}");
+    assert!(help.contains("Exit on nonzero command exit."), "{help}");
+    assert!(help.contains("-o, +o [<OPT>]"), "{help}");
+}

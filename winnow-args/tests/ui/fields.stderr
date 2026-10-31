@@ -4,7 +4,7 @@ error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_
 6 |     #[arg(long, hdie)]
   |                 ^^^^
 
-error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in
+error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>`, `Vec<Vec<T>>` or `Vec<(bool, T)>` field to put the pieces in
   --> tests/ui/fields.rs:12:5
    |
 12 |     #[arg(long, delimiter = ',')]
@@ -118,7 +118,7 @@ error: `Vec<Vec<T>>` and `Vec<Option<T>>` hold each occurrence of a flag: not a 
 129 |     #[arg(positional)]
     |     ^
 
-error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in
+error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>`, `Vec<Vec<T>>` or `Vec<(bool, T)>` field to put the pieces in
    --> tests/ui/fields.rs:135:5
     |
 135 |     #[arg(long, delimiter = ',')]
@@ -146,4 +146,10 @@ error: `Vec<Option<T>>` takes one value or none each time: not with `default_mis
    --> tests/ui/fields.rs:161:5
     |
 161 |     #[arg(short = 'x', plus = 'x')]
+    |     ^
+
+error: a `Vec<(bool, T)>` is a flag with `plus` equal to `short`, one value each time: not a positional, and not with `values` or `keywords`
+   --> tests/ui/fields.rs:168:5
+    |
+168 |     #[arg(short = 'o')]
     |     ^
