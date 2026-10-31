@@ -124,6 +124,7 @@
 //! | a default, an environment variable | `default_value`, `env` | `default`, `env` | `default`, `env` |
 //! | several words, a delimiter | `num_args`, `value_delimiter` | `num_args`, `delimiter` | `values`, `delimiter` |
 //! | a value that may be left off | `default_missing_value` | `default_missing` | `default_missing` |
+//! | a function parsing a value | `value_parser = f` | a `FromStr` type | `parse_with = f` |
 //! | choices from an enum | `#[arg(value_enum)]` | `#[usage(value_enum)]` | the type derives `ValueEnum` |
 //! | a conflict | `conflicts_with = "file"` | `conflicts("--file")` | `conflicts("--file")` |
 //! | the flag that clears a switch | `ArgAction::SetFalse` | `negate = "--no-force"` | `negate = "no-force"` |

@@ -29,7 +29,7 @@ usage's derives is in the crate docs, under "From clap and usage".
 | `require_equals`, hyphen values, negative numbers | ✓ | ✓ | ~ | ✓ |
 | `--no-x` negation | ✓ | ✓ | ~ | ~ |
 | A flag taking several words, a fixed number or a range | ✓ | ✓ | ~ | ✓ |
-| Custom value parser in the derive | ~ `FromArg` type | ~ `FromStr` type | ✓ | ✓ |
+| Custom value parser in the derive | ✓ `parse_with` | ~ `FromStr` type | ✓ | ✓ |
 | Defaults computed, or depending on another flag | ✓ | ✓ | ~ | ✓ |
 
 ## Shell and linker conventions
