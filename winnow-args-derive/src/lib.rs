@@ -108,6 +108,7 @@ mod spec;
 /// | `Option<T>` | one value, or absent. With `require_equals`, a bare flag is `None` | an optional word |
 /// | `Vec<T>` | one value each time the flag is given | every word left |
 /// | `Option<bool>`, `plus` equal to `short` | `-x` is `Some(true)`, `+x` is `Some(false)` | |
+/// | `Vec<bool>`, `plus` equal to `short` | `true` for each `-x` and `false` for each `+x`, in order | |
 ///
 /// # Struct options
 ///
@@ -243,7 +244,7 @@ mod spec;
 ///   takes a value.
 /// - `plus = 'c'`: also `+c`, on a struct with `plus_options`. On `Option<bool>`
 ///   whose `short` is the same letter, `-c` is `Some(true)` and `+c` is
-///   `Some(false)`.
+///   `Some(false)`; on `Vec<bool>`, each pushes `true` or `false`.
 /// - `global`: accepted after a subcommand word, at any depth.
 ///
 /// # Values
@@ -2798,8 +2799,8 @@ struct Field {
     stop_flags: bool,
     /// The letter of its `+c` spelling, in a `plus_options` struct.
     plus: Option<char>,
-    /// An `Option<bool>` with `short` and the same `plus` letter: `-c` is
-    /// `Some(true)`, `+c` is `Some(false)`.
+    /// An `Option<bool>` or `Vec<bool>` with `short` and the same `plus` letter: `-c` is
+    /// `true`, `+c` is `false`.
     tristate: bool,
     /// `--flag=true` and `--flag=false` are taken.
     bool_value: bool,
@@ -3525,6 +3526,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             Kind::Switch if f.bool_value => quote! {
                 #ident = __arg.switch_value()?;
             },
+            Kind::Many(_) if f.tristate => quote! {
+                __arg.check_switch()?;
+                #ident.push(true);
+            },
             _ if f.tristate || f.negate.is_some() => quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(true);
@@ -3650,13 +3655,18 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
         ))
     };
-    // A `+c` occurrence: a tristate's `Some(false)`, else what `-c` stores.
+    // A `+c` occurrence: a tristate's `Some(false)` (or `false` pushed), else what `-c` stores.
     let plus = |f: &Field| {
         let letter = LitChar::new(f.plus?, Span::call_site());
         let body = if f.tristate {
             let ident = slot(&f.ident);
             let displace = rules.displace(&fields, f);
-            quote!(#ident = ::core::option::Option::Some(false); #displace)
+            let set = if matches!(f.kind, Kind::Many(_)) {
+                quote!(#ident.push(false);)
+            } else {
+                quote!(#ident = ::core::option::Option::Some(false);)
+            };
+            quote!(#set #displace)
         } else {
             store(f)
         };
@@ -6665,14 +6675,19 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
         return error("`allow_negative_numbers` is for fields that take a value".into());
     }
-    let tristate =
-        plus.is_some() && plus == short && matches!(&kind, Kind::Optional(ty) if is_bool(ty));
+    let tristate = plus.is_some()
+        && plus == short
+        && matches!(&kind, Kind::Optional(ty) | Kind::Many(ty) if is_bool(ty));
     if plus.is_some()
         && (positional || subcommand || !tristate && matches!(kind, Kind::Switch | Kind::Count(_)))
     {
         return error(
-            "`plus` is for a flag taking a value, or an `Option<bool>` with the same `short` letter".into(),
+            "`plus` is for a flag taking a value, or an `Option<bool>` or `Vec<bool>` with the same `short` letter"
+                .into(),
         );
+    }
+    if tristate && (delimiter.is_some() || values != 1 || values_max.is_some()) {
+        return error("a `+x` tri-state takes no value: not with `delimiter` or `values`".into());
     }
     if keywords
         && (positional

@@ -100,3 +100,25 @@ fn plus_words_are_words_elsewhere() {
     let p = Plain::parse_words(&words).unwrap();
     assert_eq!((p.e, p.rest), (false, strings(&["+e"])));
 }
+
+/// `declare`'s attributes, where every `-x` and `+x` counts.
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct Declare {
+    #[arg(short = 'x', plus = 'x')]
+    export: Vec<bool>,
+    #[arg(short = 'r', plus = 'r')]
+    readonly: Option<bool>,
+    #[arg(positional)]
+    names: Vec<String>,
+}
+
+#[test]
+fn a_bool_list_keeps_every_spelling_in_order() {
+    let d = Declare::parse_from(["-x", "+x", "-xr", "+x", "v"]).unwrap();
+    assert_eq!(d.export, [true, false, true, false]);
+    assert_eq!((d.readonly, d.names), (Some(true), strings(&["v"])));
+    let d = Declare::parse_from(["+rx", "v"]).unwrap();
+    assert_eq!((d.export, d.readonly), (vec![false], Some(false)));
+    assert!(Declare::parse_from(["v"]).unwrap().export.is_empty());
+}

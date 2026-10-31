@@ -4,6 +4,15 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: a `Vec<bool>` with `plus` equal to `short` records every
+  spelling in order: `true` for each `-x`, `false` for each `+x`. For a
+  command where the last one does not simply win: in bash's `declare`, `+x`
+  wins in either order.
+- **Changed**: such a `Vec<bool>` takes no value. Before, it took one each
+  time (`-x true`), as any `Vec<bool>`.
+
 ## 0.5.0 (2026-10-24)
 
 - **Added**: what a choice means. A `ValueEnum` variant's doc comment or
