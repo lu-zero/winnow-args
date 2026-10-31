@@ -12,6 +12,9 @@ released together. Versions follow [semver](https://semver.org).
   wins in either order.
 - **Changed**: such a `Vec<bool>` takes no value. Before, it took one each
   time (`-x true`), as any `Vec<bool>`.
+- **Fixed**: in the man and markdown pages, a `use` inside a function no
+  longer names a field's type for its whole module; a type derived in that
+  function still sees it.
 
 ## 0.5.0 (2026-10-24)
 

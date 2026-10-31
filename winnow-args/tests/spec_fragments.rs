@@ -103,6 +103,20 @@ mod list {
 
 type Listing = list::Opts;
 
+// A `use` in a function is the function's: `bind` is still `std`'s `IpAddr`,
+// and a type derived in the function has `places::IpAddr`.
+fn home() -> bool {
+    use places::IpAddr;
+
+    #[derive(Args)]
+    struct SpecLocal {
+        #[arg(long)]
+        place: IpAddr,
+    }
+
+    matches!(IpAddr::Home, IpAddr::Home)
+}
+
 mod places {
     /// A type of the standard library has this name too.
     #[derive(winnow_args::ValueEnum)]
@@ -145,6 +159,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecDeprecated",
             "SpecDupA",
             "SpecDupB",
+            "SpecLocal",
             "SpecPages",
             "SpecPlace",
             "SpecTools"
@@ -352,6 +367,8 @@ fn emitted_fragments_stitch() {
     );
     let place = catalog.stitch("SpecPlace").unwrap();
     assert_eq!(place.items[0].choices, ["home", "away"]);
+    let local = catalog.stitch("SpecLocal").unwrap();
+    assert_eq!(local.items[0].choices, ["home", "away"]);
     assert_eq!(command.subcommands[1].name, "true");
     assert_eq!(command.name, "spec-tool");
     #[cfg(feature = "help-text")]

@@ -430,7 +430,13 @@ fn place(span: Span) -> Place {
     }
     let ident = span.unwrap().source_text().unwrap_or_default();
     let around = inline_modules(&local, ident.trim_start_matches("r#"));
-    modules.extend(around.iter().flatten().cloned());
+    modules.extend(
+        around
+            .iter()
+            .flatten()
+            .filter(|part| !is_block(part))
+            .cloned(),
+    );
     *AROUND.lock().unwrap_or_else(PoisonError::into_inner) =
         around.map(|around| (around, modules.clone()));
     Place {
@@ -444,14 +450,22 @@ fn place(span: Span) -> Place {
 /// and not what is around it, so the file is read for the rest.
 #[derive(Default)]
 struct Names {
-    /// The types the file declares, with the `mod name { … }` blocks of the
-    /// file around each, and whether it has a derive of this crate: one
-    /// entry a declaration.
+    /// The types the file declares, with the blocks of the file around each,
+    /// and whether it has a derive of this crate: one entry a declaration.
+    /// A `mod name { … }` is its name, any other block (a function's body)
+    /// a mark of its own, `{` and a number.
     declared: HashMap<String, Vec<(Vec<String>, bool)>>,
     /// The names its `use` lines bring in, by the blocks around the `use`,
     /// with the path of each: none for a name two of them bring in from
     /// different places.
     imported: Imported,
+    /// The blocks marked so far.
+    blocks: usize,
+}
+
+/// Whether a part of a scope is a block's mark, not a module.
+fn is_block(part: &str) -> bool {
+    part.starts_with('{')
 }
 
 type Imported = HashMap<(Vec<String>, String), Option<Vec<String>>>;
@@ -523,15 +537,25 @@ pub(crate) fn origin(span: Span, name: &str) -> Origin {
     let local = span.unwrap().local_file().unwrap_or_default();
     let local = std::path::absolute(&local).unwrap_or(local);
     names(&local, |names| {
-        let here = |declared: &Vec<(Vec<String>, bool)>| {
-            declared.iter().any(|(inside, _)| inside == around)
-        };
-        if names.declared.get(name).is_some_and(here) {
-            return Origin::Here;
-        }
-        match names.imported.get(&(around.clone(), name.to_owned())) {
-            Some(Some(path)) => Origin::Imported(path.clone()),
-            _ => Origin::Unknown,
+        // A block sees what it declares and imports, then what the blocks
+        // around it do, up to its module; a module sees only its own.
+        let mut scope = around.clone();
+        loop {
+            let here = |declared: &Vec<(Vec<String>, bool)>| {
+                declared.iter().any(|(inside, _)| *inside == scope)
+            };
+            if names.declared.get(name).is_some_and(here) {
+                return Origin::Here;
+            }
+            match names.imported.get(&(scope.clone(), name.to_owned())) {
+                Some(Some(path)) => return Origin::Imported(path.clone()),
+                Some(None) => return Origin::Unknown,
+                None => {}
+            }
+            if !scope.last().is_some_and(|part| is_block(part)) {
+                return Origin::Unknown;
+            }
+            scope.pop();
         }
     })
 }
@@ -612,11 +636,16 @@ fn declare(tokens: TokenStream, inside: &mut Vec<String>, names: &mut Names) {
                     tokens.by_ref().take_while(|token| !ends(token)).collect();
                 import(&tree, Vec::new(), inside, &mut names.imported);
             }
-            TokenTree::Group(group) => {
-                // A body ends its item; `pub(crate)` does not.
-                derived &= group.delimiter() != Delimiter::Brace;
+            // A body ends its item; `pub(crate)` does not. A block's `use`
+            // lines are its own.
+            TokenTree::Group(group) if group.delimiter() == Delimiter::Brace => {
+                derived = false;
+                names.blocks += 1;
+                inside.push(format!("{{{}", names.blocks));
                 declare(group.stream(), inside, names);
+                inside.pop();
             }
+            TokenTree::Group(group) => declare(group.stream(), inside, names),
             _ => {}
         }
     }

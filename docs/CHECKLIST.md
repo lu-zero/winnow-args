@@ -133,7 +133,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] A bare name is the path its file's `use` brings it in by; one nothing
       accounts for is refused where a `ValueEnum` of another file has it,
       rather than given that enum's choices
-- [ ] In those pages: a `use` inside a function is read as its module's
+- [x] In those pages: a `use` inside a function is the function's, not
+      its module's; a type derived in it sees it, and the module's
+- [ ] In those pages: a `use` inside a macro's braces at module level
+      (`cfg_if! { … }`) is not the module's
 - [x] In a man page: a description's code and strong spans are bold, its
       emphasized ones italic, without their stars; in Markdown, they are
       Markdown's own spans
@@ -236,8 +239,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Completion
 
-- [ ] A hint that keeps to some extensions; a candidate of `complete` with a
-      space in it, quoted for each shell
+- [ ] A hint that keeps to some extensions
+- [ ] A candidate of `complete` with a space or a shell character in it,
+      quoted for each shell; clap and usage leave it split in bash
 
 ### Program surface
 
