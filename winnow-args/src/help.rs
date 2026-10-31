@@ -1230,8 +1230,53 @@ fn usage_lines(command: &Command, path: &[&str], style: Style) -> Vec<String> {
     if command.usage.is_empty() {
         vec![usage(command, path, style)]
     } else {
-        command.usage.lines().map(str::to_owned).collect()
+        let lines = command.usage.lines();
+        lines.map(|line| painted_usage(line, path, style)).collect()
     }
+}
+
+/// A usage line written by hand, painted as a made one is: the program's
+/// words, flags, placeholders (`<FILE>`, `OPTIONS`), and brackets, `|` and
+/// `...` as frames. Without colour, the text is as written.
+fn painted_usage(line: &str, path: &[&str], style: Style) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut program = path.iter();
+    let mut leading = true;
+    let mut at = 0;
+    let words = line.split_whitespace().map(|word| {
+        let start = word.as_ptr() as usize - line.as_ptr() as usize;
+        (start, start + word.len())
+    });
+    for (start, end) in words {
+        out.push_str(&line[at..start]);
+        at = end;
+        let word = &line[start..end];
+        if leading && program.next().is_some_and(|name| *name == word) {
+            push_painted(&mut out, style.program(), word);
+            continue;
+        }
+        leading = false;
+        let open = word.len() - word.trim_start_matches(['[', '(']).len();
+        let close = word.len() - word.trim_end_matches([']', ')', '|', '.']).len();
+        let (prefix, rest) = word.split_at(open);
+        let (core, suffix) = rest.split_at(rest.len().saturating_sub(close));
+        let ink = if core.len() > 1 && core.starts_with('-') {
+            style.flag()
+        } else if (core.starts_with('<') && core.ends_with('>') && core.len() > 2)
+            || (core.len() > 1 && core.bytes().all(|b| b.is_ascii_uppercase() || b == b'_'))
+        {
+            style.placeholder()
+        } else {
+            Ink::NONE
+        };
+        for (ink, piece) in [(style.dim(), prefix), (ink, core), (style.dim(), suffix)] {
+            if !piece.is_empty() {
+                push_painted(&mut out, ink, piece);
+            }
+        }
+    }
+    out.push_str(&line[at..]);
+    out
 }
 
 pub(crate) fn usage(command: &Command, path: &[&str], style: Style) -> String {

@@ -542,12 +542,13 @@ pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
     // Help goes to stdout, except a bare invocation's, which is an error.
     let bare = error.is_bare_help();
     let style = if bare { stderr() } else { stdout() };
+    // The page ends with its newline.
     if let Some(help) = error.render_help_styled(program, style) {
         if bare {
-            eprintln!("{help}");
+            eprint!("{help}");
             return 2;
         }
-        println!("{help}");
+        print!("{help}");
         return 0;
     }
     if let Some(version) = error.version_text(program) {

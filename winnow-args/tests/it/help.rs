@@ -936,3 +936,41 @@ fn the_help_flag_names_the_other_spelling_as_a_flag() {
     assert!(page.contains("see a summary with '\u{1b}["), "{page:?}");
     assert!(strip(&page).contains("see a summary with '-h'"), "{page:?}");
 }
+
+/// bash's usage line, written by hand.
+#[derive(Args, Debug)]
+#[arg(name = "set", usage = "set [-abef] [-o option-name] [--] <ARG>...")]
+struct HandUsage {
+    #[arg(short)]
+    a: bool,
+}
+
+#[test]
+fn a_usage_written_by_hand_is_painted_as_a_made_one() {
+    use winnow_args::help::render_styled;
+    let plain = render_styled(HandUsage::HELP, &["set"], false, 80, Style::PLAIN);
+    assert!(
+        plain.contains("Usage: set [-abef] [-o option-name] [--] <ARG>...\n"),
+        "{plain}"
+    );
+    let at256 = Style::at(Palette::DEFAULT_256, Depth::Ansi256);
+    let text = render_styled(HandUsage::HELP, &["set"], false, 80, at256);
+    let frame = |text: &str| sgr("38;5;245", text);
+    let flag = |text: &str| sgr("1;38;5;71", text);
+    let expected = format!(
+        "{} set {}{}{} {}{} option-name{} {}{}{} {}{}\n",
+        sgr("1;38;5;73", "Usage:"),
+        frame("["),
+        flag("-abef"),
+        frame("]"),
+        frame("["),
+        flag("-o"),
+        frame("]"),
+        frame("["),
+        flag("--"),
+        frame("]"),
+        sgr("38;5;109", "<ARG>"),
+        frame("..."),
+    );
+    assert!(text.contains(&expected), "{text:?}");
+}

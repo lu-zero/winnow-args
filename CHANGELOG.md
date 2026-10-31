@@ -41,6 +41,10 @@ released together. Versions follow [semver](https://semver.org).
   possible values as a bulleted list; a VERSION section when the command
   has a version. An empty `Manual::manual` (or `source`, `date`) after the
   last one given is left out, so `man` shows its default manual name.
+- **Changed**: a usage line written by hand (`usage = "…"`) is painted as a
+  made one: the program's words, flags, placeholders, and its brackets as
+  frames. Without colour it is as written.
+- **Fixed**: `report` printed a blank line after the help page.
 - **Fixed**: completion stops offering flags where the parser stops reading
   them: after a positional with `stop_flags` or `double_dash =
   "automatic"`, as a shell's script name, or `-c`'s command string. For it,
