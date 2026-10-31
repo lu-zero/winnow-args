@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.0 (2026-10-31)
 
 - **Added**: a `Vec<bool>` with `plus` equal to `short` records every
   spelling in order: `true` for each `-x`, `false` for each `+x`. For a
@@ -31,20 +31,23 @@ released together. Versions follow [semver](https://semver.org).
   `Occurrence` variant takes `plus = 'o'`, so a `sequence` keeps `+x`
   spellings in order with the rest. With `short` the same letter, one
   variant holds the sign: `Errexit(bool)`, `Named(bool, String)`.
-- **Changed**: a `Vec<bool>` with `plus` equal to `short` takes no value.
-  Before, it took one each time (`-x true`), as any `Vec<bool>`.
 - **Added**: `detached_only` on a flag or an `Occurrence` variant (and
   `Named::detached_only`, `ValueOptions::detached_only`): its `-x` value is
   only the next word, never the rest of its bundle, so bash's `set -oe` is
   a bare `-o` (its `default_missing`), then `-e`.
 - **Added**: `author`, or `author = "…"`, on a command: the man pages'
   AUTHORS section, one author a line. With no string, the crate's
-  `CARGO_PKG_AUTHORS`. `winnow_args_spec::Command` has an `author` field.
+  `CARGO_PKG_AUTHORS`.
 - **Added**: `Palette::usage`, the `Usage:` heading's paint, which clap
   styles apart from the other headings. `None`, as in the built-in
   palettes, paints it as `header`, so a theme looks as it did.
-  **Breaking**: a `Palette` written out in full needs `usage: None`, or
-  ends in `..Palette::DEFAULT`.
+- **Changed**: a `Vec<bool>` with `plus` equal to `short` takes no value.
+  Before, it took one each time (`-x true`), as any `Vec<bool>`.
+- **Changed**: `help::Item` has the field `stop_flags`, `color::Palette`
+  `usage`, `token::ValueOptions` `detached_only`, and
+  `winnow_args_spec::Command` `author`. A value written by hand that ends in
+  `..Item::EMPTY`, `..Palette::DEFAULT`, `..ValueOptions::DEFAULT` or
+  `..Default::default()` is unaffected; one written out in full needs them.
 - **Changed**: the derives mark their impls `#[automatically_derived]`, as
   std's and clap's do, so tools such as `cargo public-api` list them as
   derived.
@@ -59,8 +62,7 @@ released together. Versions follow [semver](https://semver.org).
 - **Fixed**: `report` printed a blank line after the help page.
 - **Fixed**: completion stops offering flags where the parser stops reading
   them: after a positional with `stop_flags` or `double_dash =
-  "automatic"`, as a shell's script name, or `-c`'s command string. For it,
-  `help::Item` has a `stop_flags` field.
+  "automatic"`, as a shell's script name, or `-c`'s command string.
 - **Fixed**: a negative number with a default subcommand. It goes to the
   default subcommand when that one's first positional has
   `allow_negative_numbers`, or its own default subcommand's, at any depth;
