@@ -843,6 +843,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         #(#structs)*
         #(#spec_checks)*
         #run_impl
+        #[automatically_derived]
         impl #impl_generics ::winnow_args::Subcommand for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
             #external_const
@@ -867,6 +868,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
 
+        #[automatically_derived]
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
 
@@ -1764,6 +1766,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     Ok(quote! {
         #(#spec_checks)*
+        #[automatically_derived]
         impl #impl_generics ::winnow_args::Occurrence for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
 
@@ -2313,6 +2316,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     });
     Ok(quote! {
+        #[automatically_derived]
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
             const CHOICES: &'static [&'static str] = &[#(#visible),*];
             #choice_help
@@ -5094,7 +5098,6 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
 
-            #[automatically_derived]
             #[allow(
                 unused_mut,
                 unused_variables,
@@ -5104,6 +5107,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 clippy::nursery,
                 clippy::restriction
             )]
+            #[automatically_derived]
             impl ::winnow_args::__private::Flatten for #name {
                 type Slots = #slots_name;
 
@@ -5387,6 +5391,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         #(#spec_checks)*
+        #[automatically_derived]
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
             #negative_first
