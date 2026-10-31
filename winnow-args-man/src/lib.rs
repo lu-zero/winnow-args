@@ -15,9 +15,11 @@ pub struct Manual {
     pub section: String,
     /// The date in the center of the header. Empty leaves it out.
     pub date: String,
-    /// The source in the left of the footer.
+    /// The source in the left of the footer, as `tool 1.2.3`. Empty leaves it
+    /// out.
     pub source: String,
-    /// The manual title in the center of the footer.
+    /// The manual title in the center of the header. Empty leaves `man`'s
+    /// default for the section ("General Commands Manual" for 1).
     pub manual: String,
 }
 
@@ -89,10 +91,15 @@ impl Manual {
         let command = page.command;
         let mut doc = Roff::new();
         let name = page.stem();
-        // The title is in capitals by convention; NAME keeps the word as typed.
-        let mut header = vec![arg(&name.to_uppercase()), arg(&self.section)];
-        if !self.date.is_empty() || !self.source.is_empty() || !self.manual.is_empty() {
-            header.extend([arg(&self.date), arg(&self.source), arg(&self.manual)]);
+        // The title as the command is written, as clap's pages have it. The
+        // fields after the section go up to the last one given: an empty one
+        // would replace the default `man` shows for it ("General Commands
+        // Manual" for the manual's name).
+        let mut header = vec![arg(&name), arg(&self.section)];
+        let fields = [&self.date, &self.source, &self.manual];
+        let given = fields.iter().rposition(|field| !field.is_empty());
+        if let Some(last) = given {
+            header.extend(fields[..=last].iter().map(|field| arg(field)));
         }
         doc.control("TH", header.iter().map(String::as_str));
         doc.control("SH", ["NAME"]);
@@ -175,7 +182,7 @@ impl Manual {
             }
         }
         for (title, items) in grouped.headings {
-            doc.control("SH", [arg(title).as_str()]);
+            doc.control("SH", [arg(&title.to_uppercase()).as_str()]);
             if let Some(help) = command.heading_help(title) {
                 doc.text(prose(help));
             }
@@ -233,6 +240,10 @@ impl Manual {
         if !after.is_empty() {
             doc.control("PP", std::iter::empty::<&str>());
             doc.text(prose(after));
+        }
+        if let Some(version) = command.package_version.as_deref().filter(|v| !v.is_empty()) {
+            doc.control("SH", ["VERSION"]);
+            doc.text([roman(format!("v{version}"))]);
         }
         doc.render()
     }
@@ -327,15 +338,18 @@ fn item_tp(doc: &mut Roff, item: &Item) {
     if let Some(choices) = item.listed_choices() {
         doc.control("sp", std::iter::empty::<&str>());
         doc.text([roman("Possible values:")]);
+        // A bullet a value, indented past the tag's column, as clap's pages.
+        doc.control("RS", ["14"]);
         for (name, help) in choices {
-            doc.control("br", std::iter::empty::<&str>());
-            let mut line = vec![roman("- "), bold(name)];
+            doc.control("IP", ["\\(bu", "2"]);
+            let mut line = vec![bold(name)];
             if !help.is_empty() {
                 line.push(roman(": "));
                 line.extend(prose(help));
             }
             doc.text(line);
         }
+        doc.control("RE", std::iter::empty::<&str>());
     }
     if let Some(vocabulary) = &item.vocabulary {
         // Indented, so that the next flag is not read as one more keyword.
@@ -377,7 +391,7 @@ mod tests {
             ..Command::default()
         };
         let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
-        assert!(page.contains(".TH TOOL 1\n"), "{page}");
+        assert!(page.contains(".TH tool 1\n"), "{page}");
         assert!(
             page.contains("\\-\\-file") || page.contains("\\-file"),
             "{page}"
@@ -430,7 +444,7 @@ mod tests {
         let names: Vec<&str> = pages.iter().map(|(name, _)| name.as_str()).collect();
         assert_eq!(names, ["busybox.1", "ls.1", "ls-dir.1", "list.1"]);
         let ls = &pages[1].1;
-        assert!(ls.contains(".TH LS 1\n.SH NAME\n\\fBls\\fR\n"), "{ls}");
+        assert!(ls.contains(".TH ls 1\n.SH NAME\n\\fBls\\fR\n"), "{ls}");
         assert!(
             ls.contains("ls [OPTIONS] [COMMAND]\n.br\nbusybox ls [OPTIONS] [COMMAND]\n"),
             "{ls}"
@@ -492,10 +506,27 @@ mod tests {
         };
         let page = manual.render(&pages(&command, "tool").unwrap()[0]);
         assert!(
-            page.contains(".TH TOOL 1 \"\" \"tool 1.0\" \"User Commands\"\n"),
+            page.contains(".TH tool 1 \"\" \"tool 1.0\" \"User Commands\"\n"),
             "{page}"
         );
-        assert!(page.contains(".SH \"Say \\(dqhi\\(dq\"\n"), "{page}");
+        assert!(page.contains(".SH \"SAY \\(dqHI\\(dq\"\n"), "{page}");
+    }
+
+    #[test]
+    fn the_header_ends_at_its_last_field_and_a_version_has_its_section() {
+        let command = Command {
+            name: "tool".to_owned(),
+            package_version: Some("1.2.3".to_owned()),
+            ..Command::default()
+        };
+        let manual = Manual {
+            source: "tool 1.2.3".to_owned(),
+            ..Manual::default()
+        };
+        let page = manual.render(&pages(&command, "tool").unwrap()[0]);
+        // No manual name: `man` shows its default for it.
+        assert!(page.contains(".TH tool 1 \"\" \"tool 1.2.3\"\n"), "{page}");
+        assert!(page.ends_with(".SH VERSION\nv1.2.3\n"), "{page}");
     }
 
     #[test]
@@ -656,7 +687,7 @@ mod tests {
         for expected in [
             ".SH DESCRIPTION\nA package manager.\n.PP\nEffect: modifies state.\n",
             "\\fBemerge\\fR\nMerge. (default)\n",
-            ".SH Roots\nWhich tree is read.\n.TP\n",
+            ".SH ROOTS\nWhich tree is read.\n.TP\n",
             "Warning: Not for use.",
             ".SH \"OUTPUT FORMATS\"\n.TP\n\\fBpretty\\fR\nFor people. The default.\n.TP\n\\fBjson\\fR\nFraming: json.\n",
             ".SH \"EXIT STATUS\"\n.TP\n\\fB64\\fR\nNo such root.\n",
@@ -690,7 +721,7 @@ mod choice_tests {
             choice_help: vec!["The file's name".to_owned(), String::new()],
             ..Item::default()
         });
-        let list = ".sp\nPossible values:\n.br\n\\- \\fBname\\fR: The file\\*(Aqs name\n.br\n\\- \\fBsize\\fR\n";
+        let list = ".sp\nPossible values:\n.RS 14\n.IP \\(bu 2\n\\fBname\\fR: The file\\*(Aqs name\n.IP \\(bu 2\n\\fBsize\\fR\n.RE\n";
         assert!(page.contains(list), "{page}");
     }
 }

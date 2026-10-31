@@ -36,6 +36,11 @@ released together. Versions follow [semver](https://semver.org).
 - **Changed**: the derives mark their impls `#[automatically_derived]`, as
   std's and clap's do, so tools such as `cargo public-api` list them as
   derived.
+- **Changed**: man pages as clap's: the title as the command is written,
+  not in capitals; a heading's section name in capitals, as the others;
+  possible values as a bulleted list; a VERSION section when the command
+  has a version. An empty `Manual::manual` (or `source`, `date`) after the
+  last one given is left out, so `man` shows its default manual name.
 - **Fixed**: completion stops offering flags where the parser stops reading
   them: after a positional with `stop_flags` or `double_dash =
   "automatic"`, as a shell's script name, or `-c`'s command string. For it,
