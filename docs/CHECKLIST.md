@@ -190,8 +190,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Grammar and values
 
 - [ ] A variadic positional that is not last; `allow_missing_positional`
-- [ ] A negative number routed into a default subcommand's positional
-      (usage corpus `default-takes-an-opted-negative-number`)
+- [x] A negative number routed into a default subcommand's positional
+      where it opts in, at any depth, and kept by the root's where only
+      that one does
 - [ ] `Option<Option<T>>`
 - [ ] `choices_strict = false`: choices as suggestions only
 - [ ] Custom value parsers in the derive (`parse_with`)

@@ -305,6 +305,11 @@ pub trait Args: Sized {
     #[doc(hidden)]
     const SPEC: &'static str = "";
 
+    /// Whether its first positional takes a negative number: a parent whose
+    /// default subcommand this is hands it one.
+    #[doc(hidden)]
+    const NEGATIVE_FIRST: bool = false;
+
     /// Parse the command line in `input`, consuming all of it.
     ///
     /// This is a winnow parser: `Cli::parse_argv` can be passed anywhere a
@@ -634,6 +639,12 @@ pub trait Subcommand: Sized {
     /// `cargo-foo`. [`Subcommand::parse_subcommand`] then takes any name.
     const EXTERNAL: bool = false;
 
+    /// Each name whose subcommand takes a negative number as its first word,
+    /// as [`Args::NEGATIVE_FIRST`] says: as the default subcommand, it is
+    /// handed one. Read at compile time.
+    #[doc(hidden)]
+    const NEGATIVE_FIRST: &'static [(&'static [u8], bool)] = &[];
+
     /// Parse the rest of `input` as the subcommand `name`, which [`Subcommand::has`];
     /// `globals` binds its ancestors' global flags.
     fn parse_subcommand(
@@ -772,6 +783,36 @@ pub mod __private {
     pub type BoxError = crate::error::BoxError;
 
     use crate::token::is_flag_like;
+
+    /// The digit of a word that is `-` and one digit: a short flag where
+    /// one is declared, else a negative number.
+    #[inline]
+    pub fn digit_short(word: &[u8]) -> Option<char> {
+        match word {
+            [b'-', digit] if digit.is_ascii_digit() => Some(char::from(*digit)),
+            _ => None,
+        }
+    }
+
+    /// Whether `name`, in a [`Subcommand::NEGATIVE_FIRST`] table, takes a
+    /// negative number as its first word.
+    pub const fn negative_first(table: &[(&[u8], bool)], name: &[u8]) -> bool {
+        let mut i = 0;
+        while i < table.len() {
+            let (named, takes) = table[i];
+            if named.len() == name.len() {
+                let mut j = 0;
+                while j < name.len() && named[j] == name[j] {
+                    j += 1;
+                }
+                if j == name.len() {
+                    return takes;
+                }
+            }
+            i += 1;
+        }
+        false
+    }
 
     /// The flags of a struct that another flattens (`#[arg(flatten)]`), derived
     /// for every `Args` struct that has flags only.

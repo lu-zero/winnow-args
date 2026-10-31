@@ -12,6 +12,13 @@ released together. Versions follow [semver](https://semver.org).
   wins in either order.
 - **Changed**: such a `Vec<bool>` takes no value. Before, it took one each
   time (`-x true`), as any `Vec<bool>`.
+- **Fixed**: a negative number with a default subcommand. It goes to the
+  default subcommand when that one's first positional has
+  `allow_negative_numbers`, or its own default subcommand's, at any depth;
+  to the root's own positional when only the root's opts in. It was an
+  unknown flag in both cases. A word that spells a declared short (`-1`),
+  the struct's own, a flattened struct's or an ancestor's global, is that
+  flag, where a positional opts in too.
 - **Fixed**: in the man and markdown pages, a `use` inside a function no
   longer names a field's type for its whole module; a type derived in that
   function still sees it.

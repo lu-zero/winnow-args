@@ -547,6 +547,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut patterns = Vec::new();
+    // The variants holding a type whose first positional may take a negative number.
+    let mut negatives = Vec::new();
     let mut subs = Vec::new();
     // Each variant and the type it holds, for `run`.
     let mut held: Vec<(&Ident, Type, bool)> = Vec::new();
@@ -591,6 +593,12 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             (_, Some((name, ..))) => Some(syn::parse_quote!(#name)),
             _ => None,
         };
+        if let Some(ty) = &inner {
+            for name in &info.names {
+                let name = LitByteStr::new(name.as_bytes(), Span::call_site());
+                negatives.push(quote!((#name, <#ty as ::winnow_args::Args>::NEGATIVE_FIRST)));
+            }
+        }
         // The name a variant with fields is filed under, when it is not its
         // struct's own.
         let mut filed_as = None;
@@ -805,6 +813,11 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         true => quote!(false),
         false => quote!(matches!(__name, #(#patterns)|*)),
     };
+    let negative_first = (!negatives.is_empty()).then(|| {
+        quote! {
+            const NEGATIVE_FIRST: &'static [(&'static [u8], bool)] = &[#(#negatives),*];
+        }
+    });
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let run_impl = runs.map(|runs| run_impl(input, runs, &held));
@@ -820,6 +833,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             fn has(__name: &[u8]) -> bool {
                 #has_body
             }
+
+            #negative_first
 
             fn parse_subcommand(
                 __name: &[u8],
@@ -3868,6 +3883,29 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     };
+    // A negative number read for one of this struct's positionals is told
+    // apart from one read for the default subcommand.
+    let track_number =
+        default_subcommand.is_some() && positionals.iter().any(|f| f.negative_numbers);
+    // Whether the default subcommand takes a negative number as its first
+    // word: a constant, for `NEGATIVE_FIRST` and the lexer.
+    let negative_lookup = subcommand
+        .zip(default_subcommand.as_ref())
+        .map(|(f, name)| {
+            let ty = subcommand_type(f);
+            let name = LitByteStr::new(name.as_bytes(), Span::call_site());
+            quote! {
+                ::winnow_args::__private::negative_first(
+                    <#ty as ::winnow_args::Subcommand>::NEGATIVE_FIRST,
+                    #name,
+                )
+            }
+        });
+    // Read as a word where the default subcommand would take it.
+    let default_number = negative_lookup.as_ref().map(|lookup| {
+        let not_filled = track_filled.then(|| quote!(!__filled &&));
+        quote!((#not_filled const { #lookup }))
+    });
     let routes = subcommand.map(|f| {
         let ident = slot(&f.ident);
         let ty = subcommand_type(f);
@@ -3962,6 +4000,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 false => fallback.clone(),
             },
         );
+        // A negative number read for this struct's own positional stays here.
+        let route_fallback = match &negative_lookup {
+            Some(lookup) if track_number => quote! {
+                if !__number || const { #lookup } {
+                    #fallback
+                }
+            },
+            _ => quote!(#fallback),
+        };
         let route = quote! {
             if #not_filled !__word.after_separator {
                 if <#ty as __wa::Subcommand>::has(&**__word.value) {
@@ -3975,7 +4022,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     break;
                 }
                 #help_word
-                #fallback
+                #route_fallback
             }
         };
         // A line that took no subcommand, no positional and no `--` runs the
@@ -4210,20 +4257,36 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
         }
     });
-    let lex = if opted.is_empty() {
+    let own = (!opted.is_empty()).then(|| quote!(matches!(__position, #(#opted)|*)));
+    let opts: Vec<TokenStream2> = own.into_iter().chain(default_number).collect();
+    let lex = if opts.is_empty() {
         quote!(#lexer(__input)?)
     } else {
-        let digits: Vec<LitByteStr> = fields
+        // Unless it spells a declared short exactly (`-0` for fd's
+        // `--print0`): this struct's, a flattened one's or an ancestor's
+        // global.
+        let digits: Vec<LitChar> = fields
             .iter()
             .filter_map(|f| f.short().filter(char::is_ascii_digit))
-            .map(|c| LitByteStr::new(format!("-{c}").as_bytes(), Span::call_site()))
+            .map(|c| LitChar::new(c, Span::call_site()))
             .collect();
-        let not_a_short =
-            (!digits.is_empty()).then(|| quote!(&&!matches!(__input.front(), #(#digits)|*)));
+        let own_digit = (!digits.is_empty()).then(|| quote!(matches!(__digit, #(#digits)|*) ||));
+        let flattened = flattens
+            .iter()
+            .map(|(_, ty)| quote!(<#ty as __wa::Flatten>::short(__digit).is_some() ||));
+        // `__number`: the word is a negative number, read so.
+        let found = track_number.then(|| quote!(__number = true;));
         quote! {
-            match matches!(__position, #(#opted)|*) #not_a_short {
+            match (#(#opts)||*)
+                && !__wa::digit_short(__input.front()).is_some_and(|__digit| {
+                    #own_digit #(#flattened)* __globals.short(__digit).is_some()
+                })
+            {
                 true => match __wa::number(__input) {
-                    ::core::result::Result::Ok(__word) => __wa::Arg::Word(__word),
+                    ::core::result::Result::Ok(__word) => {
+                        #found
+                        __wa::Arg::Word(__word)
+                    }
                     ::core::result::Result::Err(_) => #lexer(__input)?,
                 },
                 false => #lexer(__input)?,
@@ -4233,6 +4296,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let start = default_subcommand
         .is_some()
         .then(|| quote!(let __start = *__input;));
+    let number_slot = track_number.then(|| quote!(let mut __number = false;));
     let help_on_empty = arg_required_else_help.then(|| {
         quote! {
             if __input.is_empty() {
@@ -4872,6 +4936,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             const _: () = assert!(!<#ty as ::winnow_args::Subcommand>::EXTERNAL, #message);
         });
     }
+    // Its first word takes a negative number where its first positional opts
+    // in, or where its default subcommand's first word does, at any depth.
+    let own_negative = positionals.first().is_some_and(|f| f.negative_numbers);
+    let negative_first = match (own_negative, negative_lookup) {
+        (true, _) => Some(quote!(
+            const NEGATIVE_FIRST: bool = true;
+        )),
+        (false, Some(default)) => Some(quote!(const NEGATIVE_FIRST: bool = #default;)),
+        (false, None) => None,
+    };
     let filed = filed(input)?;
     let identity = spec::identity(input.ident.span(), &filed);
     if spec::enabled() {
@@ -4955,6 +5029,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         #(#spec_checks)*
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
+            #negative_first
 
             // Compiled here and never inlined, so a program in another crate has
             // no copy of the help.
@@ -5008,6 +5083,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #lenient_bundle
                     #save_token
                     #bundle_start
+                    #number_slot
                     let __arg = #lex;
                     match __arg {
                         __wa::Arg::Long(__flag) => match __flag.name {

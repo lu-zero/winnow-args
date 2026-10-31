@@ -423,3 +423,153 @@ mod on_empty {
         assert_eq!(Git::parse_from(["--"]).unwrap().command, None);
     }
 }
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct Opted {
+    #[arg(positional, value_name = "ROOT_TASK")]
+    root_task: Option<String>,
+    #[arg(subcommand)]
+    command: Option<OptedCommand>,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+enum OptedCommand {
+    Run {
+        #[arg(positional, allow_negative_numbers)]
+        offset: Option<f64>,
+    },
+}
+
+#[test]
+fn default_takes_an_opted_negative_number() {
+    let opted: Opted = parse(&["-1.5"]).unwrap();
+    assert_eq!(
+        (opted.root_task, opted.command),
+        (None, Some(OptedCommand::Run { offset: Some(-1.5) }))
+    );
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct Unopted {
+    #[arg(positional, value_name = "ROOT_OFFSET", allow_negative_numbers)]
+    root_offset: Option<f64>,
+    #[arg(subcommand)]
+    command: Option<UnoptedCommand>,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+enum UnoptedCommand {
+    Run {
+        #[arg(positional)]
+        task: Option<String>,
+    },
+}
+
+#[test]
+fn default_leaves_an_unopted_negative_number() {
+    let unopted: Unopted = parse(&["-1.5"]).unwrap();
+    assert_eq!((unopted.root_offset, unopted.command), (Some(-1.5), None));
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct BothOpted {
+    #[arg(positional, allow_negative_numbers)]
+    root_offset: Option<f64>,
+    #[arg(subcommand)]
+    command: Option<OptedCommand>,
+}
+
+#[test]
+fn default_takes_a_negative_number_both_opt_into() {
+    // As any word: the default subcommand beats the root's own positional.
+    let both: BothOpted = parse(&["-1.5"]).unwrap();
+    assert_eq!(
+        (both.root_offset, both.command),
+        (None, Some(OptedCommand::Run { offset: Some(-1.5) }))
+    );
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "mid")]
+struct Nested {
+    #[arg(subcommand)]
+    command: Option<Outer>,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+enum Outer {
+    Mid(Mid),
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct Mid {
+    #[arg(subcommand)]
+    command: Option<OptedCommand>,
+}
+
+#[test]
+fn a_negative_number_reaches_a_nested_default_subcommand() {
+    let nested: Nested = parse(&["-1.5"]).unwrap();
+    assert_eq!(
+        nested.command,
+        Some(Outer::Mid(Mid {
+            command: Some(OptedCommand::Run { offset: Some(-1.5) })
+        }))
+    );
+}
+
+#[derive(Args, Debug, PartialEq)]
+struct DigitFlags {
+    #[arg(short = '1')]
+    one: bool,
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct Digits {
+    #[arg(flatten)]
+    flags: DigitFlags,
+    #[arg(short = '2', global)]
+    two: bool,
+    #[arg(subcommand)]
+    command: Option<DigitCommand>,
+}
+
+#[derive(Subcommand, Debug, PartialEq)]
+enum DigitCommand {
+    Run {
+        #[arg(positional, allow_negative_numbers)]
+        n: Option<i32>,
+    },
+    Mid(DigitMid),
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(default_subcommand = "run")]
+struct DigitMid {
+    #[arg(subcommand)]
+    command: Option<OptedCommand>,
+}
+
+#[test]
+fn a_declared_digit_short_is_a_flag_not_a_number() {
+    // The flattened struct's `-1`, and the root's own `-2`.
+    let digits: Digits = parse(&["-1"]).unwrap();
+    assert_eq!((digits.flags.one, digits.command), (true, None));
+    let digits: Digits = parse(&["-2"]).unwrap();
+    assert_eq!((digits.two, digits.command), (true, None));
+    // Any other is the default subcommand's number.
+    let digits: Digits = parse(&["-3"]).unwrap();
+    assert_eq!(digits.command, Some(DigitCommand::Run { n: Some(-3) }));
+    // An ancestor's global `-2` is still the flag below it.
+    let digits: Digits = parse(&["mid", "-2"]).unwrap();
+    assert!(digits.two);
+    assert_eq!(
+        digits.command,
+        Some(DigitCommand::Mid(DigitMid { command: None }))
+    );
+}
