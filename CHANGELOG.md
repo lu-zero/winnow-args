@@ -12,6 +12,15 @@ released together. Versions follow [semver](https://semver.org).
   wins in either order.
 - **Changed**: such a `Vec<bool>` takes no value. Before, it took one each
   time (`-x true`), as any `Vec<bool>`.
+- **Added**: an `Option<Option<T>>` flag, whose value may be left out:
+  absent is `None`, `--color` alone `Some(None)`, `--color never` or
+  `--color=never` `Some(Some(…))`. With `require_equals`, only the attached
+  value. Help shows `--color [<COLOR>]`.
+- **Added**: `Option<Vec<T>>`, `None` where the flag (or positional) is
+  never given; `Vec<Vec<T>>`, the values of each occurrence apart, for
+  `values = a..=b` or `delimiter`; `Vec<Option<T>>`, each occurrence's
+  value, `None` for a bare flag. `Vec<u8>` stays one value, its bytes:
+  `Option<Vec<u8>>` and `Vec<Vec<u8>>` mean what they did.
 - **Fixed**: a negative number with a default subcommand. It goes to the
   default subcommand when that one's first positional has
   `allow_negative_numbers`, or its own default subcommand's, at any depth;

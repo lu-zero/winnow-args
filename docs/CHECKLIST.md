@@ -51,6 +51,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Switch, `count` (saturating), `Option<T>`, required `T`, `Vec<T>` one
       value per occurrence; a repeated single value keeps the last;
       `bool_value` (`--flag=false`)
+- [x] `Option<Option<T>>` (a bare flag is `Some(None)`), `Option<Vec<T>>`
+      (`None` where never given), `Vec<Vec<T>>` (each occurrence's values),
+      `Vec<Option<T>>` (each occurrence's value or none)
 - [x] `delimiter`, `values = N` (with `value_names`), `values = 1..` /
       `a..=b` with `value_terminator`, `choices(…)`, `ValueEnum` (`name`,
       `alias`, `alias_hidden`, `hide`, `rename_all`)
@@ -193,7 +196,6 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] A negative number routed into a default subcommand's positional
       where it opts in, at any depth, and kept by the root's where only
       that one does
-- [ ] `Option<Option<T>>`
 - [ ] `choices_strict = false`: choices as suggestions only
 - [ ] Custom value parsers in the derive (`parse_with`)
 - [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names

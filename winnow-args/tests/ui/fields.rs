@@ -112,4 +112,41 @@ enum DeprecatedValue {
     Slow,
 }
 
+#[derive(Args)]
+struct MaybeValuePositional {
+    #[arg(positional)]
+    name: Option<Option<String>>,
+}
+
+#[derive(Args)]
+struct MaybeValueDefaultMissing {
+    #[arg(long, default_missing = "always")]
+    color: Option<Option<String>>,
+}
+
+#[derive(Args)]
+struct GroupedPositional {
+    #[arg(positional)]
+    words: Vec<Vec<String>>,
+}
+
+#[derive(Args)]
+struct EachWithDelimiter {
+    #[arg(long, delimiter = ',')]
+    define: Vec<Option<String>>,
+}
+
+#[derive(Args)]
+struct KeywordsOnEach {
+    #[arg(long, keywords)]
+    define: Vec<Option<String>>,
+}
+
+#[derive(Args)]
+#[arg(plus_options)]
+struct EachWithPlus {
+    #[arg(short = 'x', plus = 'x')]
+    trace: Vec<Option<bool>>,
+}
+
 fn main() {}

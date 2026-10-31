@@ -4,7 +4,7 @@ error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_
 6 |     #[arg(long, hdie)]
   |                 ^^^^
 
-error: `delimiter` needs a `Vec<T>` field to put the pieces in
+error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in
   --> tests/ui/fields.rs:12:5
    |
 12 |     #[arg(long, delimiter = ',')]
@@ -98,4 +98,40 @@ error: `deprecated` is for a flag, a positional or a subcommand, not a value
    --> tests/ui/fields.rs:111:5
     |
 111 |     #[arg(deprecated)]
+    |     ^
+
+error: `Option<Option<T>>` is a flag whose value may be left out: not a positional or a subcommand, and not with `plus` or `default_missing`
+   --> tests/ui/fields.rs:117:5
+    |
+117 |     #[arg(positional)]
+    |     ^
+
+error: `Option<Option<T>>` is a flag whose value may be left out: not a positional or a subcommand, and not with `plus` or `default_missing`
+   --> tests/ui/fields.rs:123:5
+    |
+123 |     #[arg(long, default_missing = "always")]
+    |     ^
+
+error: `Vec<Vec<T>>` and `Vec<Option<T>>` hold each occurrence of a flag: not a positional or a subcommand
+   --> tests/ui/fields.rs:129:5
+    |
+129 |     #[arg(positional)]
+    |     ^
+
+error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in
+   --> tests/ui/fields.rs:135:5
+    |
+135 |     #[arg(long, delimiter = ',')]
+    |     ^
+
+error: `keywords` is for a flag whose type derives `Args`, without `env`, `default`, `default_missing`, `choices` or `delimiter`
+   --> tests/ui/fields.rs:141:5
+    |
+141 |     #[arg(long, keywords)]
+    |     ^
+
+error: `Vec<Option<T>>` takes one value or none each time: not with `default_missing`, `values` or `plus`
+   --> tests/ui/fields.rs:148:5
+    |
+148 |     #[arg(short = 'x', plus = 'x')]
     |     ^

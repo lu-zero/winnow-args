@@ -106,9 +106,19 @@ mod spec;
 /// | an integer, with `count` | how many times the flag was given | |
 /// | `T` | one value. Absent is an error without `env` or `default` | a required word |
 /// | `Option<T>` | one value, or absent. With `require_equals`, a bare flag is `None` | an optional word |
+/// | `Option<Option<T>>` | absent is `None`, a bare flag `Some(None)`, a value `Some(Some(v))` | |
+/// | `Option<Vec<T>>` | as `Vec<T>`, but `None` where never given | as `Vec<T>`, but `None` for no word |
+/// | `Vec<Vec<T>>` | one `Vec` for each time the flag is given, with its values | |
+/// | `Vec<Option<T>>` | one item for each time the flag is given: `None` when bare | |
 /// | `Vec<T>` | one value each time the flag is given | every word left |
 /// | `Option<bool>`, `plus` equal to `short` | `-x` is `Some(true)`, `+x` is `Some(false)` | |
 /// | `Vec<bool>`, `plus` equal to `short` | `true` for each `-x` and `false` for each `+x`, in order | |
+///
+/// A flag whose value may be left out (`Option<Option<T>>`, `Vec<Option<T>>`)
+/// takes the next word unless it is flag-like, as clap does, even a
+/// subcommand's name: `require_equals` keeps its value attached
+/// (`--color=never`). A `Vec<Vec<T>>`'s defaults are one group, as is an
+/// `env` value.
 ///
 /// # Struct options
 ///
@@ -293,15 +303,17 @@ mod spec;
 ///   and `default_if` left it unset. On `Option<T>` the field is then `Some`.
 ///   A `Vec` takes it repeated, one value each, in order.
 /// - `default_fn = path`: a function returning the field's value, or the whole
-///   list for a `Vec`, called at the same point as `default`. Setting both is
-///   a compile error. `default_note = "…"` is the text help shows for it.
+///   list for a `Vec`, called at the same point as `default`. For an
+///   `Option<T>` it returns `T`, for an `Option<Option<T>>` `T` and for an
+///   `Option<Vec<T>>` the `Vec<T>`. Setting both is a compile error.
+///   `default_note = "…"` is the text help shows for it.
 /// - `default_from(input, |input: &PathBuf| input.with_extension("out"))`: a default
 ///   made from the fields named, by the function or closure last, called with
 ///   a reference to each as declared. On a struct without generics a closure
 ///   needs no types: `|input| input.with_extension("out")`. It is computed after `env`, `default_if`
 ///   and the other defaults, a field after those it is made from; one that is
 ///   required and still unset leaves it unset. Help shows "from `input`", or
-///   its `default_note`.
+///   its `default_note`. It returns what `default_fn` would.
 /// - `default_if("--flag", "v")`: this default when `--flag` was given.
 ///   `default_if("--flag", "x", "v")` when that field's value equals `x`
 ///   (`PartialEq`). Tried after `env` and before `default`, in the order
@@ -2071,7 +2083,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         hide: field.hide,
         positional: field.is_positional(),
         required,
-        multiple: matches!(field.kind, Kind::Many(_) | Kind::Count(_)),
+        multiple: field.multiple(),
         trailing: field.double_dash() == DoubleDash::Required,
         default: field.shown_default(),
         env: field.shown_env().map(str::to_owned),
@@ -2084,9 +2096,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         choices_ty: choices_link(field),
         require_equals: field.require_equals,
         global: field.is_global(),
-        optional_value: field.default_missing.is_some()
-            || field.bool_value
-            || field.require_equals && matches!(field.kind, Kind::Optional(_)),
+        optional_value: field.optional_value(),
         values: field.values,
         more_values: field.values_max.is_some(),
         two_dashes: field.two_dashes,
@@ -2572,6 +2582,11 @@ fn is_ours(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("arg") || attr.path().is_ident("winnow_args")
 }
 
+/// Whether `ty` is `u8`, which a `Vec` of makes `Vec<u8>`, a value of its own.
+fn is_bytes(ty: &Type) -> bool {
+    last_segment(ty).is_some_and(|s| s.ident == "u8" && s.arguments.is_none())
+}
+
 /// Whether `ty` is `bool`.
 fn is_bool(ty: &Type) -> bool {
     last_segment(ty).is_some_and(|s| s.ident == "bool" && s.arguments.is_none())
@@ -2668,6 +2683,22 @@ enum Kind {
     Required(Type),
     /// `Vec<T>`: a repeatable flag's values, or every remaining word.
     Many(Type),
+}
+
+/// How a field holds what its `Kind` reads, where its type wraps it once more.
+#[derive(Clone, Copy, PartialEq)]
+enum Shape {
+    /// As the `Kind` says.
+    Plain,
+    /// `Option<Option<T>>`, an `Optional(T)`: `Some(None)` for a bare flag.
+    MaybeValue,
+    /// `Option<Vec<T>>`, a `Many(T)`: `None` where no value was given.
+    OptionalVec,
+    /// `Vec<Vec<T>>`, a `Many(T)`: the values of each occurrence, apart.
+    Grouped,
+    /// `Vec<Option<T>>`, a `Many(T)`: each occurrence's value, `None` for a
+    /// bare flag.
+    Each,
 }
 
 enum Role {
@@ -2817,6 +2848,8 @@ struct Field {
     /// An `Option<bool>` or `Vec<bool>` with `short` and the same `plus` letter: `-c` is
     /// `true`, `+c` is `false`.
     tristate: bool,
+    /// How it holds what its `Kind` reads.
+    shape: Shape,
     /// `--flag=true` and `--flag=false` are taken.
     bool_value: bool,
     /// Its values are words of a vocabulary of their own, the field's type
@@ -2865,9 +2898,7 @@ impl Field {
         let hide = self.hide;
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
-        let optional_value = self.default_missing.is_some()
-            || self.bool_value
-            || require_equals && matches!(self.kind, Kind::Optional(_));
+        let optional_value = self.optional_value();
         let values = self.values;
         let more_values = self.values_max.is_some();
         let hint = match (&self.hint, &self.kind, &self.role) {
@@ -2893,7 +2924,7 @@ impl Field {
             && self.default_from.is_none()
             && !self.keywords
             || self.required;
-        let multiple = matches!(self.kind, Kind::Many(_) | Kind::Count(_));
+        let multiple = self.multiple();
         let default = opt_str(self.shown_default().as_deref());
         let env = opt_str(self.shown_env());
         // Declared `choices`, else whatever fixed set the value type has.
@@ -3059,6 +3090,7 @@ impl Field {
             Kind::Switch => quote!(#slot),
             Kind::Count(_) => quote!((#slot != 0)),
             Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_some()),
+            Kind::Many(_) if self.shape == Shape::OptionalVec => quote!(#slot.is_some()),
             Kind::Many(_) => quote!((!#slot.is_empty())),
         }
     }
@@ -3069,20 +3101,79 @@ impl Field {
         let slot = slot(&self.ident);
         match &self.kind {
             Kind::Optional(ty) | Kind::Required(ty) => {
-                let value = self.source_value(ty, value, source);
-                quote!(#slot = ::core::option::Option::Some(#value);)
+                self.set(self.source_value(ty, value, source))
             }
-            Kind::Many(ty) => match self.delimiter {
-                None => {
-                    let value = self.source_value(ty, value, source);
-                    quote!(#slot.push(#value);)
-                }
-                Some(d) => {
-                    let piece = self.source_value(ty, quote!(__piece), source);
-                    quote!(for __piece in __wa::split(#value, #d) { #slot.push(#piece); })
-                }
-            },
+            Kind::Many(ty) if self.shape == Shape::Each => {
+                let value = self.source_value(ty, value, source);
+                quote!(#slot.push(::core::option::Option::Some(#value));)
+            }
+            Kind::Many(_) => self.pushing(|into| self.push_value(&into, value, source)),
             Kind::Switch | Kind::Count(_) => unreachable!("a switch or a count takes no value"),
+        }
+    }
+
+    /// Push `value` (a `&BStr`) of a `Many` field, converted, to `into`: split
+    /// at its `delimiter` if it has one.
+    fn push_value(&self, into: &TokenStream2, value: TokenStream2, source: &str) -> TokenStream2 {
+        let Kind::Many(ty) = &self.kind else {
+            unreachable!("only a `Many` field pushes");
+        };
+        match self.delimiter {
+            None => {
+                let value = self.source_value(ty, value, source);
+                quote!(#into.push(#value);)
+            }
+            Some(d) => {
+                let piece = self.source_value(ty, quote!(__piece), source);
+                quote!(for __piece in __wa::split(#value, #d) { #into.push(#piece); })
+            }
+        }
+    }
+
+    /// Whether its value may be left out: `--flag` alone is taken.
+    fn optional_value(&self) -> bool {
+        self.default_missing.is_some()
+            || self.bool_value
+            || matches!(self.shape, Shape::MaybeValue | Shape::Each)
+            || self.require_equals && matches!(self.kind, Kind::Optional(_))
+    }
+
+    /// Whether it may be given more than once, each time counted or kept.
+    fn multiple(&self) -> bool {
+        matches!(self.kind, Kind::Many(_) | Kind::Count(_))
+    }
+
+    /// Put `value`, of [`Field::made_type`], in the slot.
+    fn set(&self, value: TokenStream2) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        let some = |value| quote!(::core::option::Option::Some(#value));
+        match (&self.kind, self.shape) {
+            (Kind::Optional(_), Shape::MaybeValue) => {
+                let value = some(some(value));
+                quote!(#slot = #value;)
+            }
+            (Kind::Optional(_) | Kind::Required(_), _) | (Kind::Many(_), Shape::OptionalVec) => {
+                let value = some(value);
+                quote!(#slot = #value;)
+            }
+            (Kind::Switch, _) if self.negate.is_some() => {
+                let value = some(value);
+                quote!(#slot = #value;)
+            }
+            _ => quote!(#slot = #value;),
+        }
+    }
+
+    /// A flag's value where it may be left out: `Some(value)`, converted to
+    /// `ty`, or `None` for a bare flag.
+    fn optional_read(&self, ty: &Type) -> TokenStream2 {
+        let value = self.flag_value(ty, quote!(__value));
+        let options = self.value_options();
+        quote! {
+            match __arg.read_value_opt_with(__input, #options) {
+                ::core::option::Option::Some(__value) => ::core::option::Option::Some(#value),
+                ::core::option::Option::None => ::core::option::Option::None,
+            }
         }
     }
 
@@ -3102,22 +3193,28 @@ impl Field {
         self.env.as_deref().filter(|_| !self.hide_env)
     }
 
-    /// The type of the value a `default_from` is given for this field.
+    /// The field's type, as declared: what a `default_from` is given of it.
     fn given_type(&self) -> TokenStream2 {
-        match &self.kind {
-            Kind::Switch => quote!(bool),
-            Kind::Count(ty) | Kind::Required(ty) => quote!(#ty),
-            Kind::Optional(ty) => quote!(::core::option::Option<#ty>),
-            Kind::Many(ty) => quote!(::std::vec::Vec<#ty>),
+        let (option, vec) = (quote!(::core::option::Option), quote!(::std::vec::Vec));
+        match (&self.kind, self.shape) {
+            (Kind::Switch, _) => quote!(bool),
+            (Kind::Count(ty) | Kind::Required(ty), _) => quote!(#ty),
+            (Kind::Optional(ty), Shape::MaybeValue) => quote!(#option<#option<#ty>>),
+            (Kind::Optional(ty), _) => quote!(#option<#ty>),
+            (Kind::Many(ty), Shape::OptionalVec) => quote!(#option<#vec<#ty>>),
+            (Kind::Many(ty), Shape::Grouped) => quote!(#vec<#vec<#ty>>),
+            (Kind::Many(ty), Shape::Each) => quote!(#vec<#option<#ty>>),
+            (Kind::Many(ty), _) => quote!(#vec<#ty>),
         }
     }
 
-    /// The type of the value a `default_from` makes for this field.
+    /// What a `default_fn` or a `default_from` makes for the field: its value
+    /// without the `Option` around it, as an `Option<T>`'s is `T`.
     fn made_type(&self) -> TokenStream2 {
-        match &self.kind {
-            Kind::Switch => quote!(bool),
-            Kind::Count(ty) | Kind::Required(ty) | Kind::Optional(ty) => quote!(#ty),
-            Kind::Many(ty) => quote!(::std::vec::Vec<#ty>),
+        match (&self.kind, self.shape) {
+            (Kind::Count(ty) | Kind::Required(ty) | Kind::Optional(ty), _) => quote!(#ty),
+            (Kind::Many(ty), Shape::OptionalVec) => quote!(::std::vec::Vec<#ty>),
+            _ => self.given_type(),
         }
     }
 
@@ -3127,6 +3224,40 @@ impl Field {
         let (names, _) = self.default_from.as_ref()?;
         let names: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
         Some(format!("from {}", names.join(", ")))
+    }
+
+    /// One occurrence's values pushed by `push`, given the `Vec` they go to:
+    /// the slot, the `Vec` in its `Option`, or a group of their own.
+    fn pushing(&self, push: impl FnOnce(TokenStream2) -> TokenStream2) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        match self.shape {
+            Shape::Plain => push(quote!(#slot)),
+            Shape::OptionalVec => {
+                let body = push(quote!(__into));
+                quote!({
+                    let __into = #slot.get_or_insert_with(::std::vec::Vec::new);
+                    #body
+                })
+            }
+            Shape::Grouped => {
+                let body = push(quote!(__into));
+                quote!({
+                    let mut __into = ::std::vec::Vec::new();
+                    #body
+                    #slot.push(__into);
+                })
+            }
+            Shape::Each | Shape::MaybeValue => unreachable!("not a `Vec` of values"),
+        }
+    }
+
+    /// Empty a `Many` field's slot.
+    fn clear(&self) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        match self.shape {
+            Shape::OptionalVec => quote!(#slot = ::core::option::Option::None;),
+            _ => quote!(#slot.clear();),
+        }
     }
 
     /// Whether the field was not given, for a fallback to fill it.
@@ -3154,19 +3285,32 @@ impl Field {
         let assign = |value: TokenStream2, source: &str| self.assign(value, source);
         if !env {
             if let Some(function) = &self.default_fn {
-                let set = match &self.kind {
-                    Kind::Many(_) => quote!(#slot = #function();),
-                    _ => quote!(#slot = ::core::option::Option::Some(#function());),
-                };
+                let set = self.set(quote!(#function()));
                 return quote!(if #unset { #set });
             }
             if self.defaults.is_empty() {
                 return quote!();
             }
-            let assigns = self.defaults.iter().map(|value| {
+            let bytes = |value: &String| {
                 let bytes = LitByteStr::new(value.as_bytes(), Span::call_site());
-                assign(quote!(__wa::BStr::new(#bytes)), &self.display())
-            });
+                quote!(__wa::BStr::new(#bytes))
+            };
+            // A `Vec`'s defaults are one occurrence's values: one group.
+            if matches!(self.kind, Kind::Many(_)) && self.shape != Shape::Each {
+                let display = self.display();
+                let assigns = self.pushing(|into| {
+                    let pushes = self
+                        .defaults
+                        .iter()
+                        .map(|v| self.push_value(&into, bytes(v), &display));
+                    quote!(#(#pushes)*)
+                });
+                return quote!(if #unset { #assigns });
+            }
+            let assigns = self
+                .defaults
+                .iter()
+                .map(|value| assign(bytes(value), &self.display()));
             return quote!(if #unset { #(#assigns)* });
         }
         self.env
@@ -3511,10 +3655,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 Kind::Switch if f.negate.is_some() => (quote!(::core::option::Option<bool>), none),
                 Kind::Switch => (quote!(bool), quote!(false)),
                 Kind::Count(ty) => (quote!(#ty), quote!(0)),
-                Kind::Optional(ty) | Kind::Required(ty) => {
-                    (quote!(::core::option::Option<#ty>), none)
-                }
-                Kind::Many(ty) => (quote!(::std::vec::Vec<#ty>), new),
+                // `None` until given.
+                Kind::Required(ty) => (quote!(::core::option::Option<#ty>), none),
+                Kind::Optional(_) => (f.given_type(), none),
+                Kind::Many(_) if f.shape == Shape::OptionalVec => (f.given_type(), none),
+                Kind::Many(_) => (f.given_type(), new),
             };
             (slot(&f.ident), ty, init)
         })
@@ -3565,6 +3710,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     #ident = ::core::option::Option::Some(#value);
                 }
             }
+            Kind::Optional(ty) if f.shape == Shape::MaybeValue => {
+                let read = f.optional_read(ty);
+                quote!(#ident = ::core::option::Option::Some(#read);)
+            }
             Kind::Optional(ty) => {
                 let value = f.flag_value(ty, quote!(__value));
                 match &f.default_missing {
@@ -3597,8 +3746,12 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
             }
+            Kind::Many(ty) if f.shape == Shape::Each => {
+                let read = f.optional_read(ty);
+                quote!(#ident.push(#read);)
+            }
             Kind::Many(ty) => match f.delimiter {
-                None => {
+                None => f.pushing(|ident| {
                     let value = f.flag_value(ty, quote!(__value));
                     let read = f.read();
                     let more = match f.values_max {
@@ -3642,8 +3795,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #ident.push(#value);
                         #more
                     }
-                }
-                Some(d) => {
+                }),
+                Some(d) => f.pushing(|ident| {
                     let value = f.flag_value(ty, quote!(__piece));
                     let read = f.read();
                     quote! {
@@ -3651,7 +3804,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             #ident.push(#value);
                         }
                     }
-                }
+                }),
             },
         };
         quote!(#stored #displace)
@@ -3780,6 +3933,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             // Flags may have stopped at the positional before this one. A
             // `--` is then a word, and is still not this one's first value.
             let empty = match &f.kind {
+                Kind::Many(_) if f.shape == Shape::OptionalVec => quote!(#ident.is_none()),
                 Kind::Many(_) => quote!(#ident.is_empty()),
                 _ => quote!(true),
             };
@@ -3805,7 +3959,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
                 Kind::Many(ty) => {
                     let push = match f.delimiter {
-                        None => {
+                        None => f.pushing(|ident| {
                             let value = f.word_value(ty, quote!(__word), &display);
                             // Sized once, for at most every word left: the
                             // usual tail of operands then needs no regrowth.
@@ -3815,15 +3969,15 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                                 }
                                 #ident.push(#value);
                             }
-                        }
-                        Some(d) => {
+                        }),
+                        Some(d) => f.pushing(|ident| {
                             let value = f.word_value(ty, quote!(__piece), &display);
                             quote! {
                                 for __piece in __word.split(#d) {
                                     #ident.push(#value);
                                 }
                             }
-                        }
+                        }),
                     };
                     quote! {
                         #i => {
@@ -3854,14 +4008,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let display = LitStr::new(&t.display(), Span::call_site());
             let store = match &t.kind {
                 Kind::Many(ty) => match t.delimiter {
-                    None => {
+                    None => t.pushing(|ident| {
                         let value = t.word_value(ty, quote!(__word), &display);
                         quote!(#ident.push(#value);)
-                    }
-                    Some(d) => {
+                    }),
+                    Some(d) => t.pushing(|ident| {
                         let value = t.word_value(ty, quote!(__piece), &display);
                         quote!(for __piece in __word.split(#d) { #ident.push(#value); })
-                    }
+                    }),
                 },
                 Kind::Optional(ty) | Kind::Required(ty) => {
                     let value = t.word_value(ty, quote!(__word), &display);
@@ -4058,7 +4212,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let clears = fields.iter().filter(|f| f.is_positional()).map(|f| {
             let slot = slot(&f.ident);
             match f.kind {
-                Kind::Many(_) => quote!(#slot.clear();),
+                Kind::Many(_) => f.clear(),
                 _ => quote!(#slot = ::core::option::Option::None;),
             }
         });
@@ -5768,7 +5922,7 @@ impl Rules {
                 Kind::Optional(_) | Kind::Required(_) => {
                     quote!(#slot = ::core::option::Option::None;)
                 }
-                Kind::Many(_) => quote!(#slot.clear();),
+                Kind::Many(_) => other.clear(),
             };
             quote!(#clear #displaced = true;)
         });
@@ -6151,7 +6305,6 @@ fn default_froms(fields: &[Field], rules: &Rules, generic: bool) -> syn::Result<
     for i in order {
         let f = &fields[i];
         let (names, function) = f.default_from.as_ref().expect("in the order only with one");
-        let target = slot(&f.ident);
         let args: Vec<Ident> = (0..names.len())
             .map(|n| format_ident!("__from_{n}"))
             .collect();
@@ -6173,15 +6326,7 @@ fn default_froms(fields: &[Field], rules: &Rules, generic: bool) -> syn::Result<
                 __typed(#function)(#(#args),*)
             })
         };
-        let mut body = match &f.kind {
-            Kind::Optional(_) | Kind::Required(_) => {
-                quote!(#target = ::core::option::Option::Some(#value);)
-            }
-            Kind::Switch if f.negate.is_some() => {
-                quote!(#target = ::core::option::Option::Some(#value);)
-            }
-            _ => quote!(#target = #value;),
-        };
+        let mut body = f.set(value);
         // Each field as declared. A required one still without a value leaves
         // this one unset, and the requirements then report it.
         for (name, arg) in names.iter().zip(&args).rev() {
@@ -6237,13 +6382,21 @@ fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
                 None => quote!((#other_slot == #equals)),
             }
         }
+        (Some(equals), Kind::Optional(ty)) if other.shape == Shape::MaybeValue => {
+            let is = is(ty, equals);
+            quote!(#other_slot.as_ref().and_then(::core::option::Option::as_ref).is_some_and(#is))
+        }
         (Some(equals), Kind::Optional(ty) | Kind::Required(ty)) => {
             let is = is(ty, equals);
             quote!(#other_slot.as_ref().is_some_and(#is))
         }
-        (Some(equals), Kind::Many(ty)) => {
+        (Some(equals), Kind::Many(ty)) if other.shape == Shape::Plain => {
             let is = is(ty, equals);
             quote!(#other_slot.iter().any(#is))
+        }
+        (Some(equals), Kind::Many(ty)) => {
+            let is = is(ty, equals);
+            quote!(#other_slot.iter().flatten().any(#is))
         }
         (Some(_), Kind::Count(_)) => unreachable!("refused when the rules were read"),
     }
@@ -6728,14 +6881,65 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
 
     let error = |msg: String| Err(syn::Error::new(f.span(), msg));
-    if delimiter.is_some() && (count || !matches!(kind(&f.ty), Kind::Many(_))) {
-        return error("`delimiter` needs a `Vec<T>` field to put the pieces in".into());
-    }
     let kind = if count {
         Kind::Count(f.ty.clone())
     } else {
         kind(&f.ty)
     };
+    // `Option<Option<T>>`, kept as `Optional(T)`; `Option<Vec<T>>`,
+    // `Vec<Vec<T>>` and `Vec<Option<T>>`, kept as `Many(T)`. `Vec<u8>` is one
+    // value, its bytes: `Option<Vec<u8>>` and `Vec<Vec<u8>>` mean what they
+    // did before these shapes.
+    let wrapped = |ty: &Type, outer: &str| {
+        last_segment(ty)
+            .filter(|last| last.ident == outer)
+            .and_then(inner)
+            .filter(|value| outer != "Vec" || !is_bytes(value))
+            .cloned()
+    };
+    let (kind, shape) = match kind {
+        Kind::Optional(ty) => match (wrapped(&ty, "Option"), wrapped(&ty, "Vec")) {
+            (Some(value), _) => (Kind::Optional(value), Shape::MaybeValue),
+            (None, Some(value)) => (Kind::Many(value), Shape::OptionalVec),
+            (None, None) => (Kind::Optional(ty), Shape::Plain),
+        },
+        Kind::Many(ty) => match (wrapped(&ty, "Vec"), wrapped(&ty, "Option")) {
+            (Some(value), _) => (Kind::Many(value), Shape::Grouped),
+            (None, Some(value)) => (Kind::Many(value), Shape::Each),
+            (None, None) => (Kind::Many(ty), Shape::Plain),
+        },
+        kind => (kind, Shape::Plain),
+    };
+    if delimiter.is_some() && (count || !matches!(kind, Kind::Many(_)) || shape == Shape::Each) {
+        return error(
+            "`delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to put the pieces in"
+                .into(),
+        );
+    }
+    if matches!(shape, Shape::Grouped | Shape::Each) && (positional || subcommand) {
+        return error(
+            "`Vec<Vec<T>>` and `Vec<Option<T>>` hold each occurrence of a flag: not a positional or a subcommand"
+                .into(),
+        );
+    }
+    if shape == Shape::Each
+        && (default_missing.is_some() || values != 1 || values_max.is_some() || plus.is_some())
+    {
+        return error(
+            "`Vec<Option<T>>` takes one value or none each time: not with `default_missing`, \
+             `values` or `plus`"
+                .into(),
+        );
+    }
+    if shape == Shape::MaybeValue
+        && (positional || subcommand || plus.is_some() || default_missing.is_some())
+    {
+        return error(
+            "`Option<Option<T>>` is a flag whose value may be left out: \
+             not a positional or a subcommand, and not with `plus` or `default_missing`"
+                .into(),
+        );
+    }
     if default_missing.is_some()
         && (positional || subcommand || matches!(kind, Kind::Switch | Kind::Count(_)))
     {
@@ -6753,6 +6957,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     }
     let tristate = plus.is_some()
         && plus == short
+        && shape == Shape::Plain
         && matches!(&kind, Kind::Optional(ty) | Kind::Many(ty) if is_bool(ty));
     if plus.is_some()
         && (positional || subcommand || !tristate && matches!(kind, Kind::Switch | Kind::Count(_)))
@@ -7067,6 +7272,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         stop_flags,
         plus,
         tristate,
+        shape,
         bool_value,
         keywords,
         short_aliases,
