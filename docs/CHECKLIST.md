@@ -257,7 +257,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] Config-file settings (`setting = "key"`), between env and default
 - [ ] Emit usage's KDL spec, so its tools (SDKs, spec diff, completion from
       a spec) work from a winnow-args program
-- [ ] Metadata usage carries: `effect`, `author`, `surface`, `available_if`
+- [ ] Metadata usage carries: `surface`, `available_if`
 - [ ] `no_std` + `alloc`
 
 ### Conformance, size, ports

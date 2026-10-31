@@ -245,6 +245,16 @@ impl Manual {
             doc.control("SH", ["VERSION"]);
             doc.text([roman(format!("v{version}"))]);
         }
+        if let Some(author) = command.author.as_deref().filter(|a| !a.is_empty()) {
+            doc.control("SH", ["AUTHORS"]);
+            // One author a line; Cargo separates them with `:`.
+            for (n, name) in author.split(':').map(str::trim).enumerate() {
+                if n > 0 {
+                    doc.control("br", std::iter::empty::<&str>());
+                }
+                doc.text(prose(name));
+            }
+        }
         doc.render()
     }
 }
@@ -527,6 +537,20 @@ mod tests {
         // No manual name: `man` shows its default for it.
         assert!(page.contains(".TH tool 1 \"\" \"tool 1.2.3\"\n"), "{page}");
         assert!(page.ends_with(".SH VERSION\nv1.2.3\n"), "{page}");
+    }
+
+    #[test]
+    fn authors_are_one_a_line() {
+        let command = Command {
+            name: "tool".to_owned(),
+            author: Some("Ann <ann@example.com>:Bo".to_owned()),
+            ..Command::default()
+        };
+        let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
+        assert!(
+            page.ends_with(".SH AUTHORS\nAnn <ann@example.com>\n.br\nBo\n"),
+            "{page}"
+        );
     }
 
     #[test]

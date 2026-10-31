@@ -37,6 +37,9 @@ released together. Versions follow [semver](https://semver.org).
   `Named::detached_only`, `ValueOptions::detached_only`): its `-x` value is
   only the next word, never the rest of its bundle, so bash's `set -oe` is
   a bare `-o` (its `default_missing`), then `-e`.
+- **Added**: `author`, or `author = "…"`, on a command: the man pages'
+  AUTHORS section, one author a line. With no string, the crate's
+  `CARGO_PKG_AUTHORS`. `winnow_args_spec::Command` has an `author` field.
 - **Changed**: the derives mark their impls `#[automatically_derived]`, as
   std's and clap's do, so tools such as `cargo public-api` list them as
   derived.

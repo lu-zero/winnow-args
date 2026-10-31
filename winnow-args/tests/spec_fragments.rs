@@ -16,7 +16,7 @@ use winnow_args_spec::Catalog;
 
 /// Root.
 #[derive(Args)]
-#[arg(name = "spec-tool", long_only)]
+#[arg(name = "spec-tool", long_only, author = "Ann:Bo")]
 struct SpecCli {
     /// say "hi"
     #[arg(positional)]
@@ -371,6 +371,7 @@ fn emitted_fragments_stitch() {
     assert_eq!(local.items[0].choices, ["home", "away"]);
     assert_eq!(command.subcommands[1].name, "true");
     assert_eq!(command.name, "spec-tool");
+    assert_eq!(command.author.as_deref(), Some("Ann:Bo"));
     #[cfg(feature = "help-text")]
     {
         assert_eq!(command.items[0].help, "say \"hi\"");

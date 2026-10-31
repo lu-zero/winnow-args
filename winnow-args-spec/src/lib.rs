@@ -72,6 +72,8 @@ pub struct Command {
     pub unknown_flags_value: bool,
     /// Text of `-V`/`--version`, when those flags are supplied.
     pub package_version: Option<String>,
+    /// Who wrote it, `:` between several authors, as Cargo has them.
+    pub author: Option<String>,
     /// The subcommand a line that names none runs.
     pub default_subcommand: Option<String>,
     /// Command lines to try.
@@ -390,6 +392,7 @@ struct ArgsFrag {
     unknown_flags_value: bool,
     multicall: bool,
     package_version: Option<String>,
+    author: Option<String>,
     default_subcommand: Option<String>,
     examples: Vec<Example>,
     headings: Vec<Heading>,
@@ -1221,6 +1224,7 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
         unknown_flags_value: flag(table, "unknown_flags_value")?,
         multicall: flag(table, "multicall")?,
         package_version: opt_present(table, "package_version")?,
+        author: opt_present(table, "author")?,
         default_subcommand: opt_present(table, "default_subcommand")?,
         examples: rows(table, "example", |row| {
             Ok(Example {
@@ -1538,6 +1542,7 @@ impl Catalog {
             long_only: args.long_only,
             unknown_flags_value: args.unknown_flags_value,
             package_version: args.package_version.clone(),
+            author: args.author.clone(),
             default_subcommand: args.default_subcommand.clone(),
             examples: args.examples.clone(),
             headings,

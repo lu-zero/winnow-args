@@ -45,6 +45,8 @@ pub(crate) struct ArgsDoc {
     /// Usage lines in place of the made one.
     pub usage: String,
     pub package_version: Option<String>,
+    /// The authors, `:` between several, as Cargo has them.
+    pub author: Option<String>,
     pub items: Vec<ItemDoc>,
     pub flatten: Vec<String>,
     pub sequence: Option<String>,
@@ -206,6 +208,7 @@ fn args_toml(doc: &ArgsDoc) -> String {
     field(&mut out, "before_long_help", &doc.before_long_help);
     field(&mut out, "usage", &doc.usage);
     opt(&mut out, "package_version", &doc.package_version);
+    opt(&mut out, "author", &doc.author);
     strings(&mut out, "flatten", &doc.flatten);
     opt(&mut out, "sequence", &doc.sequence);
     opt(&mut out, "subcommand", &doc.subcommand);

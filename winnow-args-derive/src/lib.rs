@@ -129,6 +129,9 @@ mod spec;
 ///   means `argv[0]`. A completion script needs the name set.
 /// - `version`, or `version = "…"`: add `-V` and `--version`. With no string,
 ///   the text is the crate's `CARGO_PKG_VERSION`.
+/// - `author`, or `author = "…"`: the authors, for the man pages' AUTHORS
+///   section. With no string, the crate's `CARGO_PKG_AUTHORS`; a `:`
+///   separates several. Help does not show it.
 /// - `long_version = "…"`: what `--version` prints after the program name;
 ///   `-V` keeps `version`. It needs `version`.
 /// - `about`: the description on `-h`. It defaults to the doc comment's first
@@ -3706,6 +3709,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         validate,
         name: program_name,
         version,
+        author,
         about,
         long_about,
         after_help,
@@ -5380,6 +5384,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 before_long_help: before_long_text,
                 usage: usage_text,
                 package_version: package_version(&version, with_version),
+                author: author.clone(),
                 items,
                 flatten,
                 sequence,
@@ -5552,6 +5557,8 @@ struct StructOptions {
     name: String,
     /// `-V`/`--version` text: a literal, or `CARGO_PKG_VERSION`.
     version: Option<TokenStream2>,
+    /// The authors, for the pages: a literal, or `CARGO_PKG_AUTHORS`.
+    author: Option<String>,
     /// Help text around the lists; `about`/`long_about` default to the doc comment.
     about: Option<String>,
     long_about: Option<String>,
@@ -5725,6 +5732,16 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.name = text(&meta)?;
                 return Ok(());
             }
+            if meta.path.is_ident("author") {
+                // Read here, from the crate being built: only the pages show it.
+                options.author = if meta.input.peek(syn::Token![=]) {
+                    Some(meta.value()?.parse::<LitStr>()?.value())
+                } else {
+                    std::env::var("CARGO_PKG_AUTHORS").ok()
+                }
+                .filter(|author| !author.is_empty());
+                return Ok(());
+            }
             if meta.path.is_ident("version") {
                 options.version = Some(if meta.input.peek(syn::Token![=]) {
                     let version = meta.value()?.parse::<LitStr>()?;
@@ -5778,7 +5795,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
-                     `plus_options`, `multicall`, `validate`, `name`, `version`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
+                     `plus_options`, `multicall`, `validate`, `name`, `version`, `author`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `brief_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
                      `exit_code(n, \"meaning\")` or a `disable_*` option",
