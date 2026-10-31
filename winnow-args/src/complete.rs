@@ -413,11 +413,23 @@ impl Walk {
         } else if let Some(sub) = self.command.default_target() {
             // A word that names no subcommand is the default one's.
             *self = self.within(sub);
-            self.position = 1;
+            self.fill();
         } else {
             self.external = self.command.external_subcommands && !self.positional_left();
-            self.position += 1;
+            self.fill();
         }
+    }
+
+    /// A word fills the next positional: after one that stops flags, as the
+    /// parser does, every later word is a value.
+    fn fill(&mut self) {
+        let mut positionals = self.command.items.iter().filter(|i| i.positional);
+        let filled = positionals
+            .clone()
+            .nth(self.position)
+            .or_else(|| positionals.rfind(|i| i.multiple));
+        self.stopped |= filled.is_some_and(|item| item.stop_flags);
+        self.position += 1;
     }
 
     fn complete(&self, current: &str) -> Completions {

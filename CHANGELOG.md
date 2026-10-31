@@ -33,6 +33,10 @@ released together. Versions follow [semver](https://semver.org).
   variant holds the sign: `Errexit(bool)`, `Named(bool, String)`.
 - **Changed**: a `Vec<bool>` with `plus` equal to `short` takes no value.
   Before, it took one each time (`-x true`), as any `Vec<bool>`.
+- **Fixed**: completion stops offering flags where the parser stops reading
+  them: after a positional with `stop_flags` or `double_dash =
+  "automatic"`, as a shell's script name, or `-c`'s command string. For it,
+  `help::Item` has a `stop_flags` field.
 - **Fixed**: a negative number with a default subcommand. It goes to the
   default subcommand when that one's first positional has
   `allow_negative_numbers`, or its own default subcommand's, at any depth;

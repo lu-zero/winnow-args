@@ -1870,6 +1870,7 @@ fn occurrence_item(
         required: false,
         multiple: #positional,
         trailing: false,
+        stop_flags: false,
         default: ::core::option::Option::None,
         env: ::core::option::Option::None,
         choices: #choices,
@@ -3019,6 +3020,9 @@ impl Field {
         let global = self.is_global();
         let positional = self.is_positional();
         let trailing = self.double_dash() == DoubleDash::Required;
+        // As the parser: flags stop once it has a value.
+        let stop_flags = self.is_positional()
+            && (self.double_dash() == DoubleDash::Automatic || self.stop_flags);
         let display = self.display();
         let value_name = if positional {
             opt_str(Some(&display))
@@ -3087,6 +3091,7 @@ impl Field {
                 required: #required,
                 multiple: #multiple,
                 trailing: #trailing,
+                stop_flags: #stop_flags,
                 default: #default,
                 env: #env,
                 choices: #choices,

@@ -454,3 +454,36 @@ fn completion_offers_a_visible_alias_and_its_values() {
     assert!(!offered.contains(&"--old".to_owned()), "{offered:?}");
     assert_eq!(names(&["--session", ""]), ["auto", "always", "never"]);
 }
+
+/// A shell: a script's name stops flags, as brush's does, and so does the
+/// first word after `-c`, the command string.
+#[derive(Args, Debug)]
+struct Shell2 {
+    #[arg(short = 'c')]
+    command: bool,
+    #[arg(long, choices("reedline", "basic"))]
+    input_backend: Option<String>,
+    #[arg(positional, stop_flags)]
+    script: Option<String>,
+    #[arg(positional)]
+    args: Vec<String>,
+}
+
+fn shell_values(words: &[&str]) -> Vec<String> {
+    complete(Shell2::HELP, words)
+        .candidates
+        .into_iter()
+        .map(|c| c.value)
+        .collect()
+}
+
+#[test]
+fn flags_stop_where_the_parser_stops_them() {
+    // Before the script, a flag and its value.
+    assert_eq!(shell_values(&["--input-backend", "r"]), ["reedline"]);
+    assert_eq!(shell_values(&["--in"]), ["--input-backend"]);
+    // After it, words are the script's: no flag, and no flag's value.
+    assert!(shell_values(&["script.sh", "--input-backend", "r"]).is_empty());
+    assert!(shell_values(&["script.sh", "--in"]).is_empty());
+    assert!(shell_values(&["-c", "echo hi", "--in"]).is_empty());
+}

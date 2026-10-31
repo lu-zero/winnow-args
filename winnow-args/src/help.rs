@@ -178,6 +178,9 @@ pub struct Item {
     pub multiple: bool,
     /// A positional that only takes words after `--`.
     pub trailing: bool,
+    /// A positional after whose value flags stop: every later word is a value,
+    /// as the parser reads it (`stop_flags`, `double_dash = "automatic"`).
+    pub stop_flags: bool,
     /// The value used when none is given.
     pub default: Option<&'static str>,
     /// The environment variable consulted.
@@ -240,6 +243,7 @@ impl Item {
         required: false,
         multiple: false,
         trailing: false,
+        stop_flags: false,
         default: None,
         env: None,
         choices: &[],
