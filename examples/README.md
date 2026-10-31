@@ -20,6 +20,8 @@ that package.
 | [`values.rs`](values.rs) | `NPROC=8 cargo run --example values -- lib` |
 | [`subcommands.rs`](subcommands.rs) | `cargo run --example subcommands -- -pu firefox` |
 | [`multicall.rs`](multicall.rs) | `cargo run --example multicall -- frob --fast x` |
+| [`set.rs`](set.rs) | `cargo run --example set -- -o errexit +e -x a b` |
+| [`features.rs`](features.rs) | `cargo run --example features -- -F simd +F simd -F lto` |
 | [`brush_builtins.rs`](brush_builtins.rs) | `cargo run --example brush_builtins -- set -eu +x -o pipefail a b` |
 | [`ld.rs`](ld.rs) | `cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now` |
 
