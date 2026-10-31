@@ -405,8 +405,11 @@ impl Paint {
 /// A paint for each kind of text in help and errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Palette {
-    /// `Usage:`, `Options:` and the other headings.
+    /// `Options:` and the other headings.
     pub header: Paint,
+    /// The `Usage:` heading, which clap styles apart; `None` paints it as
+    /// `header`, as the built-in palettes do.
+    pub usage: Option<Paint>,
     /// The program's name in the usage line.
     pub program: Paint,
     /// Flags as typed: `-v`, `--verbose`, `--no-cache`, and `--` in the usage line.
@@ -442,6 +445,7 @@ impl Palette {
     /// Nothing painted.
     pub const PLAIN: Palette = Palette {
         header: Paint::NONE,
+        usage: None,
         program: Paint::NONE,
         flag: Paint::NONE,
         command: Paint::NONE,
@@ -468,6 +472,7 @@ impl Palette {
     /// missing.
     pub const DEFAULT: Palette = Palette {
         header: Paint::ansi(Ansi::Cyan).bold(),
+        usage: None,
         program: Paint::NONE,
         flag: Paint::ansi(Ansi::Green).bold(),
         command: Paint::ansi(Ansi::Green).bold(),
@@ -495,6 +500,7 @@ impl Palette {
     /// sage 108 (`#87af87`) for what is missing.
     pub const DEFAULT_256: Palette = Palette {
         header: Paint::fg(Color::Ansi256(73)).bold(),
+        usage: None,
         program: Paint::NONE,
         flag: Paint::fg(Color::Ansi256(71)).bold(),
         command: Paint::fg(Color::Ansi256(71)).bold(),
@@ -516,6 +522,7 @@ impl Palette {
     /// `error:`, yellow for what was typed wrong, green for what is missing.
     pub const CLAP: Palette = Palette {
         header: Paint::NONE.bold().underline(),
+        usage: None,
         program: Paint::NONE.bold(),
         flag: Paint::NONE.bold(),
         command: Paint::NONE.bold(),
@@ -534,8 +541,13 @@ impl Palette {
 
     /// The deepest color any role uses.
     pub const fn depth(&self) -> Depth {
+        let usage = match self.usage {
+            Some(paint) => paint,
+            None => self.header,
+        };
         let roles = [
             self.header,
+            usage,
             self.program,
             self.flag,
             self.command,

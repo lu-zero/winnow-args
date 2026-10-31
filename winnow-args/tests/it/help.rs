@@ -974,3 +974,27 @@ fn a_usage_written_by_hand_is_painted_as_a_made_one() {
     );
     assert!(text.contains(&expected), "{text:?}");
 }
+
+#[test]
+fn usage_has_a_paint_of_its_own() {
+    use winnow_args::help::render_styled;
+    // As the other headings by default.
+    let at256 = Style::at(Palette::DEFAULT_256, Depth::Ansi256);
+    let text = render_styled(HandUsage::HELP, &["set"], false, 80, at256);
+    assert!(text.contains(&sgr("1;38;5;73", "Usage:")), "{text:?}");
+    assert!(text.contains(&sgr("1;38;5;73", "Options:")), "{text:?}");
+    // Apart, as clap styles it.
+    let palette = Palette {
+        usage: Some(Paint::fg(Color::Ansi256(71)).underline()),
+        ..Palette::DEFAULT_256
+    };
+    let text = render_styled(
+        HandUsage::HELP,
+        &["set"],
+        false,
+        80,
+        Style::at(palette, Depth::Ansi256),
+    );
+    assert!(text.contains(&sgr("4;38;5;71", "Usage:")), "{text:?}");
+    assert!(text.contains(&sgr("1;38;5;73", "Options:")), "{text:?}");
+}

@@ -579,6 +579,10 @@ impl Style {
         self.ink(self.palette.header)
     }
 
+    pub(crate) fn usage(self) -> Ink {
+        self.ink(self.palette.usage.unwrap_or(self.palette.header))
+    }
+
     pub(crate) fn program(self) -> Ink {
         self.ink(self.palette.program)
     }
@@ -798,7 +802,7 @@ fn page(
     }
     let visible_subs: Vec<&Sub> = command.subcommands.iter().filter(|s| !s.hide).collect();
     let flat = command.flatten_help && !visible_subs.is_empty();
-    push_painted(out, style.header(), "Usage:");
+    push_painted(out, style.usage(), "Usage:");
     let mut lines = Vec::new();
     if !flat || !command.subcommand_required {
         lines.extend(usage_lines(command, path, style));

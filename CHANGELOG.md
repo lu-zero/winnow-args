@@ -40,6 +40,11 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `author`, or `author = "…"`, on a command: the man pages'
   AUTHORS section, one author a line. With no string, the crate's
   `CARGO_PKG_AUTHORS`. `winnow_args_spec::Command` has an `author` field.
+- **Added**: `Palette::usage`, the `Usage:` heading's paint, which clap
+  styles apart from the other headings. `None`, as in the built-in
+  palettes, paints it as `header`, so a theme looks as it did.
+  **Breaking**: a `Palette` written out in full needs `usage: None`, or
+  ends in `..Palette::DEFAULT`.
 - **Changed**: the derives mark their impls `#[automatically_derived]`, as
   std's and clap's do, so tools such as `cargo public-api` list them as
   derived.
