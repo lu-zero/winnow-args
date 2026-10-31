@@ -202,6 +202,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] Custom value parsers in the derive (`parse_with`)
 - [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names
       rejected cleanly
+- [ ] A short flag whose value is only the next word, never attached:
+      bash's `set -oe` is a bare `-o` (list) and then `-e`
 - [ ] GNU ld's extras: errors spelling a single-dash long option as written,
       unambiguous abbreviations (`--whole-arch`), an unreadable `@file` kept
       as a word
