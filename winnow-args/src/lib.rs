@@ -784,6 +784,16 @@ pub mod __private {
 
     use crate::token::is_flag_like;
 
+    /// A value converted by a field's `parse_with` function, given it as
+    /// text: a value that is not UTF-8 is refused first.
+    #[inline]
+    pub fn parse_with<T, E: Into<BoxError>>(
+        value: &BStr,
+        parse: impl FnOnce(&str) -> Result<T, E>,
+    ) -> Result<T, BoxError> {
+        parse(crate::value::to_str(value)?).map_err(Into::into)
+    }
+
     /// The digit of a word that is `-` and one digit: a short flag where
     /// one is declared, else a negative number.
     #[inline]

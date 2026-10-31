@@ -137,6 +137,19 @@ struct EachWithDelimiter {
 }
 
 #[derive(Args)]
+struct ParseWithOnASwitch {
+    #[arg(long, parse_with = str::parse::<bool>)]
+    verbose: bool,
+}
+
+#[derive(Args)]
+#[arg(plus_options)]
+struct TristateWithValues {
+    #[arg(short = 'x', plus = 'x', values = 2)]
+    trace: Vec<bool>,
+}
+
+#[derive(Args)]
 struct KeywordsOnEach {
     #[arg(long, keywords)]
     define: Vec<Option<String>>,

@@ -10,8 +10,6 @@ released together. Versions follow [semver](https://semver.org).
   spelling in order: `true` for each `-x`, `false` for each `+x`. For a
   command where the last one does not simply win: in bash's `declare`, `+x`
   wins in either order.
-- **Changed**: such a `Vec<bool>` takes no value. Before, it took one each
-  time (`-x true`), as any `Vec<bool>`.
 - **Added**: an `Option<Option<T>>` flag, whose value may be left out:
   absent is `None`, `--color` alone `Some(None)`, `--color never` or
   `--color=never` `Some(Some(…))`. With `require_equals`, only the attached
@@ -19,8 +17,15 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `Option<Vec<T>>`, `None` where the flag (or positional) is
   never given; `Vec<Vec<T>>`, the values of each occurrence apart, for
   `values = a..=b` or `delimiter`; `Vec<Option<T>>`, each occurrence's
-  value, `None` for a bare flag. `Vec<u8>` stays one value, its bytes:
-  `Option<Vec<u8>>` and `Vec<Vec<u8>>` mean what they did.
+  value, `None` for a bare flag. A `Vec<Vec<T>>`'s defaults are one group.
+  `Vec<u8>` stays one value, its bytes: `Option<Vec<u8>>` and
+  `Vec<Vec<u8>>` mean what they did.
+- **Added**: `parse_with = f` on a field: its value is `f(text)`, a
+  function or closure returning `Result<T, E>`, as clap's `value_parser`.
+  Flags, positionals, `env`, defaults and the values rules compare against
+  all go through it.
+- **Changed**: a `Vec<bool>` with `plus` equal to `short` takes no value.
+  Before, it took one each time (`-x true`), as any `Vec<bool>`.
 - **Fixed**: a negative number with a default subcommand. It goes to the
   default subcommand when that one's first positional has
   `allow_negative_numbers`, or its own default subcommand's, at any depth;

@@ -197,7 +197,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       where it opts in, at any depth, and kept by the root's where only
       that one does
 - [ ] `choices_strict = false`: choices as suggestions only
-- [ ] Custom value parsers in the derive (`parse_with`)
+- [x] Custom value parsers in the derive (`parse_with`)
 - [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names
       rejected cleanly
 - [ ] GNU ld's extras: errors spelling a single-dash long option as written,

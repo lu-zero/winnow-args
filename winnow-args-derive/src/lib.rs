@@ -265,6 +265,10 @@ mod spec;
 ///   another crate (`camino::Utf8PathBuf`, `url::Url`). The error text is that
 ///   parse error. The type brings no choices and no completion hint: set
 ///   `choices` or `hint`.
+/// - `parse_with = f`: parse with `f`, a function or closure of the value's
+///   text, `Fn(&str) -> Result<T, E>` (`E` an error type or a `String`), as
+///   clap's `value_parser`. A value that is not UTF-8 is refused first. As
+///   with `from_str`, the type brings no choices and no completion hint.
 /// - `count`: an integer. Each time the flag is given adds one.
 /// - `bool_value`: a `bool` flag also takes `--flag=true` and `--flag=false`,
 ///   attached; alone it is true. Help shows `--flag[=<BOOL>]`.
@@ -1956,11 +1960,14 @@ fn spec_filed(
     })
 }
 
-/// The type of a field's value.
+/// The type of a field's value, where its choices and completion hint are
+/// looked for: none for a switch, a count, a subcommand, `keywords`, or a
+/// value parsed by `from_str` or `parse_with`.
 fn value_type(field: &Field) -> Option<&Type> {
     if !field.takes_value()
         || field.keywords
         || field.from_str
+        || field.parse_with.is_some()
         || matches!(field.role, Role::Subcommand)
     {
         return None;
@@ -2809,6 +2816,8 @@ struct Field {
     display_order: Option<usize>,
     /// The value is parsed with its type's `FromStr`.
     from_str: bool,
+    /// The value is parsed by this function of its text.
+    parse_with: Option<syn::Expr>,
     /// What giving it does, for the documentation: `read`, `write` or
     /// `destructive`.
     effect: Option<String>,
@@ -2901,17 +2910,10 @@ impl Field {
         let optional_value = self.optional_value();
         let values = self.values;
         let more_values = self.values_max.is_some();
-        let hint = match (&self.hint, &self.kind, &self.role) {
-            (Some(hint), _, _) => quote!(::winnow_args::complete::Hint::#hint),
-            (None, Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty), role)
-                if !matches!(role, Role::Subcommand)
-                    && !self.keywords
-                    && !self.tristate
-                    && !self.from_str =>
-            {
-                quote!(<#ty as ::winnow_args::FromArg>::HINT)
-            }
-            (None, _, _) => quote!(::winnow_args::complete::Hint::Nothing),
+        let hint = match (&self.hint, value_type(self)) {
+            (Some(hint), _) => quote!(::winnow_args::complete::Hint::#hint),
+            (None, Some(ty)) => quote!(<#ty as ::winnow_args::FromArg>::HINT),
+            (None, None) => quote!(::winnow_args::complete::Hint::Nothing),
         };
         let complete = match &self.complete {
             Some(function) => quote!(::core::option::Option::Some(#function)),
@@ -2928,12 +2930,7 @@ impl Field {
         let default = opt_str(self.shown_default().as_deref());
         let env = opt_str(self.shown_env());
         // Declared `choices`, else whatever fixed set the value type has.
-        let value_ty = match &self.kind {
-            _ if matches!(self.role, Role::Subcommand) => None,
-            _ if self.keywords || self.tristate || self.from_str => None,
-            Kind::Optional(ty) | Kind::Required(ty) | Kind::Many(ty) => Some(ty),
-            Kind::Switch | Kind::Count(_) => None,
-        };
+        let value_ty = value_type(self);
         let choices = match (&self.choices, value_ty) {
             (Some(choices), _) => quote!(&[#(#choices),*]),
             (None, Some(ty)) => quote!(<#ty as ::winnow_args::FromArg>::CHOICES),
@@ -3048,11 +3045,25 @@ impl Field {
         }
     }
 
+    /// `value` (a `&BStr`) converted by the field's `parse_with`, if it has one;
+    /// `error(cause)` reports a failure.
+    fn parsed_with(
+        &self,
+        value: &TokenStream2,
+        error: impl FnOnce(TokenStream2) -> TokenStream2,
+    ) -> Option<TokenStream2> {
+        let parse = self.parse_with.as_ref()?;
+        let error = error(quote!(__cause));
+        Some(quote!(__wa::parse_with(#value, #parse).map_err(|__cause| #error)?))
+    }
+
     /// A flag's value converted to `ty`, checked against `choices` first.
     fn flag_value(&self, ty: &Type, value: TokenStream2) -> TokenStream2 {
-        let check = self.check(value.clone(), |cause| {
-            quote!(__wa::Error::invalid_value(__arg.offset(), __arg.spelling(), #value, #cause))
-        });
+        let error = |cause| quote!(__wa::Error::invalid_value(__arg.offset(), __arg.spelling(), #value, #cause));
+        let check = self.check(value.clone(), error);
+        if let Some(parsed) = self.parsed_with(&value, error) {
+            return quote!({ #check #parsed });
+        }
         if self.from_str {
             return quote!({ #check __arg.convert::<::winnow_args::value::Parsed<#ty>>(#value)?.0 });
         }
@@ -3063,10 +3074,12 @@ impl Field {
     /// errors name it by `source`.
     fn source_value(&self, ty: &Type, value: TokenStream2, source: &str) -> TokenStream2 {
         let source = LitStr::new(source, Span::call_site());
-        let check = self.check(
-            value.clone(),
-            |cause| quote!(__wa::Error::invalid_value(__input.offset(), #source, #value, #cause)),
-        );
+        let error =
+            |cause| quote!(__wa::Error::invalid_value(__input.offset(), #source, #value, #cause));
+        let check = self.check(value.clone(), error);
+        if let Some(parsed) = self.parsed_with(&value, error) {
+            return quote!({ #check #parsed });
+        }
         let (ty, unwrap) = self.parsed(ty);
         quote!({
             #check
@@ -3389,10 +3402,12 @@ impl Field {
 
     /// A positional word converted to `ty`, checked against `choices` first.
     fn word_value(&self, ty: &Type, word: TokenStream2, display: &LitStr) -> TokenStream2 {
-        let check = self.check(
-            quote!(#word.value),
-            |cause| quote!(__wa::Error::invalid_value(#word.offset, #display, #word.value, #cause)),
-        );
+        let error =
+            |cause| quote!(__wa::Error::invalid_value(#word.offset, #display, #word.value, #cause));
+        let check = self.check(quote!(#word.value), error);
+        if let Some(parsed) = self.parsed_with(&quote!(#word.value), error) {
+            return quote!({ #check #parsed });
+        }
         let (ty, unwrap) = self.parsed(ty);
         quote!({ #check #word.convert::<#ty>(#display)? #unwrap })
     }
@@ -6367,6 +6382,12 @@ fn condition(other: &Field, equals: Option<&str>) -> TokenStream2 {
     let other_slot = slot(&other.ident);
     let is = |ty: &Type, equals: &str| {
         let literal = LitByteStr::new(equals.as_bytes(), Span::call_site());
+        if let Some(parse) = &other.parse_with {
+            return quote! {
+                |__v| __wa::parse_with(__wa::BStr::new(#literal), #parse)
+                    .is_ok_and(|__literal| __literal == *__v)
+            };
+        }
         let (ty, unwrap) = other.parsed(ty);
         quote! {
             |__v| <#ty as ::winnow_args::FromArg>::from_arg(__wa::BStr::new(#literal))
@@ -6584,6 +6605,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut warning = String::new();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
+    let mut parse_with = None;
     let mut bool_value = false;
     let mut value_names = Vec::new();
     let mut effect = None;
@@ -6672,6 +6694,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 deprecated_env.extend(aliases(&meta)?);
             } else if meta.path.is_ident("from_str") {
                 from_str = true;
+            } else if meta.path.is_ident("parse_with") {
+                parse_with = Some(meta.value()?.parse::<syn::Expr>()?);
             } else if meta.path.is_ident("hide_default_value") {
                 hide_default_value = true;
             } else if meta.path.is_ident("hide_env") {
@@ -6871,7 +6895,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
-                     `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, \
+                     `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
                 ));
@@ -6967,8 +6991,22 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 .into(),
         );
     }
-    if tristate && (delimiter.is_some() || values != 1 || values_max.is_some()) {
-        return error("a `+x` tri-state takes no value: not with `delimiter` or `values`".into());
+    if tristate
+        && (delimiter.is_some() || values != 1 || values_max.is_some() || parse_with.is_some())
+    {
+        return error(
+            "a `+x` tri-state takes no value: not with `delimiter`, `values` or `parse_with`"
+                .into(),
+        );
+    }
+    if parse_with.is_some()
+        && (subcommand || from_str || keywords || matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error(
+            "`parse_with` is for a field that takes a value: not a switch, a count or a subcommand, \
+             and not with `from_str` or `keywords`"
+                .into(),
+        );
     }
     if keywords
         && (positional
@@ -7254,6 +7292,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hide_env,
         display_order,
         from_str,
+        parse_with,
         effect,
         negative_numbers,
         hyphen_values,

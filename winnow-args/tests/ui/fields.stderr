@@ -1,4 +1,4 @@
-error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
  --> tests/ui/fields.rs:6:17
   |
 6 |     #[arg(long, hdie)]
@@ -124,14 +124,26 @@ error: `delimiter` needs a `Vec<T>`, `Option<Vec<T>>` or `Vec<Vec<T>>` field to 
 135 |     #[arg(long, delimiter = ',')]
     |     ^
 
-error: `keywords` is for a flag whose type derives `Args`, without `env`, `default`, `default_missing`, `choices` or `delimiter`
+error: `parse_with` is for a field that takes a value: not a switch, a count or a subcommand, and not with `from_str` or `keywords`
    --> tests/ui/fields.rs:141:5
     |
-141 |     #[arg(long, keywords)]
+141 |     #[arg(long, parse_with = str::parse::<bool>)]
+    |     ^
+
+error: a `+x` tri-state takes no value: not with `delimiter`, `values` or `parse_with`
+   --> tests/ui/fields.rs:148:5
+    |
+148 |     #[arg(short = 'x', plus = 'x', values = 2)]
+    |     ^
+
+error: `keywords` is for a flag whose type derives `Args`, without `env`, `default`, `default_missing`, `choices` or `delimiter`
+   --> tests/ui/fields.rs:154:5
+    |
+154 |     #[arg(long, keywords)]
     |     ^
 
 error: `Vec<Option<T>>` takes one value or none each time: not with `default_missing`, `values` or `plus`
-   --> tests/ui/fields.rs:148:5
+   --> tests/ui/fields.rs:161:5
     |
-148 |     #[arg(short = 'x', plus = 'x')]
+161 |     #[arg(short = 'x', plus = 'x')]
     |     ^
