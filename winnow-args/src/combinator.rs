@@ -164,6 +164,13 @@ impl<const N: usize> Named<N> {
         self
     }
 
+    /// A short spelling's value is only the next word, never the rest of its
+    /// bundle: `-oe` is a bare `-o`, then `-e`.
+    pub const fn detached_only(mut self) -> Self {
+        self.options.detached_only = true;
+        self
+    }
+
     /// Take a negative number as a detached value: `--offset -1`.
     pub const fn allow_negative_numbers(mut self) -> Self {
         self.options.negative_numbers = true;

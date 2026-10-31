@@ -279,6 +279,8 @@ impl<'i> Arg<'i> {
     fn next_value(&self, input: &mut Argv<'i>, options: ValueOptions) -> Option<&'i BStr> {
         match self {
             Arg::Long(LongFlag { value: Some(v), .. }) => Some(v),
+            // Bare, and the bundle goes on with its next letter.
+            Arg::Short(_) if input.mode() == Mode::Bundle && options.detached_only => None,
             Arg::Short(_) if input.mode() == Mode::Bundle => {
                 let v = input.take_word();
                 if options.keep_equals {
@@ -427,6 +429,10 @@ pub struct ValueOptions {
     /// A short option's attached value keeps a leading `=`: `-L=dir` is
     /// `=dir`, as GNU ld reads it (a sysroot-relative path), not `dir`.
     pub keep_equals: bool,
+    /// A short option's value is only the next word, never the rest of its
+    /// bundle: bash's `set -oe` is a bare `-o`, then `-e`. Last in a bundle,
+    /// or alone, it takes the next word.
+    pub detached_only: bool,
 }
 
 impl ValueOptions {
@@ -436,6 +442,7 @@ impl ValueOptions {
         hyphen_values: false,
         require_equals: false,
         keep_equals: false,
+        detached_only: false,
     };
 }
 

@@ -239,8 +239,15 @@ enum SetOption {
     /// Disable filename globbing.
     #[arg(short = 'f', plus = 'f')]
     Noglob(bool),
-    /// Set or unset the option NAME; alone, list them.
-    #[arg(short = 'o', plus = 'o', value_name = "OPT", default_missing = "\u{0}")]
+    /// Set or unset the option NAME; alone, list them. As bash, only the
+    /// next word is its value: `-oe` is a bare `-o`, then `-e`.
+    #[arg(
+        short = 'o',
+        plus = 'o',
+        value_name = "OPT",
+        default_missing = "\u{0}",
+        detached_only
+    )]
     Named(bool, String),
     /// The same, its sign and value as one tuple.
     #[arg(short = 'O', plus = 'O')]
@@ -318,4 +325,41 @@ fn help_has_one_row_a_signed_variant() {
     assert!(help.contains("-e, +e"), "{help}");
     assert!(help.contains("Exit on nonzero command exit."), "{help}");
     assert!(help.contains("-o, +o [<OPT>]"), "{help}");
+}
+
+#[test]
+fn a_detached_only_value_is_never_the_rest_of_the_bundle() {
+    use SetOption::*;
+    assert_eq!(items(&["-oe"]), [named(true, "\0"), Errexit(true)]);
+    assert_eq!(items(&["+oe"]), [named(false, "\0"), Errexit(false)]);
+    // Last in its bundle, or alone, it takes the next word.
+    assert_eq!(
+        items(&["-eo", "pipefail"]),
+        [Errexit(true), named(true, "pipefail")]
+    );
+    assert_eq!(items(&["-o", "noglob"]), [named(true, "noglob")]);
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(plus_options, disable_help_flag)]
+struct Detached {
+    #[arg(short = 'o', default_missing = "", detached_only)]
+    option: Vec<String>,
+    #[arg(short = 'e')]
+    errexit: bool,
+    #[arg(short = 'n', detached_only)]
+    count: Option<u8>,
+}
+
+#[test]
+fn a_detached_only_field() {
+    let detached = Detached::parse_from(["-oe", "-o", "x"]).unwrap();
+    assert_eq!(
+        (&detached.option[..], detached.errexit),
+        (&["".to_owned(), "x".to_owned()][..], true)
+    );
+    // With no `default_missing`, a bare one is a missing value.
+    let error = Detached::parse_from(["-ne"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::MissingValue);
+    assert_eq!(Detached::parse_from(["-en", "3"]).unwrap().count, Some(3));
 }

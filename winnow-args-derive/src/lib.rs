@@ -330,6 +330,9 @@ mod spec;
 ///   `default_missing`, a bare flag leaves the next word alone. On `Option<T>`,
 ///   a bare flag is `None`.
 /// - `keep_equals`: an attached short value keeps a leading `=` (`-L=dir`).
+/// - `detached_only`: the short spelling's value is only the next word, never
+///   the rest of its bundle: `-oe` is a bare `-o` (its `default_missing`),
+///   then `-e`, as bash's `set` reads it.
 /// - `allow_hyphen_values`: the next word is the value when it looks like a
 ///   flag, and when it is `--`.
 /// - `allow_negative_numbers`: a negative number is a value, on a flag or a
@@ -1201,6 +1204,8 @@ fn run_impl(input: &DeriveInput, runs: Runs, held: &[(&Ident, Type, bool)]) -> T
 /// - `allow_hyphen_values`: the next word is the value when it looks like a
 ///   flag, and when it is `--`.
 /// - `keep_equals`: an attached short value keeps a leading `=`.
+/// - `detached_only`: the short spelling's value is only the next word, never
+///   the rest of its bundle.
 ///
 /// # Names
 ///
@@ -1346,6 +1351,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let (mut hyphen_values, mut negative_numbers) = (enum_hyphen_values, false);
         let (mut require_equals, mut default_missing) = (false, None);
         let mut keep_equals = enum_keep_equals;
+        let mut detached_only = false;
         let (mut skip, mut is_unknown, mut is_bundle) = (false, false, false);
         let stated = spec_name(&variant.attrs)?;
         for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
@@ -1358,6 +1364,8 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     require_equals = true;
                 } else if meta.path.is_ident("keep_equals") {
                     keep_equals = true;
+                } else if meta.path.is_ident("detached_only") {
+                    detached_only = true;
                 } else if meta.path.is_ident("default_missing") {
                     default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("skip") {
@@ -1399,7 +1407,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     return Err(meta.error(
                         "expected `short`, `plus`, `long`, `alias`, `visible_alias`, `positional`, `two_dashes`, `prefix`, \
                          `value_name`, `verbatim_doc_comment`, `allow_hyphen_values`, `allow_negative_numbers`, \
-                         `require_equals`, `keep_equals`, `default_missing`, `skip`, `unknown` or `bundle`",
+                         `require_equals`, `keep_equals`, `detached_only`, `default_missing`, `skip`, `unknown` or `bundle`",
                     ));
                 }
                 Ok(())
@@ -1632,6 +1640,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         hyphen_values: #hyphen_values,
                         require_equals: #require_equals,
                         keep_equals: #keep_equals,
+                        detached_only: #detached_only,
                     }
                 };
                 let attached = spanned
@@ -2965,6 +2974,8 @@ struct Field {
     require_equals: bool,
     /// A short option's attached value keeps a leading `=` (GNU ld's `-L=dir`).
     keep_equals: bool,
+    /// A short option's value is only the next word, never the rest of its bundle.
+    detached_only: bool,
     /// The long spelling that sets a `bool` false; the slot is then an
     /// `Option<bool>` until the end, so a default fills only what was not given.
     negate: Option<String>,
@@ -3118,11 +3129,12 @@ impl Field {
 
     /// How this flag takes a detached value.
     fn value_options(&self) -> TokenStream2 {
-        let (negative_numbers, hyphen_values, require_equals, keep_equals) = (
+        let (negative_numbers, hyphen_values, require_equals, keep_equals, detached_only) = (
             self.negative_numbers,
             self.hyphen_values,
             self.require_equals,
             self.keep_equals,
+            self.detached_only,
         );
         quote! {
             __wa::ValueOptions {
@@ -3130,21 +3142,21 @@ impl Field {
                 hyphen_values: #hyphen_values,
                 require_equals: #require_equals,
                 keep_equals: #keep_equals,
+                detached_only: #detached_only,
             }
         }
     }
 
     /// Reading this flag's value: `read_value`, or `read_value_or` its `default_missing`.
     fn read(&self) -> TokenStream2 {
-        let (negative_numbers, hyphen_values, require_equals, keep_equals) = (
-            self.negative_numbers,
-            self.hyphen_values,
-            self.require_equals,
-            self.keep_equals,
-        );
+        let plain = !self.negative_numbers
+            && !self.hyphen_values
+            && !self.require_equals
+            && !self.keep_equals
+            && !self.detached_only;
         let options = self.value_options();
         match &self.default_missing {
-            None if !negative_numbers && !hyphen_values && !require_equals && !keep_equals => {
+            None if plain => {
                 quote!(__arg.read_value(__input)?)
             }
             None => quote!(__arg.read_value_with(__input, #options)?),
@@ -6789,6 +6801,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut hyphen_values = false;
     let mut require_equals = false;
     let mut keep_equals = false;
+    let mut detached_only = false;
     let (mut two_dashes, mut prefix) = (false, false);
     let mut values = 1;
     let (mut values_max, mut value_terminator) = (None, None);
@@ -6978,6 +6991,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 require_equals = true;
             } else if meta.path.is_ident("keep_equals") {
                 keep_equals = true;
+            } else if meta.path.is_ident("detached_only") {
+                detached_only = true;
             } else if meta.path.is_ident("allow_hyphen_values") {
                 hyphen_values = true;
             } else if meta.path.is_ident("allow_negative_numbers") {
@@ -7094,7 +7109,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
                      `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
-                     `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
+                     `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
@@ -7190,6 +7205,18 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     {
         return error(
             "`allow_hyphen_values` and `require_equals` are for flags that take a value".into(),
+        );
+    }
+    if detached_only
+        && (require_equals
+            || (short.is_none() && plus.is_none())
+            || positional
+            || subcommand
+            || matches!(kind, Kind::Switch | Kind::Count(_)))
+    {
+        return error(
+            "`detached_only` is for a `-x` or `+x` flag that takes a value, not with `require_equals`"
+                .into(),
         );
     }
     if negative_numbers && (subcommand || matches!(kind, Kind::Switch | Kind::Count(_))) {
@@ -7514,6 +7541,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         hyphen_values,
         require_equals,
         keep_equals,
+        detached_only,
         negate,
         two_dashes,
         prefix,

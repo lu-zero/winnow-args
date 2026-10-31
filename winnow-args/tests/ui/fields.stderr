@@ -1,4 +1,4 @@
-error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
  --> tests/ui/fields.rs:6:17
   |
 6 |     #[arg(long, hdie)]
@@ -152,4 +152,10 @@ error: a `Vec<(bool, T)>` is a flag with `plus` equal to `short`, one value each
    --> tests/ui/fields.rs:168:5
     |
 168 |     #[arg(short = 'o')]
+    |     ^
+
+error: `detached_only` is for a `-x` or `+x` flag that takes a value, not with `require_equals`
+   --> tests/ui/fields.rs:174:5
+    |
+174 |     #[arg(short = 'o', require_equals, detached_only)]
     |     ^

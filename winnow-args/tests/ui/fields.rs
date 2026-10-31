@@ -169,4 +169,10 @@ struct SignedWithoutPlus {
     options: Vec<(bool, String)>,
 }
 
+#[derive(Args)]
+struct DetachedWithEquals {
+    #[arg(short = 'o', require_equals, detached_only)]
+    option: Option<String>,
+}
+
 fn main() {}

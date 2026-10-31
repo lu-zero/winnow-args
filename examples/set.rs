@@ -9,6 +9,7 @@
 //!     cargo run --example set -- -o errexit +e -x a b         # errexit off, xtrace on
 //!     cargo run --example set -- -eo pipefail                 # a bundle, then the name
 //!     cargo run --example set -- -o noglob -o                 # set it, then list
+//!     cargo run --example set -- -oe                          # list, then errexit on
 //!     cargo run --example set -- -h
 
 use std::collections::BTreeMap;
@@ -40,7 +41,13 @@ enum Item {
     #[arg(short = 'x', plus = 'x')]
     Xtrace(bool),
     /// Set or unset the option NAME; alone, list the options.
-    #[arg(short = 'o', plus = 'o', value_name = "NAME", default_missing = "")]
+    #[arg(
+        short = 'o',
+        plus = 'o',
+        value_name = "NAME",
+        default_missing = "",
+        detached_only
+    )]
     Named(bool, String),
 }
 
