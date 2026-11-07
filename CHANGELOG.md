@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.1 (2026-11-07)
 
 - **Added**: the `ValueEnum` trait, which `#[derive(ValueEnum)]` implements:
   `name()` is the spelling a variant is given on the command line,
@@ -15,7 +15,8 @@ released together. Versions follow [semver](https://semver.org).
   from a build script. The derive reads the variable itself, so help and
   the pages say the same; it is not rustc's `env!`, and no other macro is
   read. A `#[doc = …]` it cannot read, `include_str!` or `concat!`, is
-  still left out of help and the pages, now with a warning.
+  still left out of help and the pages, now with a warning: a crate that
+  denies warnings sees it as an error.
 - **Added**: `version = EXPR` and `long_version = EXPR`, any `&'static str`
   a constant can be, as `help = EXPR` takes. The man pages list `-V`
   without a VERSION section, as they cannot read the constant.
@@ -26,6 +27,7 @@ released together. Versions follow [semver](https://semver.org).
   the option.
 - **Fixed**: a field's `help = env!("VAR")` is the variable's value in the
   pages too, not the doc comment.
+- **Fixed**: `version = ""` lists `-V` in the pages, as help does.
 
 ## 0.6.0 (2026-10-31)
 
