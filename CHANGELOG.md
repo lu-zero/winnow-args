@@ -16,6 +16,9 @@ released together. Versions follow [semver](https://semver.org).
   the pages say the same; it is not rustc's `env!`, and no other macro is
   read. A `#[doc = …]` it cannot read, `include_str!` or `concat!`, is
   still left out of help and the pages, now with a warning.
+- **Added**: `version = EXPR` and `long_version = EXPR`, any `&'static str`
+  a constant can be, as `help = EXPR` takes. The man pages list `-V`
+  without a VERSION section, as they cannot read the constant.
 
 ## 0.6.0 (2026-10-31)
 

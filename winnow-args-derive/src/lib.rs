@@ -136,12 +136,14 @@ mod spec;
 /// - `name = "…"`: the program name in the usage line, where an empty name
 ///   means `argv[0]`. A completion script needs the name set.
 /// - `version`, or `version = "…"`: add `-V` and `--version`. With no string,
-///   the text is the crate's `CARGO_PKG_VERSION`.
+///   the text is the crate's `CARGO_PKG_VERSION`. `version = EXPR`, any
+///   `&'static str` a constant can be, is what the program prints; the man
+///   pages, which cannot read it, list `-V` without a VERSION section.
 /// - `author`, or `author = "…"`: the authors, for the man pages' AUTHORS
 ///   section. With no string, the crate's `CARGO_PKG_AUTHORS`; a `:`
 ///   separates several. Help does not show it.
-/// - `long_version = "…"`: what `--version` prints after the program name;
-///   `-V` keeps `version`. It needs `version`.
+/// - `long_version = "…"`, or `long_version = EXPR`: what `--version` prints
+///   after the program name; `-V` keeps `version`. It needs `version`.
 /// - `about`: the description on `-h`. It defaults to the doc comment's first
 ///   paragraph.
 /// - `long_about`: the description on `--help`. It defaults to the whole doc
@@ -488,6 +490,21 @@ fn lit_text(input: syn::parse::ParseStream<'_>) -> syn::Result<LitStr> {
     }
     let mac = input.parse::<syn::Macro>()?;
     Ok(LitStr::new(&env_text(&mac)?, mac.span()))
+}
+
+/// Text only the running program shows: a literal or `env!("VAR")`, whose
+/// text the pages say too, or any `&'static str` constant, which they cannot.
+fn const_text(input: syn::parse::ParseStream<'_>) -> syn::Result<(TokenStream2, Option<String>)> {
+    if input.peek(LitStr)
+        || (input.peek(Ident)
+            && input.peek2(syn::Token![!])
+            && input.fork().parse::<syn::Macro>()?.path.is_ident("env"))
+    {
+        let text = lit_text(input)?;
+        return Ok((quote!(#text), Some(text.value())));
+    }
+    let expr = input.parse::<syn::Expr>()?;
+    Ok((quote!(#expr), None))
 }
 
 const TEXT_EXPECTED: &str = "expected a string literal or `env!(\"VAR\")`";
@@ -2256,22 +2273,6 @@ fn spec_check(
     })
 }
 
-/// A bare `version` becomes `env!("CARGO_PKG_VERSION")` in help. Cargo has
-/// already set that variable for the crate being compiled.
-fn package_version(version: &Option<TokenStream2>, enabled: bool) -> Option<String> {
-    if !enabled {
-        return None;
-    }
-    let tokens = version.as_ref()?;
-    if let Ok(lit) = syn::parse2::<LitStr>(tokens.clone()) {
-        let text = lit.value();
-        return (!text.is_empty()).then_some(text);
-    }
-    std::env::var("CARGO_PKG_VERSION")
-        .ok()
-        .filter(|text| !text.is_empty())
-}
-
 fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
     let longs = field.longs();
     let keywords = if field.keywords {
@@ -3837,6 +3838,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         validate,
         name: program_name,
         version,
+        version_text,
         author,
         about,
         long_about,
@@ -5511,7 +5513,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 before_help: before_text,
                 before_long_help: before_long_text,
                 usage: usage_text,
-                package_version: package_version(&version, with_version),
+                package_version: with_version.then(|| version_text.clone()),
                 author: author.clone(),
                 items,
                 flatten,
@@ -5683,8 +5685,10 @@ struct StructOptions {
     validate: Option<syn::Path>,
     /// The program name for the usage line; `argv[0]` when empty.
     name: String,
-    /// `-V`/`--version` text: a literal, or `CARGO_PKG_VERSION`.
+    /// `-V`/`--version` text: a constant, or `CARGO_PKG_VERSION`.
     version: Option<TokenStream2>,
+    /// `version` for the pages: empty when it is a constant they cannot read.
+    version_text: String,
     /// The authors, for the pages: a literal, or `CARGO_PKG_AUTHORS`.
     author: Option<String>,
     /// Help text around the lists; `about`/`long_about` default to the doc comment.
@@ -5696,8 +5700,8 @@ struct StructOptions {
     before_long_help: String,
     /// Usage lines in place of the made one.
     usage: String,
-    /// What `--version` prints in place of `version`.
-    long_version: Option<String>,
+    /// What `--version` prints in place of `version`: a constant.
+    long_version: Option<TokenStream2>,
     disable_help_flag: bool,
     /// Help is `--help` alone, `-h` left undeclared (bash's builtins).
     disable_help_short: bool,
@@ -5871,12 +5875,15 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             if meta.path.is_ident("version") {
-                options.version = Some(if meta.input.peek(syn::Token![=]) {
-                    let version = lit_text(meta.value()?)?;
-                    quote!(#version)
+                let (version, text) = if meta.input.peek(syn::Token![=]) {
+                    const_text(meta.value()?)?
                 } else {
-                    quote!(::core::env!("CARGO_PKG_VERSION"))
-                });
+                    // Cargo has set it for the crate being compiled.
+                    let text = std::env::var("CARGO_PKG_VERSION").ok();
+                    (quote!(::core::env!("CARGO_PKG_VERSION")), text)
+                };
+                options.version = Some(version);
+                options.version_text = text.unwrap_or_default();
                 return Ok(());
             }
             for (key, slot) in [
@@ -5889,7 +5896,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 }
             }
             if meta.path.is_ident("long_version") {
-                options.long_version = Some(text(&meta)?);
+                options.long_version = Some(const_text(meta.value()?)?.0);
                 return Ok(());
             }
             for (key, slot) in [

@@ -156,6 +156,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecChange",
             "SpecChoices",
             "SpecCli",
+            "SpecConstVersion",
             "SpecDeprecated",
             "SpecDupA",
             "SpecDupB",
@@ -605,4 +606,29 @@ fn text_from_the_environment_is_the_same_in_help_and_the_fragments() {
     assert_eq!(command.items[0].heading.as_deref(), Some("winnow-args"));
     #[cfg(feature = "help-text")]
     assert_eq!(command.about, "winnow-args");
+}
+
+const VERSION: &str = "1.2.3-g0ff1ce";
+const fn long_version() -> &'static str {
+    "1.2.3-g0ff1ce, built for the tests"
+}
+
+#[derive(Args)]
+#[arg(name = "spec-const", version = VERSION, long_version = long_version())]
+struct SpecConstVersion {}
+
+#[test]
+fn a_constant_version_is_help_s_and_the_pages_keep_the_flag() {
+    let help = SpecConstVersion::HELP;
+    assert_eq!(help.version, Some(VERSION));
+    assert_eq!(help.long_version, Some(long_version()));
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecConstVersion")
+        .unwrap_or_else(|error| panic!("{error}"));
+    // `-V` is listed; the version itself is not known to the pages.
+    assert_eq!(command.package_version.as_deref(), Some(""));
 }
