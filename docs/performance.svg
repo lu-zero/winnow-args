@@ -14,17 +14,17 @@
 <line x1="664" y1="30" x2="664" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
 <text x="664.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 ms</text>
 <text x="96.0" y="48" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">winnow-args</text>
-<rect x="104" y="35" width="30.4" height="16" rx="2" fill="#5faf5f"/>
-<text x="140.4" y="48" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">187 ns</text>
+<rect x="104" y="35" width="29.7" height="16" rx="2" fill="#5faf5f"/>
+<text x="139.7" y="48" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">184 ns</text>
 <text x="96.0" y="74" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage 7</text>
-<rect x="104" y="61" width="79.8" height="16" rx="2" fill="#87afaf"/>
-<text x="189.8" y="74" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">516 ns</text>
+<rect x="104" y="61" width="78.8" height="16" rx="2" fill="#87afaf"/>
+<text x="188.8" y="74" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">505 ns</text>
 <text x="96.0" y="100" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap 4</text>
-<rect x="104" y="87" width="243.7" height="16" rx="2" fill="#d78787"/>
-<text x="353.7" y="100" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">15.0 µs</text>
+<rect x="104" y="87" width="244.4" height="16" rx="2" fill="#d78787"/>
+<text x="354.4" y="100" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">15.2 µs</text>
 <text x="96.0" y="126" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>
-<rect x="104" y="113" width="243.1" height="16" rx="2" fill="#d75f5f"/>
-<text x="353.1" y="126" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">14.8 µs</text>
+<rect x="104" y="113" width="242.7" height="16" rx="2" fill="#d75f5f"/>
+<text x="352.7" y="126" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">14.7 µs</text>
 <text x="10.0" y="186" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">mise use -g node@20, 211 commands</text>
 <line x1="104" y1="198" x2="104" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
 <text x="104.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">100 ns</text>
@@ -39,16 +39,16 @@
 <line x1="664" y1="198" x2="664" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
 <text x="664.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 ms</text>
 <text x="96.0" y="216" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">winnow-args</text>
-<rect x="104" y="203" width="57.6" height="16" rx="2" fill="#5faf5f"/>
-<text x="167.6" y="216" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">327 ns</text>
+<rect x="104" y="203" width="56.9" height="16" rx="2" fill="#5faf5f"/>
+<text x="166.9" y="216" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">322 ns</text>
 <text x="96.0" y="242" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage 7</text>
-<rect x="104" y="229" width="99.1" height="16" rx="2" fill="#87afaf"/>
-<text x="209.1" y="242" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">767 ns</text>
+<rect x="104" y="229" width="102.7" height="16" rx="2" fill="#87afaf"/>
+<text x="212.7" y="242" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">826 ns</text>
 <text x="96.0" y="268" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap 4</text>
-<rect x="104" y="255" width="434.5" height="16" rx="2" fill="#d78787"/>
-<text x="544.5" y="268" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">757 µs</text>
+<rect x="104" y="255" width="434.7" height="16" rx="2" fill="#d78787"/>
+<text x="544.7" y="268" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">760 µs</text>
 <text x="96.0" y="294" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>
-<rect x="104" y="281" width="495.4" height="16" rx="2" fill="#d75f5f"/>
-<text x="605.4" y="294" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">2.65 ms</text>
+<rect x="104" y="281" width="495.6" height="16" rx="2" fill="#d75f5f"/>
+<text x="605.6" y="294" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">2.66 ms</text>
 <text x="384.0" y="340" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">time per parse, log scale</text>
 </svg>

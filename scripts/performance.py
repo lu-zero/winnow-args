@@ -7,8 +7,8 @@ FONT = "ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif"
 TEAL, GREY = "#5fafaf", "#8a8a8a"
 COLOURS = {"winnow-args": "#5faf5f", "usage 7": "#87afaf", "clap 4": "#d78787", "bpaf 0.9": "#d75f5f"}
 PANELS = [
-    ("example -v --path /tmp/x a b c", [("winnow-args", 187, "187 ns"), ("usage 7", 516, "516 ns"), ("clap 4", 15000, "15.0 µs"), ("bpaf 0.9", 14800, "14.8 µs")]),
-    ("mise use -g node@20, 211 commands", [("winnow-args", 327, "327 ns"), ("usage 7", 767, "767 ns"), ("clap 4", 757000, "757 µs"), ("bpaf 0.9", 2650000, "2.65 ms")]),
+    ("example -v --path /tmp/x a b c", [("winnow-args", 184, "184 ns"), ("usage 7", 505, "505 ns"), ("clap 4", 15200, "15.2 µs"), ("bpaf 0.9", 14700, "14.7 µs")]),
+    ("mise use -g node@20, 211 commands", [("winnow-args", 322, "322 ns"), ("usage 7", 826, "826 ns"), ("clap 4", 760000, "760 µs"), ("bpaf 0.9", 2660000, "2.66 ms")]),
 ]
 TICKS = ["100 ns", "1 µs", "10 µs", "100 µs", "1 ms", "10 ms"]
 W, X0, DECADE, ROW, BAR, SIZE = 720, 104, 112, 26, 16, 13
