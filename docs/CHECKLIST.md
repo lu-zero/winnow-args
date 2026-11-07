@@ -103,6 +103,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       defaults and env shown
 - [x] What each choice means, listed one a line in the long help and the
       pages; `hide_choices`; `help` from a constant; `brief_help`
+- [x] `env!("VAR")`, read by the derive, wherever an option takes a string
+      and in a doc comment; help text, `version` and `long_version` from a
+      constant, the pages saying what they would without it
 - [x] Wrapping to `COLUMNS`, else the terminal (`terminal-size`), else 100;
       in terminal columns with `unicode`, else a column a character
 - [x] Colour: `help::Style`, `color::Theme` per depth (16, 256, 24-bit),
@@ -196,6 +199,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Grammar and values
 
 - [ ] A variadic positional that is not last; `allow_missing_positional`
+- [ ] A `ValueEnum` matched ignoring case (clap's `ignore_case`)
 - [x] A negative number routed into a default subcommand's positional
       where it opts in, at any depth, and kept by the root's where only
       that one does
@@ -242,6 +246,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] A doc comment's paragraph wrapped to the terminal, an indented line
       kept; `verbatim_doc_comment` keeps every line
 - [ ] `note`, a logo, `help <topic>`
+- [ ] A doc comment from `include_str!` or `concat!`, left out with a warning
+- [ ] A `ValueEnum` variant's help from the value, beside `name()`
 - [ ] Rendered diagnostics with the command line and a caret
 - [ ] A user palette from the environment (as `GCC_COLORS`)
 
