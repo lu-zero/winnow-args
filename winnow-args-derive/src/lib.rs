@@ -121,6 +121,14 @@ mod spec;
 /// (`--color=never`). A `Vec<Vec<T>>`'s defaults are one group, as is an
 /// `env` value.
 ///
+/// Wherever an option takes a string, and in a `#[doc = …]`, `env!("VAR")`
+/// is the variable's value, such as one a build script sets with
+/// `cargo:rustc-env`. The derive reads it itself: it is not rustc's `env!`,
+/// though `env!("VAR", "message")` says the same when it is missing, and no
+/// other macro is read. Help and the pages say the same; they leave out,
+/// with a warning, a `#[doc = …]` the derive cannot read, such as
+/// `include_str!`.
+///
 /// # Struct options
 ///
 /// Name and help:
@@ -435,11 +443,107 @@ pub fn derive_args(input: TokenStream) -> TokenStream {
 /// again when `WINNOW_ARGS_SPEC` changes.
 fn finish(expanded: syn::Result<TokenStream2>) -> TokenStream {
     let expanded = expanded.unwrap_or_else(syn::Error::into_compile_error);
+    let mut read = ENV_READ.take();
+    read.sort();
+    read.dedup();
+    // A derive cannot warn on stable: a deprecated item, used where the doc
+    // comment is, has rustc do it. A doc comment read twice is warned once.
+    let mut left_out = DOC_LEFT_OUT.take();
+    let mut seen = std::collections::HashSet::new();
+    left_out.retain(|span| seen.insert(format!("{span:?}")));
+    let left_out = left_out.into_iter().map(|span| {
+        quote::quote_spanned! {span=>
+            const _: () = {
+                #[deprecated(note = "help and the pages leave this doc comment out: \
+                    they read a string literal or `env!(\"VAR\")`")]
+                const DOC_COMMENT_LEFT_OUT: () = ();
+                DOC_COMMENT_LEFT_OUT
+            };
+        }
+    });
     quote! {
         #expanded
         const _: ::core::option::Option<&str> = ::core::option_env!("WINNOW_ARGS_SPEC");
+        #(const _: &str = ::core::env!(#read);)*
+        #(#left_out)*
     }
     .into()
+}
+
+std::thread_local! {
+    /// The variables `env!` in an attribute read, for `finish` to make rustc
+    /// rebuild when one changes: a derive cannot say so itself.
+    static ENV_READ: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    /// Where a doc comment the derive cannot read is, for `finish` to warn.
+    static DOC_LEFT_OUT: std::cell::RefCell<Vec<Span>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// A string the derive needs the text of: a literal, or `env!("VAR")`.
+fn lit_text(input: syn::parse::ParseStream<'_>) -> syn::Result<LitStr> {
+    if input.peek(LitStr) {
+        return input.parse();
+    }
+    if !(input.peek(Ident) && input.peek2(syn::Token![!])) {
+        return Err(input.error(TEXT_EXPECTED));
+    }
+    let mac = input.parse::<syn::Macro>()?;
+    Ok(LitStr::new(&env_text(&mac)?, mac.span()))
+}
+
+const TEXT_EXPECTED: &str = "expected a string literal or `env!(\"VAR\")`";
+
+/// A `#[doc = …]`'s text: a literal or `env!("VAR")`, as for an option.
+/// Anything else, `include_str!` say, is left out with a warning, as rustc
+/// expands it for rustdoc only.
+fn doc_text(value: &syn::Expr) -> syn::Result<Option<String>> {
+    match value {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(s),
+            ..
+        }) => Ok(Some(s.value())),
+        syn::Expr::Macro(syn::ExprMacro { mac, .. }) if mac.path.is_ident("env") => {
+            env_text(mac).map(Some)
+        }
+        _ => {
+            DOC_LEFT_OUT.with_borrow_mut(|spans| spans.push(value.span()));
+            Ok(None)
+        }
+    }
+}
+
+/// `env!("VAR")`, read by the derive and not expanded by rustc, which a derive
+/// cannot ask to: the variable as Cargo sets it for the crate being built.
+fn env_text(mac: &syn::Macro) -> syn::Result<String> {
+    if !mac.path.is_ident("env") {
+        return Err(syn::Error::new(mac.span(), TEXT_EXPECTED));
+    }
+    // As rustc's: the variable's name, then what to say when it is missing.
+    let parser = syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated;
+    let args = mac.parse_body_with(parser)?;
+    let (Some(var), message) = (args.first(), args.get(1)) else {
+        return Err(syn::Error::new(mac.span(), TEXT_EXPECTED));
+    };
+    if args.len() > 2 {
+        return Err(syn::Error::new(
+            mac.span(),
+            "`env!` takes a variable name and a message",
+        ));
+    }
+    let name = var.value();
+    let text = std::env::var(&name).map_err(|error| {
+        let said = match (error, message) {
+            (std::env::VarError::NotPresent, Some(message)) => message.value(),
+            (std::env::VarError::NotPresent, None) => {
+                format!("environment variable `{name}` not defined at compile time")
+            }
+            (std::env::VarError::NotUnicode(_), _) => {
+                format!("environment variable `{name}` not valid unicode")
+            }
+        };
+        syn::Error::new(var.span(), said)
+    })?;
+    ENV_READ.with_borrow_mut(|read| read.push(name));
+    Ok(text)
 }
 
 /// Derive `Subcommand` for an enum of subcommands. The enum also implements
@@ -653,14 +757,17 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             None => {}
         }
         // The whole doc comment, when the description is its first paragraph.
-        let unit_long_about = inner.is_none().then(|| {
-            let (doc, long_doc) = docs(&variant.attrs);
-            if doc == info.about {
-                long_doc
-            } else {
-                info.about.clone()
+        let unit_long_about = match inner {
+            Some(_) => None,
+            None => {
+                let (doc, long_doc) = docs(&variant.attrs)?;
+                Some(if doc == info.about {
+                    long_doc
+                } else {
+                    info.about.clone()
+                })
             }
-        });
+        };
         let command = match (&inner, &unit_long_about) {
             (Some(ty), _) => quote!(<#ty as ::winnow_args::Args>::HELP),
             (None, long_about) => {
@@ -787,7 +894,7 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         arms.push(quote!(#pattern => { #record (#parse).map_err(|e| e.within(#primary)) },));
         patterns.push(pattern);
     }
-    let (about_text, long_about_text) = docs(&input.attrs);
+    let (about_text, long_about_text) = docs(&input.attrs)?;
     let (about, long_about) = (text(&about_text), text(&long_about_text));
     if spec_on {
         spec::write_subcommands(
@@ -1373,7 +1480,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 } else if meta.path.is_ident("detached_only") {
                     detached_only = true;
                 } else if meta.path.is_ident("default_missing") {
-                    default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
+                    default_missing = Some(lit_text(meta.value()?)?.value());
                 } else if meta.path.is_ident("skip") {
                     skip = true;
                 } else if meta.path.is_ident("bundle") {
@@ -1392,7 +1499,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     plus = Some(meta.value()?.parse::<LitChar>()?.value());
                 } else if meta.path.is_ident("long") {
                     longs.push(if meta.input.peek(syn::Token![=]) {
-                        meta.value()?.parse::<LitStr>()?.value()
+                        lit_text(meta.value()?)?.value()
                     } else {
                         kebab_case(&ident.to_string())
                     });
@@ -1407,7 +1514,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 } else if meta.path.is_ident("prefix") {
                     prefix = true;
                 } else if meta.path.is_ident("value_name") {
-                    value_name = Some(meta.value()?.parse::<LitStr>()?.value());
+                    value_name = Some(lit_text(meta.value()?)?.value());
                 } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
                 } else {
                     return Err(meta.error(
@@ -1518,7 +1625,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     Some(ty),
                     false,
                     false,
-                ));
+                )?);
                 if spec_on {
                     spec_checks.extend(spec_check(&input.generics, Some(ty), stated.as_ref()));
                     spec_rows.push(occurrence_spec(
@@ -1528,7 +1635,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             choices_ty: choices_name(stated.as_ref(), ty),
                             ..spec::ItemDoc::default()
                         },
-                    ));
+                    )?);
                 }
             }
             let value = wrap(
@@ -1591,7 +1698,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
             value,
             require_equals,
             default_missing.is_some(),
-        ));
+        )?);
         if spec_on {
             let value_ty = takes.map(|ty| spanned.or(optional).unwrap_or(ty));
             spec_checks.extend(spec_check(&input.generics, value_ty, stated.as_ref()));
@@ -1612,7 +1719,7 @@ fn expand_occurrence(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     prefix,
                     ..spec::ItemDoc::default()
                 },
-            ));
+            )?);
         }
         // `true` for `-x` (or a long name), `false` for `+x`.
         let sign_of = (sign != Sign::None).then(|| {
@@ -1850,8 +1957,8 @@ fn occurrence_item(
     value: Option<&Type>,
     require_equals: bool,
     optional_value: bool,
-) -> TokenStream2 {
-    let (doc, long_doc) = docs(&variant.attrs);
+) -> syn::Result<TokenStream2> {
+    let (doc, long_doc) = docs(&variant.attrs)?;
     let (help, long_help) = (text(&doc), text(&long_doc));
     // What the value's type says of it, when the variant holds one.
     let (choices, choice_help, hint) = match value {
@@ -1872,7 +1979,7 @@ fn occurrence_item(
     let long = opt_str(longs.first().map(String::as_str));
     let aliases = longs.iter().skip(1);
     let value_name = opt_str(value_name);
-    quote!(::winnow_args::help::Item {
+    Ok(quote!(::winnow_args::help::Item {
         short: #short,
         long: #long,
         aliases: &[#(#aliases),*],
@@ -1905,7 +2012,7 @@ fn occurrence_item(
         hint: #hint,
         complete: ::core::option::Option::None,
         warning: "",
-    })
+    }))
 }
 
 /// A help item's `choice_help`: `None` unless the field writes what a choice
@@ -1965,7 +2072,7 @@ fn spec_name(attrs: &[syn::Attribute]) -> syn::Result<Option<String>> {
         // The parser of each derive has already rejected what it does not know.
         let _ = attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("spec") {
-                name = Some(meta.value()?.parse::<LitStr>()?);
+                name = Some(lit_text(meta.value()?)?);
             } else if meta.input.peek(syn::Token![=]) {
                 meta.value()?.parse::<syn::Expr>()?;
             } else if meta.input.peek(syn::token::Paren) {
@@ -1994,7 +2101,7 @@ fn skip_spec(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<bool> {
     if !meta.path.is_ident("spec") {
         return Ok(false);
     }
-    meta.value()?.parse::<LitStr>()?;
+    lit_text(meta.value()?)?;
     Ok(true)
 }
 
@@ -2236,13 +2343,13 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
     })
 }
 
-fn occurrence_spec(variant: &syn::Variant, mut item: spec::ItemDoc) -> spec::ItemDoc {
-    let (help, long_help) = docs(&variant.attrs);
+fn occurrence_spec(variant: &syn::Variant, mut item: spec::ItemDoc) -> syn::Result<spec::ItemDoc> {
+    let (help, long_help) = docs(&variant.attrs)?;
     item.help = help;
     item.long_help = long_help;
     item.positional = item.short.is_none() && item.long.is_none();
     item.multiple = item.positional;
-    item
+    Ok(item)
 }
 
 /// `FromArg` as one `match` on the value's bytes.
@@ -2472,7 +2579,7 @@ fn rename_all(input: &DeriveInput, options: Option<&mut EnumOptions>) -> syn::Re
                     false => "expected `rename_all` or `spec`",
                 }));
             }
-            let lit = meta.value()?.parse::<LitStr>()?;
+            let lit = lit_text(meta.value()?)?;
             case = match lit.value().as_str() {
                 "kebab-case" => Case::Kebab,
                 "lowercase" => Case::Lower,
@@ -2510,7 +2617,7 @@ fn variant_names<'a>(
         attr.parse_nested_meta(|meta| {
             if DeprecationDoc::option(&meta, &mut deprecation)? {
             } else if meta.path.is_ident("name") {
-                name = Some(meta.value()?.parse::<LitStr>()?.value());
+                name = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("alias") {
                 alias.extend(aliases(&meta)?);
             } else if meta.path.is_ident("alias_hidden") {
@@ -2518,10 +2625,10 @@ fn variant_names<'a>(
             } else if meta.path.is_ident("hide") {
                 hide = true;
             } else if meta.path.is_ident("help") {
-                help = Some(meta.value()?.parse::<LitStr>()?.value());
+                help = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("long_help") {
                 // The listing shows one line; the subcommand's own help has the rest.
-                meta.value()?.parse::<LitStr>()?;
+                lit_text(meta.value()?)?;
             } else if meta.path.is_ident("verbatim_doc_comment") && !holds_type {
             } else if skip_spec(&meta)? {
                 if !holds_type {
@@ -2563,19 +2670,20 @@ fn variant_names<'a>(
         }
         seen.push((spelling.clone(), ident));
     }
+    let about = match help {
+        Some(h) => h
+            .split("\n\n")
+            .next()
+            .unwrap_or_default()
+            .replace('\n', " "),
+        None => docs(&variant.attrs)?.0,
+    };
     Ok(Variant {
         names,
         shown,
         hide,
         deprecation,
-        about: help
-            .map(|h| {
-                h.split("\n\n")
-                    .next()
-                    .unwrap_or_default()
-                    .replace('\n', " ")
-            })
-            .unwrap_or_else(|| docs(&variant.attrs).0),
+        about,
     })
 }
 
@@ -2583,27 +2691,20 @@ fn variant_names<'a>(
 /// paragraph is one line, so help wraps it to the terminal rather than to the
 /// source; an indented line is kept as written, and every line is with
 /// `verbatim_doc_comment`.
-fn docs(attrs: &[syn::Attribute]) -> (String, String) {
+fn docs(attrs: &[syn::Attribute]) -> syn::Result<(String, String)> {
     let verbatim = has_option(attrs, "verbatim_doc_comment");
-    let lines = attrs
-        .iter()
-        .filter(|a| a.path().is_ident("doc"))
-        .filter_map(|a| match &a.meta {
-            syn::Meta::NameValue(nv) => match &nv.value {
-                syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(s),
-                    ..
-                }) => Some(s.value()),
-                _ => None,
-            },
-            _ => None,
-        })
-        .map(|line| {
-            line.strip_prefix(' ')
-                .unwrap_or(&line)
-                .trim_end()
-                .to_owned()
-        });
+    let mut text = Vec::new();
+    for attr in attrs.iter().filter(|a| a.path().is_ident("doc")) {
+        if let syn::Meta::NameValue(nv) = &attr.meta {
+            text.extend(doc_text(&nv.value)?);
+        }
+    }
+    let lines = text.into_iter().map(|line| {
+        line.strip_prefix(' ')
+            .unwrap_or(&line)
+            .trim_end()
+            .to_owned()
+    });
     let mut long = String::new();
     let mut joins = false;
     for line in lines {
@@ -2622,7 +2723,7 @@ fn docs(attrs: &[syn::Attribute]) -> (String, String) {
         .next()
         .unwrap_or_default()
         .replace('\n', " ");
-    (short, long)
+    Ok((short, long))
 }
 
 /// `error`, said with `message` in place of its default one when there is one.
@@ -2670,11 +2771,13 @@ fn matches_name(names: &[String]) -> TokenStream2 {
 /// `alias = "x"` or `alias("x", "y")`.
 fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
     if meta.input.peek(syn::Token![=]) {
-        return Ok(vec![meta.value()?.parse::<LitStr>()?.value()]);
+        return Ok(vec![lit_text(meta.value()?)?.value()]);
     }
     let content;
     syn::parenthesized!(content in meta.input);
-    let names = syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+    let names = syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated_with(
+        &content, lit_text,
+    )?;
     Ok(names.iter().map(LitStr::value).collect())
 }
 
@@ -2682,14 +2785,14 @@ fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
 /// message said in place of the default one, `{0}` this field and `{1}` the other.
 fn related(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<(String, Option<String>)>> {
     if meta.input.peek(syn::Token![=]) {
-        return Ok(vec![(meta.value()?.parse::<LitStr>()?.value(), None)]);
+        return Ok(vec![(lit_text(meta.value()?)?.value(), None)]);
     }
     let content;
     syn::parenthesized!(content in meta.input);
     let (mut names, mut message) = (Vec::new(), None);
     while !content.is_empty() {
-        if content.peek(LitStr) {
-            names.push(content.parse::<LitStr>()?.value());
+        if !(content.peek(Ident) && !content.peek2(syn::Token![!])) {
+            names.push(lit_text(&content)?.value());
         } else {
             let key = content.parse::<Ident>()?;
             if key != "message" {
@@ -2699,7 +2802,7 @@ fn related(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<(String, Op
                 ));
             }
             content.parse::<syn::Token![=]>()?;
-            message = Some(content.parse::<LitStr>()?.value());
+            message = Some(lit_text(&content)?.value());
         }
         if !content.is_empty() {
             content.parse::<syn::Token![,]>()?;
@@ -3840,7 +3943,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "a `double_dash = \"preserve\"` positional keeps the `--` this one waits for",
         ));
     }
-    let (doc_about, doc_long_about) = docs(&input.attrs);
+    let (doc_about, doc_long_about) = docs(&input.attrs)?;
     let about = about.unwrap_or(doc_about);
     let long_about = long_about.unwrap_or(doc_long_about);
     let (about_text, long_about_text) = (about, long_about);
@@ -5620,11 +5723,11 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             if meta.path.is_ident("restart_token") {
-                options.restart_token = Some(meta.value()?.parse::<LitStr>()?.value());
+                options.restart_token = Some(lit_text(meta.value()?)?.value());
                 return Ok(());
             }
             if meta.path.is_ident("default_subcommand") {
-                options.default_subcommand = Some(meta.value()?.parse::<LitStr>()?.value());
+                options.default_subcommand = Some(lit_text(meta.value()?)?.value());
                 return Ok(());
             }
             if meta.path.is_ident("default_subcommand_flags") {
@@ -5647,7 +5750,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             if meta.path.is_ident("next_help_heading") {
-                options.next_help_heading = Some(meta.value()?.parse::<LitStr>()?.value());
+                options.next_help_heading = Some(lit_text(meta.value()?)?.value());
                 return Ok(());
             }
             if meta.path.is_ident("heading") {
@@ -5663,7 +5766,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let mut output = spec::OutputDoc {
-                    name: content.parse::<LitStr>()?.value(),
+                    name: lit_text(&content)?.value(),
                     default: false,
                     framing: String::new(),
                     help: String::new(),
@@ -5689,7 +5792,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                         }
                     };
                     content.parse::<syn::Token![=]>()?;
-                    *slot = content.parse::<LitStr>()?.value();
+                    *slot = lit_text(&content)?.value();
                 }
                 options.outputs.push(output);
                 return Ok(());
@@ -5699,13 +5802,13 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 syn::parenthesized!(content in meta.input);
                 let code = content.parse::<syn::LitInt>()?.base10_parse::<u8>()?;
                 content.parse::<syn::Token![,]>()?;
-                let help = content.parse::<LitStr>()?.value();
+                let help = lit_text(&content)?.value();
                 options.exit_codes.push((code, help));
                 return Ok(());
             }
             if meta.path.is_ident("example") {
                 let example = if meta.input.peek(syn::Token![=]) {
-                    [meta.value()?.parse::<LitStr>()?.value(), String::new(), String::new()]
+                    [lit_text(meta.value()?)?.value(), String::new(), String::new()]
                 } else {
                     let (code, [header, help]) = titled(&meta, ["header", "help"])?;
                     [code, header, help]
@@ -5737,7 +5840,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             if meta.path.is_ident("unknown_flags") {
-                let mode = meta.value()?.parse::<LitStr>()?;
+                let mode = lit_text(meta.value()?)?;
                 options.unknown_flags_value = match mode.value().as_str() {
                     "value" => true,
                     "error" => false,
@@ -5751,7 +5854,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             let text = |meta: &syn::meta::ParseNestedMeta<'_>| -> syn::Result<String> {
-                Ok(meta.value()?.parse::<LitStr>()?.value())
+                Ok(lit_text(meta.value()?)?.value())
             };
             if meta.path.is_ident("name") {
                 options.name = text(&meta)?;
@@ -5760,7 +5863,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if meta.path.is_ident("author") {
                 // Read here, from the crate being built: only the pages show it.
                 options.author = if meta.input.peek(syn::Token![=]) {
-                    Some(meta.value()?.parse::<LitStr>()?.value())
+                    Some(lit_text(meta.value()?)?.value())
                 } else {
                     std::env::var("CARGO_PKG_AUTHORS").ok()
                 }
@@ -5769,7 +5872,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             if meta.path.is_ident("version") {
                 options.version = Some(if meta.input.peek(syn::Token![=]) {
-                    let version = meta.value()?.parse::<LitStr>()?;
+                    let version = lit_text(meta.value()?)?;
                     quote!(#version)
                 } else {
                     quote!(::core::env!("CARGO_PKG_VERSION"))
@@ -5828,7 +5931,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             }
             let content;
             syn::parenthesized!(content in meta.input);
-            let name = content.parse::<LitStr>()?.value();
+            let name = lit_text(&content)?.value();
             let (mut required, mut multiple, mut message) = (false, false, None);
             while !content.is_empty() {
                 content.parse::<syn::Token![,]>()?;
@@ -5838,7 +5941,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                     "multiple" => multiple = true,
                     "message" => {
                         content.parse::<syn::Token![=]>()?;
-                        message = Some(content.parse::<LitStr>()?.value());
+                        message = Some(lit_text(&content)?.value());
                     }
                     _ => {
                         return Err(syn::Error::new(
@@ -5862,7 +5965,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
 
 /// `effect = "…"`: what a command or a flag does to what it works on.
 fn effect_name(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<String> {
-    let name = meta.value()?.parse::<LitStr>()?;
+    let name = lit_text(meta.value()?)?;
     match name.value().as_str() {
         "read" | "write" | "destructive" => Ok(name.value()),
         _ => Err(syn::Error::new(
@@ -5880,7 +5983,7 @@ fn titled<const N: usize>(
 ) -> syn::Result<(String, [String; N])> {
     let content;
     syn::parenthesized!(content in meta.input);
-    let text = content.parse::<LitStr>()?.value();
+    let text = lit_text(&content)?.value();
     let mut given = [const { String::new() }; N];
     while !content.is_empty() {
         content.parse::<syn::Token![,]>()?;
@@ -5893,7 +5996,7 @@ fn titled<const N: usize>(
             return Err(syn::Error::new(key.span(), format!("expected {names}")));
         };
         content.parse::<syn::Token![=]>()?;
-        given[at] = content.parse::<LitStr>()?.value();
+        given[at] = lit_text(&content)?.value();
     }
     Ok((text, given))
 }
@@ -6746,7 +6849,7 @@ impl DeprecationDoc {
         };
         let doc = slot.get_or_insert_with(Self::default);
         let text = |meta: &syn::meta::ParseNestedMeta<'_>| -> syn::Result<String> {
-            Ok(meta.value()?.parse::<LitStr>()?.value())
+            Ok(lit_text(meta.value()?)?.value())
         };
         match key {
             "deprecated" if meta.input.peek(syn::Token![=]) => doc.message = text(meta)?,
@@ -6805,10 +6908,10 @@ struct Choice {
 
 impl syn::parse::Parse for Choice {
     fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
-        let name = input.parse()?;
+        let name = lit_text(input)?;
         let help = if input.peek(syn::Token![=]) {
             input.parse::<syn::Token![=]>()?;
-            Some(input.parse()?)
+            Some(lit_text(input)?)
         } else {
             None
         };
@@ -6855,7 +6958,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut short_aliases = Vec::new();
     let mut visible = Vec::new();
     let mut negate: Option<Option<String>> = None;
-    let (doc_help, doc_long_help) = docs(&f.attrs);
+    let (doc_help, doc_long_help) = docs(&f.attrs)?;
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
     let mut warning = String::new();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
@@ -6874,7 +6977,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     for attr in f.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("hint") {
-                let name = meta.value()?.parse::<LitStr>()?;
+                let name = lit_text(meta.value()?)?;
                 let variant = match name.value().as_str() {
                     "file" => "Files",
                     "dir" => "Dirs",
@@ -6905,7 +7008,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 }
             } else if meta.path.is_ident("long") {
                 let name = if meta.input.peek(syn::Token![=]) {
-                    meta.value()?.parse::<LitStr>()?.value()
+                    lit_text(meta.value()?)?.value()
                 } else {
                     bare.replace('_', "-")
                 };
@@ -6935,9 +7038,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                     expr => help_expr = Some(expr),
                 }
             } else if meta.path.is_ident("long_help") {
-                long_help = Some(meta.value()?.parse::<LitStr>()?.value());
+                long_help = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("help_heading") {
-                heading = Some(meta.value()?.parse::<LitStr>()?.value());
+                heading = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("hide") {
                 hide = true;
             } else if meta.path.is_ident("hide_choices") {
@@ -6958,12 +7061,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("display_order") {
                 display_order = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse::<usize>()?);
             } else if meta.path.is_ident("warning") {
-                warning = meta.value()?.parse::<LitStr>()?.value();
+                warning = lit_text(meta.value()?)?.value();
             } else if meta.path.is_ident("effect") {
                 effect = Some(effect_name(&meta)?);
             } else if meta.path.is_ident("negate") {
                 negate = Some(if meta.input.peek(syn::Token![=]) {
-                    let name = meta.value()?.parse::<LitStr>()?.value();
+                    let name = lit_text(meta.value()?)?.value();
                     // A leading `--` is not part of the name.
                     Some(name.strip_prefix("--").unwrap_or(&name).to_owned())
                 } else {
@@ -6980,7 +7083,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 let count = meta.value()?.parse::<syn::Expr>()?;
                 (values, values_max) = value_count(&count)?;
             } else if meta.path.is_ident("value_terminator") {
-                value_terminator = Some(meta.value()?.parse::<LitStr>()?.value());
+                value_terminator = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("default_from") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -7006,12 +7109,12 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("default_fn") {
                 default_fn = Some(meta.value()?.parse::<syn::ExprPath>()?);
             } else if meta.path.is_ident("default_note") {
-                default_note = Some(meta.value()?.parse::<LitStr>()?.value());
+                default_note = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("default_if") {
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let list =
-                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated_with(&content, lit_text)?;
                 let mut words = list.iter().map(LitStr::value);
                 default_ifs.push(match (words.next(), words.next(), words.next(), words.next()) {
                     (Some(selector), Some(value), None, _) => (selector, None, value),
@@ -7040,9 +7143,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("allow_negative_numbers") {
                 negative_numbers = true;
             } else if meta.path.is_ident("default_missing") {
-                default_missing = Some(meta.value()?.parse::<LitStr>()?.value());
+                default_missing = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("double_dash") {
-                let mode = meta.value()?.parse::<LitStr>()?;
+                let mode = lit_text(meta.value()?)?;
                 double_dash = Some(match mode.value().as_str() {
                     "required" => DoubleDash::Required,
                     "automatic" => DoubleDash::Automatic,
@@ -7078,7 +7181,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let list =
-                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated_with(&content, lit_text)?;
                 let mut words = list.iter().map(LitStr::value);
                 let condition = match (words.next(), words.next(), words.next()) {
                     (Some(selector), equals, None) => (selector, equals),
@@ -7098,7 +7201,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 let content;
                 syn::parenthesized!(content in meta.input);
                 let list =
-                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated(&content)?;
+                    syn::punctuated::Punctuated::<LitStr, syn::Token![,]>::parse_terminated_with(&content, lit_text)?;
                 let mut words = list.iter().map(LitStr::value);
                 requires_ifs.push(match (words.next(), words.next(), words.next()) {
                     (Some(equals), Some(selector), None) => (equals, selector),
@@ -7117,15 +7220,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("required") {
                 required = true;
             } else if meta.path.is_ident("group") {
-                group = Some(meta.value()?.parse::<LitStr>()?.value());
+                group = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("env") {
                 env = Some(if meta.input.peek(syn::Token![=]) {
-                    meta.value()?.parse::<LitStr>()?.value()
+                    lit_text(meta.value()?)?.value()
                 } else {
                     bare.to_uppercase()
                 });
             } else if meta.path.is_ident("default") {
-                defaults.push(meta.value()?.parse::<LitStr>()?.value());
+                defaults.push(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("choices") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -7145,7 +7248,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 }
                 delimiter = Some(c.value() as u8);
             } else if meta.path.is_ident("value_name") {
-                value_name = Some(meta.value()?.parse::<LitStr>()?.value());
+                value_name = Some(lit_text(meta.value()?)?.value());
             } else {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \

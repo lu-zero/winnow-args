@@ -10,6 +10,12 @@ released together. Versions follow [semver](https://semver.org).
   `name()` is the spelling a variant is given on the command line,
   `names()` that and its aliases, and `variants()` every variant, as clap's
   `to_possible_value` and `value_variants`.
+- **Added**: wherever an option takes a string, and in a `#[doc = …]`,
+  `env!("VAR")` is the variable's value: `version = env!("GIT_VERSION")`,
+  from a build script. The derive reads the variable itself, so help and
+  the pages say the same; it is not rustc's `env!`, and no other macro is
+  read. A `#[doc = …]` it cannot read, `include_str!` or `concat!`, is
+  still left out of help and the pages, now with a warning.
 
 ## 0.6.0 (2026-10-31)
 

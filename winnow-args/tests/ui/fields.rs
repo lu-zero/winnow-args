@@ -175,4 +175,32 @@ struct DetachedWithEquals {
     option: Option<String>,
 }
 
+#[derive(Args)]
+struct HeadingFromNowhere {
+    #[arg(long, help_heading = env!("WINNOW_ARGS_NO_SUCH_VARIABLE"))]
+    option: Option<String>,
+}
+
+#[derive(Args)]
+struct HeadingFromNowhereSaid {
+    #[arg(long, help_heading = env!("WINNOW_ARGS_NO_SUCH_VARIABLE", "set it in build.rs"))]
+    option: Option<String>,
+}
+
+const HEADING: &str = "Output";
+
+#[derive(Args)]
+struct HeadingFromAConstant {
+    #[arg(long, help_heading = HEADING)]
+    option: Option<String>,
+}
+
+/// Joined by rustc only.
+#[derive(Args)]
+struct HelpFromConcat {
+    #[doc = concat!("A ", "flag.")]
+    #[arg(long)]
+    flag: bool,
+}
+
 fn main() {}

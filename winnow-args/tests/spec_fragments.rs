@@ -159,6 +159,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecDeprecated",
             "SpecDupA",
             "SpecDupB",
+            "SpecEnv",
             "SpecLocal",
             "SpecPages",
             "SpecPlace",
@@ -573,4 +574,35 @@ fn deprecations_and_fallbacks_are_in_the_fragments() {
             matches!(c.command, SpecOldCommand::Build | SpecOldCommand::Make),
         )
     };
+}
+
+#[doc = env!("CARGO_PKG_NAME")]
+#[derive(Args)]
+#[arg(name = "spec-env", version = env!("CARGO_PKG_VERSION"))]
+struct SpecEnv {
+    #[arg(long, help_heading = env!("CARGO_PKG_NAME", "Cargo sets it"))]
+    root: Option<String>,
+}
+
+#[test]
+fn text_from_the_environment_is_the_same_in_help_and_the_fragments() {
+    let help = SpecEnv::HELP;
+    assert_eq!(help.version, Some(env!("CARGO_PKG_VERSION")));
+    assert_eq!(help.items[0].heading, Some("winnow-args"));
+    #[cfg(feature = "help-text")]
+    assert_eq!(help.about, "winnow-args");
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecEnv")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        command.package_version.as_deref(),
+        Some(env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(command.items[0].heading.as_deref(), Some("winnow-args"));
+    #[cfg(feature = "help-text")]
+    assert_eq!(command.about, "winnow-args");
 }

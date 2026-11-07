@@ -159,3 +159,29 @@ error: `detached_only` is for a `-x` or `+x` flag that takes a value, not with `
     |
 174 |     #[arg(short = 'o', require_equals, detached_only)]
     |     ^
+
+error: environment variable `WINNOW_ARGS_NO_SUCH_VARIABLE` not defined at compile time
+   --> tests/ui/fields.rs:180:37
+    |
+180 |     #[arg(long, help_heading = env!("WINNOW_ARGS_NO_SUCH_VARIABLE"))]
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: set it in build.rs
+   --> tests/ui/fields.rs:186:37
+    |
+186 |     #[arg(long, help_heading = env!("WINNOW_ARGS_NO_SUCH_VARIABLE", "set it in build.rs"))]
+    |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: expected a string literal or `env!("VAR")`
+   --> tests/ui/fields.rs:194:32
+    |
+194 |     #[arg(long, help_heading = HEADING)]
+    |                                ^^^^^^^
+
+warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the pages leave this doc comment out: they read a string literal or `env!("VAR")`
+   --> tests/ui/fields.rs:201:13
+    |
+201 |     #[doc = concat!("A ", "flag.")]
+    |             ^^^^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
