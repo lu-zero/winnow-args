@@ -10,8 +10,8 @@ publish = false
 
 [dependencies]
 # The derives name their runtime through the `usage-rs` facade.
-usage-rs = { version = "7.0", default-features = false, features = ["spec"] }
-usage-derive = "7.0"
+usage-rs = { version = "7.3", default-features = false, features = ["spec"] }
+usage-derive = "7.3"
 
 [lints.rust]
 missing_docs = "allow"
