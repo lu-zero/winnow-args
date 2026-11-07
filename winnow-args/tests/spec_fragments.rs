@@ -164,6 +164,8 @@ fn types_of_one_name_are_told_apart() {
             "SpecLocal",
             "SpecPages",
             "SpecPlace",
+            "SpecSaid",
+            "SpecSaidChoices",
             "SpecTools"
         ]
     );
@@ -631,4 +633,99 @@ fn a_constant_version_is_help_s_and_the_pages_keep_the_flag() {
         .unwrap_or_else(|error| panic!("{error}"));
     // `-V` is listed; the version itself is not known to the pages.
     assert_eq!(command.package_version.as_deref(), Some(""));
+}
+
+const SAID: &str = "Said by a constant.";
+const fn note() -> &'static str {
+    "the terminal's width"
+}
+fn width() -> u16 {
+    80
+}
+
+/// The doc comment, which the pages keep.
+#[derive(Args)]
+#[arg(name = "spec-said", about = SAID, after_help = SAID, usage = SAID)]
+struct SpecSaid {
+    /// The doc comment, which the pages keep.
+    #[arg(long, long_help = SAID, warning = SAID, deprecated = SAID)]
+    old: bool,
+    #[arg(long, help = env!("CARGO_PKG_NAME"))]
+    from_env: Option<String>,
+    #[arg(long, default_fn = width, default_note = note())]
+    width: u16,
+    #[arg(subcommand)]
+    command: Option<SpecSaidCommand>,
+}
+
+#[derive(Subcommand)]
+enum SpecSaidCommand {
+    /// The doc comment, which the pages keep.
+    #[arg(help = SAID)]
+    Run,
+}
+
+#[derive(ValueEnum)]
+enum SpecSaidChoice {
+    /// The doc comment, which the pages keep.
+    #[arg(help = SAID)]
+    Fast,
+}
+
+#[derive(Args)]
+struct SpecSaidChoices {
+    #[arg(long)]
+    pace: Option<SpecSaidChoice>,
+}
+
+#[test]
+fn a_constant_is_help_s_and_the_pages_say_what_they_would_without_it() {
+    #[cfg(feature = "help-text")]
+    use winnow_args::FromArg;
+    let help = SpecSaid::HELP;
+    #[cfg(feature = "help-text")]
+    let kept = "The doc comment, which the pages keep.";
+    assert_eq!(help.usage, SAID);
+    assert_eq!(help.items[0].deprecated.map(|d| d.message), Some(SAID));
+    assert_eq!(help.items[2].default, Some(note()));
+    #[cfg(feature = "help-text")]
+    {
+        assert_eq!((help.about, help.after_help), (SAID, SAID));
+        assert_eq!((help.items[0].help, help.items[0].long_help), (kept, SAID));
+        assert_eq!(help.items[0].warning, SAID);
+        assert_eq!(help.items[1].help, "winnow-args");
+        assert_eq!(help.subcommands[0].about, SAID);
+        assert_eq!(help.subcommands[0].command.long_about, SAID);
+        assert_eq!(SpecSaidChoice::choice_help(0, ""), SAID);
+    }
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecSaid")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        (command.after_help.as_str(), command.usage.as_str()),
+        ("", "")
+    );
+    let old = &command.items[0];
+    assert_eq!(
+        old.deprecated.as_ref().map(|d| d.message.as_str()),
+        Some("")
+    );
+    assert_eq!(command.items[2].default, None);
+    #[cfg(feature = "help-text")]
+    {
+        assert_eq!(command.about, kept);
+        assert_eq!((old.long_help.as_str(), old.warning.as_str()), (kept, ""));
+        assert_eq!(command.items[1].help, "winnow-args");
+        assert_eq!(command.subcommands[0].about, kept);
+    }
+    let choices = catalog
+        .stitch("SpecSaidChoices")
+        .unwrap_or_else(|error| panic!("{error}"));
+    #[cfg(feature = "help-text")]
+    assert_eq!(choices.items[0].choice_help, [kept]);
+    let _ = choices;
 }

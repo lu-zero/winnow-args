@@ -19,6 +19,13 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `version = EXPR` and `long_version = EXPR`, any `&'static str`
   a constant can be, as `help = EXPR` takes. The man pages list `-V`
   without a VERSION section, as they cannot read the constant.
+- **Added**: `about`, `long_about`, `before_help`, `after_help` and their
+  `long` forms, `usage`, a field's `help`, `long_help`, `warning`,
+  `default_note` and `deprecated`, and a variant's `help` and `deprecated`
+  take a constant too. Help shows it; the pages say what they would without
+  the option.
+- **Fixed**: a field's `help = env!("VAR")` is the variable's value in the
+  pages too, not the doc comment.
 
 ## 0.6.0 (2026-10-31)
 

@@ -129,6 +129,14 @@ mod spec;
 /// with a warning, a `#[doc = …]` the derive cannot read, such as
 /// `include_str!`.
 ///
+/// Text only help and the pages show may also be any `&'static str` a
+/// constant can be, a `const fn` call included: `about`, `long_about`,
+/// `before_help`, `after_help` and their `long` forms, `usage`, `version`,
+/// `long_version`, a field's `help`, `long_help`, `warning`, `default_note`
+/// and `deprecated`, and a variant's `help` and `deprecated`. Help shows it;
+/// the pages, written without running the program, say what they would
+/// without the option.
+///
 /// # Struct options
 ///
 /// Name and help:
@@ -507,6 +515,45 @@ fn const_text(input: syn::parse::ParseStream<'_>) -> syn::Result<(TokenStream2, 
     Ok((quote!(#expr), None))
 }
 
+/// Help prose: text the pages say too, or a constant only help reads.
+#[derive(Clone, Default)]
+struct Said {
+    /// What the pages say: empty for a constant.
+    text: String,
+    constant: Option<TokenStream2>,
+}
+
+impl Said {
+    fn read(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        Ok(match const_text(input)? {
+            (_, Some(text)) => Said {
+                text,
+                constant: None,
+            },
+            (constant, None) => Said {
+                text: String::new(),
+                constant: Some(constant),
+            },
+        })
+    }
+
+    /// The pages' text, or `fallback` where they cannot read the constant.
+    fn page(&self, fallback: &str) -> String {
+        match self.constant {
+            Some(_) => fallback.to_owned(),
+            None => self.text.clone(),
+        }
+    }
+
+    /// The text in help, `""` without the `help-text` feature.
+    fn help(&self) -> TokenStream2 {
+        match &self.constant {
+            Some(constant) => quote!(::winnow_args::__text!(@expr #constant)),
+            None => text(&self.text),
+        }
+    }
+}
+
 const TEXT_EXPECTED: &str = "expected a string literal or `env!(\"VAR\")`";
 
 /// A `#[doc = …]`'s text: a literal or `env!("VAR")`, as for an option.
@@ -788,8 +835,16 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let command = match (&inner, &unit_long_about) {
             (Some(ty), _) => quote!(<#ty as ::winnow_args::Args>::HELP),
             (None, long_about) => {
-                let long_about = text(long_about.as_deref().unwrap_or_default());
-                let about = text(&info.about);
+                let (about, long_about) = match &info.about_constant {
+                    Some(c) => {
+                        let shown = quote!(::winnow_args::__text!(@expr #c));
+                        (shown.clone(), shown)
+                    }
+                    None => (
+                        text(&info.about),
+                        text(long_about.as_deref().unwrap_or_default()),
+                    ),
+                };
                 quote!(&::winnow_args::help::Command {
                     about: #about,
                     long_about: #long_about,
@@ -799,8 +854,9 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 })
             }
         };
-        let about = match (&inner, info.about.is_empty()) {
-            (Some(ty), true) => quote!(<#ty as ::winnow_args::Args>::HELP.about),
+        let about = match (&info.about_constant, &inner, info.about.is_empty()) {
+            (Some(c), _, _) => quote!(::winnow_args::__text!(@expr #c)),
+            (None, Some(ty), true) => quote!(<#ty as ::winnow_args::Args>::HELP.about),
             _ => text(&info.about),
         };
         let shown = &info.names[1..=info.shown];
@@ -2339,7 +2395,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         prefix: field.prefix,
         stop_flags: field.stop_flags,
         keywords,
-        warning: field.warning.clone(),
+        warning: field.warning.page(""),
         effect: field.effect.clone(),
     })
 }
@@ -2370,7 +2426,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let identity = spec::identity(input.ident.span(), &filed);
     let mut spec_choices = Vec::new();
     let mut spec_choice_help = Vec::new();
-    let mut visible_help: Vec<String> = Vec::new();
+    let mut visible_help: Vec<Option<TokenStream2>> = Vec::new();
     let mut variants = Vec::new();
     let mut name_arms = Vec::new();
     for variant in &data.variants {
@@ -2384,6 +2440,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             names: spellings,
             hide,
             about: doc,
+            about_constant,
             deprecation,
             ..
         } = variant_names(variant, &mut names, case)?;
@@ -2400,7 +2457,10 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 spec_choice_help.push(doc.clone());
             }
             visible.push(name);
-            visible_help.push(doc);
+            visible_help.push(match about_constant {
+                Some(c) => Some(quote!(::winnow_args::__text!(@expr #c))),
+                None => (!doc.is_empty()).then(|| text(&doc)),
+            });
         }
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
@@ -2418,15 +2478,11 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         spec::write_choices(input.ident.span(), &filed, &spec_choices, &spec_choice_help)?;
     }
     // A variant that says nothing answers the field's default.
-    let describes = visible_help.iter().any(|help| !help.is_empty());
+    let describes = visible_help.iter().any(Option::is_some);
     let help_arms = visible_help
         .iter()
         .enumerate()
-        .filter(|(_, help)| !help.is_empty())
-        .map(|(index, help)| {
-            let help = text(help);
-            quote!(#index => #help,)
-        });
+        .filter_map(|(index, help)| help.as_ref().map(|help| quote!(#index => #help,)));
     // The field's text, when it writes one, wins.
     let choice_help = describes.then(|| {
         quote! {
@@ -2497,7 +2553,10 @@ struct Variant {
     /// How many of `names` after the first are shown in help.
     shown: usize,
     hide: bool,
+    /// What the pages say, the doc comment's first paragraph for a constant.
     about: String,
+    /// `help = EXPR`: what help shows instead, short and long.
+    about_constant: Option<TokenStream2>,
     /// A subcommand that is deprecated.
     deprecation: Option<DeprecationDoc>,
 }
@@ -2613,6 +2672,7 @@ fn variant_names<'a>(
     let holds_type = !matches!(variant.fields, Fields::Unit);
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
+    let mut about_constant = None;
     let mut deprecation = None;
     for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
@@ -2626,7 +2686,10 @@ fn variant_names<'a>(
             } else if meta.path.is_ident("hide") {
                 hide = true;
             } else if meta.path.is_ident("help") {
-                help = Some(lit_text(meta.value()?)?.value());
+                match const_text(meta.value()?)? {
+                    (_, Some(text)) => help = Some(text),
+                    (constant, None) => about_constant = Some(constant),
+                }
             } else if meta.path.is_ident("long_help") {
                 // The listing shows one line; the subcommand's own help has the rest.
                 lit_text(meta.value()?)?;
@@ -2685,6 +2748,7 @@ fn variant_names<'a>(
         hide,
         deprecation,
         about,
+        about_constant,
     })
 }
 
@@ -3032,7 +3096,9 @@ struct Field {
     hide_choices: bool,
     /// `help = EXPR`, not a literal: the `&'static str` help shows in place
     /// of the doc comment, which the pages keep.
-    help_expr: Option<syn::Expr>,
+    help_expr: Option<TokenStream2>,
+    /// `long_help = EXPR`: the long help's, as `help_expr` is both.
+    long_help_expr: Option<TokenStream2>,
     /// Giving it records a warning, and help marks it.
     deprecation: Option<DeprecationDoc>,
     /// More variables after `env`, read in order.
@@ -3084,7 +3150,7 @@ struct Field {
     /// The function a shell's completion of the value asks.
     complete: Option<syn::Path>,
     /// What to know before using it, shown by `--help`.
-    warning: String,
+    warning: Said,
     /// Help and the pages leave the default out.
     hide_default_value: bool,
     /// Help and the pages leave the environment variable out.
@@ -3126,7 +3192,7 @@ struct Field {
     /// closure that makes it from them.
     default_from: Option<(Vec<Ident>, syn::Expr)>,
     /// What help says of `default_fn`'s value.
-    default_note: Option<String>,
+    default_note: Option<Said>,
     /// `(selector, the value it must have, this field's default then)`.
     default_ifs: Vec<(String, Option<String>, String)>,
     /// Once this positional has a value, flags stop (whatever its `double_dash`).
@@ -3176,16 +3242,15 @@ impl Field {
         } else {
             opt_str(self.value_name.as_deref())
         };
-        let (help, long_help) = match &self.help_expr {
+        let shown = |expr| quote!(::winnow_args::__text!(@expr #expr));
+        let (help, long_help) = match (&self.help_expr, &self.long_help_expr) {
             // The expression is shown in place of the doc comment, short and long.
-            Some(expr) => {
-                let shown = quote!(::winnow_args::__text!(@expr #expr));
-                (shown.clone(), shown)
-            }
-            None => (text(&self.help), text(&self.long_help)),
+            (Some(expr), _) => (shown(expr), shown(expr)),
+            (None, Some(expr)) => (text(&self.help), shown(expr)),
+            (None, None) => (text(&self.help), text(&self.long_help)),
         };
         let heading = opt_str(self.heading.as_deref());
-        let warning = text(&self.warning);
+        let warning = self.warning.help();
         let hide = self.hide;
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
@@ -3209,7 +3274,17 @@ impl Field {
             && !self.keywords
             || self.required;
         let multiple = self.multiple();
-        let default = opt_str(self.shown_default().as_deref());
+        // A constant note is help's alone: the pages say what `default_fn` gives.
+        let note = self
+            .default_note
+            .as_ref()
+            .and_then(|note| note.constant.as_ref());
+        let default = match note {
+            Some(note) if !self.hide_default_value && self.defaults.is_empty() => {
+                quote!(::core::option::Option::Some(#note))
+            }
+            _ => opt_str(self.shown_default().as_deref()),
+        };
         let env = opt_str(self.shown_env());
         // Declared `choices`, else whatever fixed set the value type has.
         let value_ty = value_type(self);
@@ -3495,7 +3570,10 @@ impl Field {
         }
         let stated = (!self.defaults.is_empty())
             .then(|| self.defaults.join(", "))
-            .or_else(|| self.default_note.clone());
+            .or_else(|| {
+                let note = self.default_note.as_ref()?;
+                note.constant.is_none().then(|| note.text.clone())
+            });
         stated.or_else(|| self.computed_default())
     }
 
@@ -3946,16 +4024,22 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     }
     let (doc_about, doc_long_about) = docs(&input.attrs)?;
-    let about = about.unwrap_or(doc_about);
-    let long_about = long_about.unwrap_or(doc_long_about);
-    let (about_text, long_about_text) = (about, long_about);
-    let (after_text, after_long_text) = (after_help, after_long_help);
-    let (about, long_about) = (text(&about_text), text(&long_about_text));
-    let (after_help, after_long_help) = (text(&after_text), text(&after_long_text));
-    let (before_text, before_long_text) = (before_help, before_long_help);
-    let (before_help, before_long_help) = (text(&before_text), text(&before_long_text));
-    let usage_text = usage;
-    let usage = LitStr::new(&usage_text, Span::call_site());
+    // The pages keep the doc comment where help shows a constant.
+    let about_text = about
+        .as_ref()
+        .map_or_else(|| doc_about.clone(), |s| s.page(&doc_about));
+    let long_about_text = long_about
+        .as_ref()
+        .map_or_else(|| doc_long_about.clone(), |s| s.page(&doc_long_about));
+    let about = about.map_or_else(|| text(&doc_about), |s| s.help());
+    let long_about = long_about.map_or_else(|| text(&doc_long_about), |s| s.help());
+    let (after_text, after_long_text) = (after_help.page(""), after_long_help.page(""));
+    let (after_help, after_long_help) = (after_help.help(), after_long_help.help());
+    let (before_text, before_long_text) = (before_help.page(""), before_long_help.page(""));
+    let (before_help, before_long_help) = (before_help.help(), before_long_help.help());
+    // Usage is shown without the `help-text` feature too.
+    let usage_text = usage.page("");
+    let usage = usage.constant.unwrap_or_else(|| quote!(#usage_text));
     let rules = Rules::new(&fields, &groups)?;
     // The program's own check of the built struct.
     let validate = validate.map(|path| quote!(#path(&__built)?;));
@@ -5692,14 +5776,14 @@ struct StructOptions {
     /// The authors, for the pages: a literal, or `CARGO_PKG_AUTHORS`.
     author: Option<String>,
     /// Help text around the lists; `about`/`long_about` default to the doc comment.
-    about: Option<String>,
-    long_about: Option<String>,
-    after_help: String,
-    after_long_help: String,
-    before_help: String,
-    before_long_help: String,
+    about: Option<Said>,
+    long_about: Option<Said>,
+    after_help: Said,
+    after_long_help: Said,
+    before_help: Said,
+    before_long_help: Said,
     /// Usage lines in place of the made one.
-    usage: String,
+    usage: Said,
     /// What `--version` prints in place of `version`: a constant.
     long_version: Option<TokenStream2>,
     disable_help_flag: bool,
@@ -5891,7 +5975,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 ("long_about", &mut options.long_about),
             ] {
                 if meta.path.is_ident(key) {
-                    *slot = Some(text(&meta)?);
+                    *slot = Some(Said::read(meta.value()?)?);
                     return Ok(());
                 }
             }
@@ -5907,7 +5991,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 ("usage", &mut options.usage),
             ] {
                 if meta.path.is_ident(key) {
-                    *slot = text(&meta)?;
+                    *slot = Said::read(meta.value()?)?;
                     return Ok(());
                 }
             }
@@ -6837,7 +6921,7 @@ fn slot(ident: &Ident) -> Ident {
 /// `deprecated_remove_at = "…"`: the last two imply the first.
 #[derive(Clone, Default)]
 struct DeprecationDoc {
-    message: String,
+    message: Said,
     warn_at: Option<String>,
     remove_at: Option<String>,
 }
@@ -6859,7 +6943,9 @@ impl DeprecationDoc {
             Ok(lit_text(meta.value()?)?.value())
         };
         match key {
-            "deprecated" if meta.input.peek(syn::Token![=]) => doc.message = text(meta)?,
+            "deprecated" if meta.input.peek(syn::Token![=]) => {
+                doc.message = Said::read(meta.value()?)?;
+            }
             "deprecated" => {}
             "deprecated_warn_at" => doc.warn_at = Some(text(meta)?),
             _ => doc.remove_at = Some(text(meta)?),
@@ -6873,6 +6959,10 @@ impl DeprecationDoc {
             return quote!(::core::option::Option::None);
         };
         let message = &doc.message;
+        let message = message.constant.clone().unwrap_or_else(|| {
+            let text = &message.text;
+            quote!(#text)
+        });
         let (warn_at, remove_at) = (
             opt_str(doc.warn_at.as_deref()),
             opt_str(doc.remove_at.as_deref()),
@@ -6887,7 +6977,7 @@ impl DeprecationDoc {
     /// What the fragments write: `(message, warn_at, remove_at)`.
     fn spec(&self) -> (String, Option<String>, Option<String>) {
         (
-            self.message.clone(),
+            self.message.page(""),
             self.warn_at.clone(),
             self.remove_at.clone(),
         )
@@ -6941,7 +7031,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut choices = None;
     let mut choice_help = Vec::new();
     let mut hide_choices = false;
-    let mut help_expr = None;
+    let (mut help_expr, mut long_help_expr) = (None, None);
     let mut deprecation = None;
     let mut env_fallback = Vec::new();
     let mut deprecated_env = Vec::new();
@@ -6967,7 +7057,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs)?;
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
-    let mut warning = String::new();
+    let mut warning = Said::default();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
     let mut parse_with = None;
@@ -7037,15 +7127,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("visible_alias") {
                 visible.extend(aliases(&meta)?);
             } else if meta.path.is_ident("help") {
-                match meta.value()?.parse::<syn::Expr>()? {
-                    syn::Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(text),
-                        ..
-                    }) => help = Some(text.value()),
-                    expr => help_expr = Some(expr),
+                match const_text(meta.value()?)? {
+                    (_, Some(text)) => help = Some(text),
+                    (expr, None) => help_expr = Some(expr),
                 }
             } else if meta.path.is_ident("long_help") {
-                long_help = Some(lit_text(meta.value()?)?.value());
+                match const_text(meta.value()?)? {
+                    (_, Some(text)) => long_help = Some(text),
+                    (expr, None) => long_help_expr = Some(expr),
+                }
             } else if meta.path.is_ident("help_heading") {
                 heading = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("hide") {
@@ -7068,7 +7158,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("display_order") {
                 display_order = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse::<usize>()?);
             } else if meta.path.is_ident("warning") {
-                warning = lit_text(meta.value()?)?.value();
+                warning = Said::read(meta.value()?)?;
             } else if meta.path.is_ident("effect") {
                 effect = Some(effect_name(&meta)?);
             } else if meta.path.is_ident("negate") {
@@ -7116,7 +7206,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("default_fn") {
                 default_fn = Some(meta.value()?.parse::<syn::ExprPath>()?);
             } else if meta.path.is_ident("default_note") {
-                default_note = Some(lit_text(meta.value()?)?.value());
+                default_note = Some(Said::read(meta.value()?)?);
             } else if meta.path.is_ident("default_if") {
                 let content;
                 syn::parenthesized!(content in meta.input);
@@ -7627,7 +7717,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`spec` names the type of a field's value, and this field has none".into());
     }
-    if help_expr.is_some() && long_help.is_some() {
+    if help_expr.is_some() && (long_help.is_some() || long_help_expr.is_some()) {
         return error(
             "`help = …` with a constant is the long help too: `long_help` beside it is unused"
                 .into(),
@@ -7658,6 +7748,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         choice_help,
         hide_choices,
         help_expr,
+        long_help_expr,
         deprecation,
         env_fallback,
         deprecated_env,
