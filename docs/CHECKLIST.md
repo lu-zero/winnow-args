@@ -58,7 +58,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `Vec<Option<T>>` (each occurrence's value or none)
 - [x] `delimiter`, `values = N` (with `value_names`), `values = 1..` /
       `a..=b` with `value_terminator`, `choices(…)`, `ValueEnum` (`name`,
-      `alias`, `alias_hidden`, `hide`, `rename_all`)
+      `alias`, `alias_hidden`, `hide`, `rename_all`); a variant's `name()`
+      and `names()`, every one in `variants()`
 - [x] Command line > `env` > `default_if` > `default` or `default_fn` (with
       `default_note`); `default_missing` for an optional value; an `Option`
       field with `require_equals` holds `None` for a bare flag; a bare `env`

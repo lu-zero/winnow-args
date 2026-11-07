@@ -1300,6 +1300,9 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 /// - `help = "…"`: what the value means, in place of the doc comment's first
 ///   paragraph. The long help and the pages list each value with it, one a
 ///   line, when one of them says something. `long_help = "…"` is unused.
+///
+/// It implements the `ValueEnum` trait too: `Color::WhenTerminal.name()` is
+/// `"auto"`, and `Color::variants()` lists every variant.
 #[proc_macro_derive(ValueEnum, attributes(arg, winnow_args))]
 pub fn derive_value_enum(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -2260,6 +2263,8 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut spec_choices = Vec::new();
     let mut spec_choice_help = Vec::new();
     let mut visible_help: Vec<String> = Vec::new();
+    let mut variants = Vec::new();
+    let mut name_arms = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -2292,6 +2297,9 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
         arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
+        let enum_name = &input.ident;
+        variants.push(quote!(#enum_name::#ident));
+        name_arms.push(quote!(Self::#ident => &[#(#spellings),*],));
     }
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -2342,6 +2350,23 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     _ => ::core::result::Result::Err(::std::boxed::Box::new(
                         ::winnow_args::ChoiceError { choices: Self::CHOICES },
                     )),
+                }
+            }
+        }
+
+        // Naming a deprecated variant is the enum's own business.
+        #[automatically_derived]
+        #[allow(deprecated)]
+        impl #impl_generics ::winnow_args::ValueEnum for #name #ty_generics #where_clause {
+            fn variants() -> &'static [Self] {
+                const VARIANTS: &[#name] = &[#(#variants),*];
+                VARIANTS
+            }
+
+            fn names(&self) -> &'static [&'static str] {
+                // By value, so an enum with no variants matches nothing.
+                match *self {
+                    #(#name_arms)*
                 }
             }
         }

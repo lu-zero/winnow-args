@@ -196,3 +196,32 @@ fn a_hidden_variant_is_accepted_but_never_offered() {
     let e = parse(&["--mode=bogus"]).unwrap_err();
     assert!(e.to_string().ends_with("expected one of shown"), "{e}");
 }
+
+#[test]
+fn a_variant_spells_itself_as_the_command_line_takes_it() {
+    assert_eq!(Part::Packages.name(), "pkgs");
+    assert_eq!(Part::Packages.names(), ["pkgs", "packages"]);
+    assert_eq!(Part::MiseShellActivate.name(), "mise-shell-activate");
+    assert_eq!(Spelled::FileName.name(), "file");
+    assert_eq!(Mode::variants(), [Mode::Shown, Mode::Secret]);
+    assert_eq!(Mode::Secret.name(), "secret");
+}
+
+#[derive(ValueEnum)]
+enum Nothing {}
+
+#[deny(deprecated)]
+mod deprecated_variant {
+    #[derive(winnow_args::ValueEnum, Debug, PartialEq)]
+    pub enum Speed {
+        Fast,
+        #[deprecated]
+        Slow,
+    }
+}
+
+#[test]
+fn an_empty_or_deprecated_enum_derives_without_a_warning() {
+    assert!(Nothing::variants().is_empty());
+    assert_eq!(deprecated_variant::Speed::variants().len(), 2);
+}

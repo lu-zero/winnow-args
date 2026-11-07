@@ -149,7 +149,7 @@ pub use env::with_env;
 pub use error::{Error, ErrorKind};
 pub use stream::{Argv, words};
 pub use token::Arg;
-pub use value::{ChoiceError, FromArg};
+pub use value::{ChoiceError, FromArg, ValueEnum};
 /// A word of the command line, and a flag's value: bytes, not necessarily
 /// UTF-8. What [`FromArg::from_arg`] is given.
 pub use winnow::stream::BStr;

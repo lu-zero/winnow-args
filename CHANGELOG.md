@@ -4,6 +4,13 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: the `ValueEnum` trait, which `#[derive(ValueEnum)]` implements:
+  `name()` is the spelling a variant is given on the command line,
+  `names()` that and its aliases, and `variants()` every variant, as clap's
+  `to_possible_value` and `value_variants`.
+
 ## 0.6.0 (2026-10-31)
 
 - **Added**: a `Vec<bool>` with `plus` equal to `short` records every

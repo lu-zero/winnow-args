@@ -117,6 +117,38 @@ pub trait FromArg: Sized {
     fn from_arg(value: &BStr) -> Result<Self, BoxError>;
 }
 
+/// An enum of choices, its variants and their spellings: what
+/// `#[derive(ValueEnum)]` implements beside [`FromArg`].
+///
+#[cfg_attr(feature = "derive", doc = "```")]
+#[cfg_attr(not(feature = "derive"), doc = "```ignore")]
+/// use winnow_args::ValueEnum;
+///
+/// #[derive(ValueEnum, Debug, PartialEq)]
+/// #[arg(rename_all = "lowercase")]
+/// enum Compression {
+///     Zip,
+///     #[arg(name = "tgz", alias = "tar.gz")]
+///     TarGz,
+/// }
+///
+/// assert_eq!(Compression::TarGz.name(), "tgz");
+/// assert_eq!(Compression::TarGz.names(), ["tgz", "tar.gz"]);
+/// assert_eq!(Compression::variants(), [Compression::Zip, Compression::TarGz]);
+/// ```
+pub trait ValueEnum: Sized + 'static {
+    /// Every variant, in the order they are declared, hidden ones included.
+    fn variants() -> &'static [Self];
+
+    /// Every spelling that selects the variant: its name, then its aliases.
+    fn names(&self) -> &'static [&'static str];
+
+    /// The spelling help shows for the variant.
+    fn name(&self) -> &'static str {
+        self.names()[0]
+    }
+}
+
 /// The cause of an [`ErrorKind::InvalidChoice`](crate::ErrorKind::InvalidChoice):
 /// the value is not one of `choices`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
