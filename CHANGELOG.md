@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.2 (2026-11-13)
 
 - **Added**: a user palette from the environment, as `GCC_COLORS`:
   `Palette::with_env("PROG_COLORS")` and `Style::with_env` repaint the roles
@@ -20,10 +20,14 @@ released together. Versions follow [semver](https://semver.org).
   that differ only in case are a compile error.
 - **Added**: `ValueEnum::help()`, what a variant means: its `help`, else
   the doc comment's first paragraph, beside `name()`. It is empty for a
-  hand-written implementation, which needs no change.
+  hand-written implementation, which needs no change, and in a build without
+  `help-text`. A trait of your own with a `help(&self)` method on the same
+  enum needs `Trait::help(&x)` where `x.help()` is now ambiguous.
 - **Added**: `override_self = "last" | "first" | "error"`, on a field or on
   the struct: a flag given twice keeps its last value (as before), its
-  first, or fails with the new `ErrorKind::RepeatedFlag`. It is usage's
+  first, or fails with the new `ErrorKind::RepeatedFlag`, last in the enum,
+  and `Error::repeated` (the enum is `#[non_exhaustive]`, so a `match` has an
+  arm for it already). It is usage's
   `args_override_self`, which is a boolean and has no `first`. A count and a
   list collect whatever it says, and say so at compile time if it is set.
 - **Added**: three command settings after clap's and usage's, each on a struct
@@ -31,7 +35,9 @@ released together. Versions follow [semver](https://semver.org).
   leaves the struct's requirements unmet), `args_conflicts_with_subcommands`
   (its own flags and positionals exclude one, `ErrorKind::Conflict`) and
   `subcommand_precedence_over_arg` (a subcommand's name ends a `values = n..`
-  flag, and wins over a filled positional).
+  flag, and wins over a filled positional). The conflict also holds when the
+  default subcommand is taken for an empty line or an unknown flag. The
+  derive reads a `values = n..` flag through the new `Arg::read_more_unless`.
 
 ## 0.6.1 (2026-11-07)
 
