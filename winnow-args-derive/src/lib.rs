@@ -283,8 +283,9 @@ mod spec;
 /// # Flag names
 ///
 /// - `short`, or `short = 'x'`: `-x`. With no letter, the field name's first
-///   character. `short_alias = 'x'`, or a second `short`, is another letter
-///   beside it, and help lists both (clap's `visible_short_alias`).
+///   character. `short_alias = 'x'`, `short_alias('x', 'y')` or a second
+///   `short` is another letter beside it, and help lists them (clap's
+///   `visible_short_alias`).
 /// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
 ///   `_` in the field name is written `-`. Help lists the first `long` only.
 /// - `alias = "…"`, or `alias("…", …)`: further long names. Help leaves them out.
@@ -2955,6 +2956,24 @@ fn aliases(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<String>> {
         &content, lit_text,
     )?;
     Ok(names.iter().map(LitStr::value).collect())
+}
+
+/// `short_alias = 'x'` or `short_alias('x', 'y')`.
+fn letters(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<Vec<char>> {
+    if meta.input.peek(syn::Token![=]) {
+        return Ok(vec![meta.value()?.parse::<LitChar>()?.value()]);
+    }
+    let content;
+    syn::parenthesized!(content in meta.input);
+    let letters =
+        syn::punctuated::Punctuated::<LitChar, syn::Token![,]>::parse_terminated(&content)?;
+    if letters.is_empty() {
+        return Err(syn::Error::new(
+            content.span(),
+            "`short_alias()` names no letter",
+        ));
+    }
+    Ok(letters.iter().map(LitChar::value).collect())
 }
 
 /// `key("a", "b", message = "…")` or `key = "a"`: each selector, with the
@@ -7529,7 +7548,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 keywords = true;
             } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
             } else if meta.path.is_ident("short_alias") {
-                short_aliases.push(meta.value()?.parse::<LitChar>()?.value());
+                short_aliases.extend(letters(&meta)?);
             } else if meta.path.is_ident("plus") {
                 plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {

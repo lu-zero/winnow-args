@@ -232,3 +232,31 @@ fn ignore_case_matches_any_ascii_case() {
     assert!(level("verbose").is_err());
     assert!(level("").is_err());
 }
+
+#[derive(Args, Debug, PartialEq)]
+struct Drop {
+    #[arg(short = 'R', short_alias('P', 'd'), long)]
+    drop: bool,
+    #[arg(short = 'v', short_alias = 'V')]
+    verbose: bool,
+}
+
+#[test]
+fn short_alias_takes_a_list_of_letters() {
+    let parse = |line: &[&str]| {
+        let words = crate::words(line);
+        Drop::parse_words(&words).unwrap()
+    };
+    for letter in ["-R", "-P", "-d"] {
+        assert!(parse(&[letter]).drop, "{letter}");
+    }
+    let both = parse(&["-Pv"]);
+    assert!(both.drop && both.verbose);
+    assert!(parse(&["-V"]).verbose);
+    let words = crate::words(&["--help"]);
+    let help = Drop::parse_words(&words)
+        .unwrap_err()
+        .render_help("drop")
+        .unwrap();
+    assert!(help.contains("-R, -P, -d, --drop"), "{help}");
+}

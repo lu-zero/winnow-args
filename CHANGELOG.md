@@ -4,6 +4,12 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: `short_alias('P', 'd')`, several letters in one `short_alias`,
+  as `alias("a", "b")` is for long names. A repeated `short_alias` is
+  flagged by clippy's `duplicated_attributes` as a repeated `short` is.
+
 ## 0.6.2 (2026-11-13)
 
 - **Added**: a user palette from the environment, as `GCC_COLORS`:

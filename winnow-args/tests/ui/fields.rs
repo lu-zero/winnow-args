@@ -264,3 +264,9 @@ struct NegatesWithARequiredEnv {
     #[arg(subcommand)]
     sub: Option<Sub>,
 }
+
+#[derive(Args)]
+struct EmptyShortAlias {
+    #[arg(short = 'a', short_alias(), long)]
+    quiet: bool,
+}
