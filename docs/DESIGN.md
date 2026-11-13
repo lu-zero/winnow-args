@@ -109,3 +109,43 @@ Generated code calls what users should not through `winnow_args::__private`,
 and builds `help::Item`, `help::Command` and `token::ValueOptions` by struct
 literal. Those types can gain fields in a release; the derive of the same
 release fills them, so the two crates are released together (`=` version).
+
+## Choices that are suggestions: a catch-all variant (planned for 0.7)
+
+usage's `choices_strict = false` keeps a field's choices for help and
+completion and accepts any other value. On a `String` field that is a flag.
+On a `ValueEnum` it cannot be one, since the enum has no variant for an
+unknown word, and usage rejects the combination. Here the enum says it:
+
+```rust
+#[derive(ValueEnum)]
+enum Backend {
+    Core,
+    Git,
+    #[arg(other)]
+    Other(String),
+}
+```
+
+- Parsing tries the spellings first, folded when `ignore_case` is set, so a
+  known word always wins. Anything else goes through `T::from_arg` into
+  `Other(T)`. A bad value fails with `T`'s error, never `InvalidChoice`.
+- Help and completion list the named variants and leave the catch-all out.
+  A usage KDL emitter, when there is one, writes it as usage does:
+  `choices strict=#false core git`. The pages of `winnow-args-spec` say
+  "or any other value".
+- Compile-time rules: at most one catch-all, holding exactly one field, with
+  no `name`, `alias` or `hide`.
+
+The `ValueEnum` trait does not fit it, so this waits for a release that may
+break the API. `variants()` returns `&'static [Self]` and cannot list a
+variant that holds data. `names(&self)` returns `&'static [&'static str]` and
+cannot spell `Other("x")`. `name()` takes `names()[0]`, which panics on an
+empty slice. Keeping the signatures would leave `Other`'s names empty and
+`name()` guarded, and the caller to write an `Other(x)` back out by `match`.
+The fix is a `name(&self) -> Cow<'_, str>` with `names` to match, and a
+`variants()` that says it lists the named variants only.
+
+Until then `choices_strict = false` on a `String` field is the only form, if
+it is wanted before: the same note in the pages and no `InvalidChoice` check,
+and a compile error on a `ValueEnum` field, as in usage.

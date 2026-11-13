@@ -203,7 +203,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] A negative number routed into a default subcommand's positional
       where it opts in, at any depth, and kept by the root's where only
       that one does
-- [ ] `choices_strict = false`: choices as suggestions only
+- [ ] `choices_strict = false`: choices as suggestions only; the enum form,
+      a catch-all variant, waits for 0.7 (see DESIGN.md)
 - [x] Custom value parsers in the derive (`parse_with`)
 - [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names
       rejected cleanly
