@@ -365,6 +365,56 @@ impl Paint {
         }
     }
 
+    /// A paint from SGR parameters as `GCC_COLORS` spells them: numbers
+    /// joined by `;`. `1` bold, `2` dim, `3` italic, `4` underline, `30`–`37`
+    /// and `90`–`97` the basic colors, `38;5;N` and `38;2;R;G;B` deeper ones,
+    /// `39` no color, `0`, an empty field and the empty string nothing,
+    /// `22`–`24` take an attribute off. `None` for anything else, a background included.
+    pub fn parse_sgr(spec: &str) -> Option<Paint> {
+        let mut paint = Paint::NONE;
+        if spec.is_empty() {
+            return Some(paint);
+        }
+        // An empty field is `0`, as a terminal reads it; a sign is no SGR.
+        let code = |text: &str| match text {
+            "" => Some(0),
+            _ if text.starts_with('+') => None,
+            _ => text.parse::<u8>().ok(),
+        };
+        let mut codes = spec.split(';');
+        let number = |codes: &mut dyn Iterator<Item = &str>| code(codes.next()?);
+        while let Some(text) = codes.next() {
+            match code(text)? {
+                0 => paint = Paint::NONE,
+                1 => paint.bold = true,
+                2 => paint.dim = true,
+                3 => paint.italic = true,
+                4 => paint.underline = true,
+                22 => (paint.bold, paint.dim) = (false, false),
+                23 => paint.italic = false,
+                24 => paint.underline = false,
+                n @ (30..=37 | 90..=97) => {
+                    let index = if n < 90 { n - 30 } else { n - 90 + 8 };
+                    paint.fg = Some(Color::Ansi(Ansi::ALL[usize::from(index)]));
+                }
+                38 => {
+                    paint.fg = Some(match number(&mut codes)? {
+                        5 => Color::Ansi256(number(&mut codes)?),
+                        2 => {
+                            let r = number(&mut codes)?;
+                            let g = number(&mut codes)?;
+                            Color::Rgb(r, g, number(&mut codes)?)
+                        }
+                        _ => return None,
+                    });
+                }
+                39 => paint.fg = None,
+                _ => return None,
+            }
+        }
+        Some(paint)
+    }
+
     /// Append `text` painted for a terminal of `depth`: one SGR sequence,
     /// the text, a reset. Plain when `depth` is [`Depth::None`] or there is
     /// nothing to paint.
@@ -539,6 +589,50 @@ impl Palette {
         strong: Paint::NONE,
     };
 
+    /// The palette with the roles `spec` names repainted. `spec` is `GCC_COLORS`
+    /// style: `role=SGR` entries joined by `:`, as `error=01;31:flag=38;5;71`
+    /// (see [`Paint::parse_sgr`]). The roles are the field names; an entry
+    /// with an unknown role or an SGR that is not understood is skipped.
+    pub fn with_spec(mut self, spec: &str) -> Palette {
+        for entry in spec.split(':') {
+            let Some((role, sgr)) = entry.split_once('=') else {
+                continue;
+            };
+            let Some(paint) = Paint::parse_sgr(sgr) else {
+                continue;
+            };
+            match role {
+                "header" => self.header = paint,
+                "usage" => self.usage = Some(paint),
+                "program" => self.program = paint,
+                "flag" => self.flag = paint,
+                "command" => self.command = paint,
+                "placeholder" => self.placeholder = paint,
+                "error" => self.error = paint,
+                "invalid" => self.invalid = paint,
+                "valid" => self.valid = paint,
+                "env" => self.env = paint,
+                "default" => self.default = paint,
+                "choice" => self.choice = paint,
+                "dim" => self.dim = paint,
+                "code" => self.code = paint,
+                "emphasis" => self.emphasis = paint,
+                "strong" => self.strong = paint,
+                _ => {}
+            }
+        }
+        self
+    }
+
+    /// [`with_spec`](Palette::with_spec) for the environment variable `var`,
+    /// if it is set: the user's palette, as `GCC_COLORS` is.
+    pub fn with_env(self, var: &str) -> Palette {
+        match crate::env::var(var).and_then(|spec| spec.into_string().ok()) {
+            Some(spec) => self.with_spec(&spec),
+            None => self,
+        }
+    }
+
     /// The deepest color any role uses.
     pub const fn depth(&self) -> Depth {
         let usage = match self.usage {
@@ -644,6 +738,57 @@ mod tests {
         // A basic color is shown as itself everywhere.
         let cyan = Color::Ansi(Ansi::Cyan);
         assert_eq!(cyan.at(Depth::Ansi256), Some(cyan));
+    }
+
+    #[test]
+    fn sgr_parameters_make_a_paint() {
+        assert_eq!(
+            Paint::parse_sgr("01;31"),
+            Some(Paint::ansi(Ansi::Red).bold())
+        );
+        assert_eq!(
+            Paint::parse_sgr("4;38;5;71"),
+            Some(Paint::fg(Color::Ansi256(71)).underline())
+        );
+        assert_eq!(
+            Paint::parse_sgr("38;2;1;2;3"),
+            Some(Paint::fg(Color::Rgb(1, 2, 3)))
+        );
+        assert_eq!(
+            Paint::parse_sgr("1;92;22"),
+            Some(Paint::ansi(Ansi::BrightGreen))
+        );
+        assert_eq!(Paint::parse_sgr(""), Some(Paint::NONE));
+        assert_eq!(Paint::parse_sgr("1;0"), Some(Paint::NONE));
+        // A background, a half-written color and a word are not understood.
+        assert_eq!(Paint::parse_sgr("1;;31"), Some(Paint::ansi(Ansi::Red)));
+        for bad in ["41", "38;5", "38;7;1", "bold", "300", "+1"] {
+            assert_eq!(Paint::parse_sgr(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_spec_repaints_the_roles_it_names() {
+        let palette =
+            Palette::DEFAULT.with_spec("error=01;35:flag=:bogus=1:usage=4:code=zz:nonsense");
+        assert_eq!(palette.error, Paint::ansi(Ansi::Magenta).bold());
+        assert_eq!(palette.flag, Paint::NONE);
+        assert_eq!(palette.usage, Some(Paint::NONE.underline()));
+        // Skipped entries leave their role as it was.
+        assert_eq!(palette.code, Palette::DEFAULT.code);
+        assert_eq!(palette.header, Palette::DEFAULT.header);
+    }
+
+    #[test]
+    fn the_environment_names_the_spec() {
+        let colors = |vars: &[(&str, &str)]| {
+            crate::with_env(vars, || Palette::DEFAULT.with_env("EM_COLORS"))
+        };
+        assert_eq!(colors(&[]), Palette::DEFAULT);
+        assert_eq!(
+            colors(&[("EM_COLORS", "header=32")]).header,
+            Paint::ansi(Ansi::Green)
+        );
     }
 
     #[test]

@@ -568,6 +568,15 @@ impl Style {
         Style::at(theme.palette(depth), depth)
     }
 
+    /// The style with its palette repainted by the user's variable `var`, as
+    /// [`Palette::with_env`] reads it: `Style::auto().with_env("PROG_COLORS")`.
+    pub fn with_env(self, var: &str) -> Style {
+        Style {
+            palette: self.palette.with_env(var),
+            ..self
+        }
+    }
+
     fn ink(self, paint: Paint) -> Ink {
         Ink {
             paint,

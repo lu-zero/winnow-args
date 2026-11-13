@@ -4,6 +4,14 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Added**: a user palette from the environment, as `GCC_COLORS`:
+  `Palette::with_env("PROG_COLORS")` and `Style::with_env` repaint the roles
+  a variable names (`error=01;31:flag=38;5;71`, the roles the field names of
+  `Palette`). `Palette::with_spec` takes the text, and `Paint::parse_sgr`
+  one paint; an entry that is not understood is skipped.
+
 ## 0.6.1 (2026-11-07)
 
 - **Added**: the `ValueEnum` trait, which `#[derive(ValueEnum)]` implements:
