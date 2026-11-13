@@ -188,6 +188,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
   compile time; usage lets an optional before a required one reserve the last
   word, which needs lookahead.
 - **Unknown flags are errors** by default (usage treats them as values).
+- **`override_self`** counts `--x` and `--no-x` as one flag, where usage
+  tracks each spelling apart, and a global flag given before and after a
+  subcommand as a repeat, where usage restarts its tracking there. A repeat
+  is a repeat wherever it comes; a restart would let `error` pass it.
 - **Help and errors** use winnow-args' own layout and wording, not bash's or
   GNU ld's.
 - **Windows** is out of scope: no console API, no Windows-only detection.
@@ -224,9 +228,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 ### Commands
 
-- [ ] `args_override_self = false`, `subcommand_negates_reqs`,
-      `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`,
-      `dont_delimit_trailing_values`
+- [x] `override_self = "last" | "first" | "error"` (usage's
+      `args_override_self`, with `first` beyond it), per field or per struct
+- [ ] `subcommand_negates_reqs`, `args_conflicts_with_subcommands`,
+      `subcommand_precedence_over_arg`, `dont_delimit_trailing_values`
 - [x] `default_subcommand_help`; completion of the default subcommand's flags
       before it is named
 - [x] `default_subcommand_on_empty`

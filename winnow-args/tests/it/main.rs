@@ -44,6 +44,7 @@ mod negative;
 mod no_help_text;
 mod occurrence;
 mod optional_value;
+mod override_self;
 mod parse_with;
 mod plus_options;
 mod positionals;

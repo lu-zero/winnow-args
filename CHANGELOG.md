@@ -21,6 +21,11 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `ValueEnum::help()`, what a variant means: its `help`, else
   the doc comment's first paragraph, beside `name()`. It is empty for a
   hand-written implementation, which needs no change.
+- **Added**: `override_self = "last" | "first" | "error"`, on a field or on
+  the struct: a flag given twice keeps its last value (as before), its
+  first, or fails with the new `ErrorKind::RepeatedFlag`. It is usage's
+  `args_override_self`, which is a boolean and has no `first`. A count and a
+  list collect whatever it says, and say so at compile time if it is set.
 
 ## 0.6.1 (2026-11-07)
 

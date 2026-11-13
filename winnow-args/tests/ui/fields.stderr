@@ -1,4 +1,4 @@
-error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
  --> tests/ui/fields.rs:6:17
   |
 6 |     #[arg(long, hdie)]
@@ -182,6 +182,30 @@ error: `short_alias` is another letter beside a `short`, which this lacks
    --> tests/ui/fields.rs:210:5
     |
 210 |     #[arg(long, short_alias = 'L')]
+    |     ^
+
+error: `override_self` is for a flag that holds one value, or a switch
+   --> tests/ui/fields.rs:216:5
+    |
+216 |     #[arg(short, long, count, override_self = "first")]
+    |     ^
+
+error: expected "last", "first" or "error"
+   --> tests/ui/fields.rs:222:33
+    |
+222 |     #[arg(long, override_self = "newest")]
+    |                                 ^^^^^^^^
+
+error: `override_self` is for a flag that holds one value, or a switch
+   --> tests/ui/fields.rs:228:5
+    |
+228 |     #[arg(long, override_self = "error")]
+    |     ^
+
+error: `override_self` is for a flag that holds one value, or a switch
+   --> tests/ui/fields.rs:234:5
+    |
+234 |     #[arg(positional, override_self = "error")]
     |     ^
 
 warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the pages leave this doc comment out: they read a string literal or `env!("VAR")`

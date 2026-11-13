@@ -63,6 +63,8 @@ pub enum ErrorKind {
     /// The parsed values failed the program's own check: a struct's
     /// `validate` function returned [`Error::invalid`].
     Invalid,
+    /// A flag that may be given once was given again.
+    RepeatedFlag,
 }
 
 /// What `--help` or `--version` asked for, and where.
@@ -214,6 +216,12 @@ impl Error {
         let mut error = Self::with_token(ErrorKind::Conflict, offset, name.into());
         error.detail_mut().value = Some(other.to_owned());
         error
+    }
+
+    /// `name` was given again, and its command does not take the last (or the
+    /// first) of several.
+    pub fn repeated(offset: usize, name: impl Into<String>) -> Self {
+        Self::with_token(ErrorKind::RepeatedFlag, offset, name.into())
     }
 
     /// The required group `group` had none of `members`.
@@ -527,6 +535,7 @@ impl Error {
                     self.missing().map(|n| format!("`{}`", good(&n))).collect();
                 format!("{NOT_PROVIDED}: {}", names.join(", "))
             }
+            ErrorKind::RepeatedFlag => format!("`{}` was given more than once", bad(token)),
             ErrorKind::Conflict => format!("`{}` cannot be used with `{}`", bad(token), bad(value)),
             ErrorKind::HelpRequested => "help requested".to_owned(),
             ErrorKind::VersionRequested => "version requested".to_owned(),

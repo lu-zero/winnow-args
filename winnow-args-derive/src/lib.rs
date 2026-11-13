@@ -170,6 +170,9 @@ mod spec;
 ///   long texts are for the pages. It is this struct's: a subcommand's
 ///   struct has its own.
 /// - `arg_required_else_help`: an empty command line asks for help.
+/// - `override_self = "last"`, `"first"` or `"error"`: what a flag of this
+///   struct given twice does, unless the field says. The last one is kept by
+///   default. It is this struct's: a subcommand's struct has its own.
 /// - `example = "tool build --release"`: one line in an Examples section after
 ///   the lists, shown as written. Help paints its subcommands, flags,
 ///   `<NAME>` placeholders and `# comment`; a man page sets the program,
@@ -398,6 +401,14 @@ mod spec;
 /// - `conflicts("…", …)`: the parse fails when this field and any of those are
 ///   both supplied.
 /// - `overrides("…", …)`: of this field and those, the last one supplied is kept.
+/// - `override_self = "last"`, `"first"` or `"error"`: the field given twice
+///   keeps its last value (the default), its first, or fails with
+///   `ErrorKind::RepeatedFlag`, before its value is read. With `"first"` a
+///   later value is still read and checked. Only the command line counts:
+///   `env` and defaults are not an occurrence, and `--x` and `--no-x` are
+///   one flag. A flattened struct has its own struct-level setting, not the
+///   outer one. For a flag that holds one value, or a switch; a count and a
+///   list collect.
 /// - `requires("…", …)`: when this field is supplied, each of those has a value.
 ///   A group's name means one of its members does. A field of that name wins.
 /// - `message = "…"` after the names of `conflicts` or `requires`: said in
@@ -3198,6 +3209,8 @@ struct Field {
     conflicts: Vec<(String, Option<String>)>,
     /// Selectors this field replaces, and that replace it: the last one given wins.
     overrides: Vec<String>,
+    /// What the flag given twice does, where the field says.
+    override_self: Option<OverrideSelf>,
     /// Selectors that must have a value when this field is supplied, each with
     /// the message said in place of the default one.
     requires: Vec<(String, Option<String>)>,
@@ -3981,6 +3994,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         role_alone(f)?;
     }
     let StructOptions {
+        override_self,
         groups,
         restart_token,
         default_subcommand,
@@ -4129,8 +4143,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
+    // What a flag given twice does, for a field that holds one value or is a switch.
+    let repeat_of = |f: &Field| match f.override_self.or(override_self).unwrap_or_default() {
+        _ if f.keywords
+            || f.tristate
+            || !matches!(f.role, Role::Flag { .. })
+            || !matches!(f.kind, Kind::Switch | Kind::Optional(_) | Kind::Required(_)) =>
+        {
+            OverrideSelf::Last
+        }
+        mode => mode,
+    };
+
     // Each field's slot: its name, type and starting value.
-    let slot_parts: Vec<(Ident, TokenStream2, TokenStream2)> = fields
+    let mut slot_parts: Vec<(Ident, TokenStream2, TokenStream2)> = fields
         .iter()
         .map(|f| {
             let none = quote!(::core::option::Option::None);
@@ -4150,9 +4176,45 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             (slot(&f.ident), ty, init)
         })
         .collect();
+    // Whether a flag was given, for the fields that act on a second one: the
+    // value cannot say (`--x=false`, a bare `--x=`-only flag, a `--no-x`).
+    slot_parts.extend(
+        fields
+            .iter()
+            .filter(|f| repeat_of(f) != OverrideSelf::Last)
+            .map(|f| (seen_flag(&f.ident), quote!(bool), quote!(false))),
+    );
     let slots = slot_parts
         .iter()
         .map(|(ident, ty, init)| quote!(let mut #ident: #ty = #init;));
+
+    // `stored`, a flag occurrence, as its field's `override_self` has it.
+    let guard = |f: &Field, stored: TokenStream2| {
+        let ident = slot(&f.ident);
+        let seen = seen_flag(&f.ident);
+        match repeat_of(f) {
+            OverrideSelf::Last => stored,
+            OverrideSelf::Error => quote! {
+                if #seen {
+                    return ::core::result::Result::Err(
+                        __wa::Error::repeated(__arg.offset(), __arg.spelling()),
+                    );
+                }
+                #seen = true;
+                #stored
+            },
+            // Read and checked as any occurrence, then put back.
+            OverrideSelf::First => quote! {
+                let __given = #seen;
+                #seen = true;
+                let __first = ::core::mem::take(&mut #ident);
+                #stored
+                if __given {
+                    #ident = __first;
+                }
+            },
+        }
+    };
 
     // What storing one flag occurrence looks like; the same for both spellings.
     let store = |f: &Field| {
@@ -4319,6 +4381,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }),
             },
         };
+        let stored = guard(f, stored);
         quote!(#stored #displace)
     };
 
@@ -4326,14 +4389,14 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let no = LitByteStr::new(f.negate.as_ref()?.as_bytes(), Span::call_site());
         let ident = slot(&f.ident);
         let displace = rules.displace(&fields, f);
-        Some((
-            quote!(#no),
+        let stored = guard(
+            f,
             quote! {
                 __arg.check_switch()?;
                 #ident = ::core::option::Option::Some(false);
-                #displace
             },
-        ))
+        );
+        Some((quote!(#no), quote!(#stored #displace)))
     };
     // A `+c` occurrence: a tristate's `Some(false)` (or `false` pushed), else what `-c` stores.
     let plus = |f: &Field| {
@@ -5817,9 +5880,35 @@ struct Group {
     message: Option<String>,
 }
 
+/// What a flag given twice does.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum OverrideSelf {
+    #[default]
+    Last,
+    First,
+    Error,
+}
+
+impl OverrideSelf {
+    fn parse(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<OverrideSelf> {
+        let lit = lit_text(meta.value()?)?;
+        match lit.value().as_str() {
+            "last" => Ok(OverrideSelf::Last),
+            "first" => Ok(OverrideSelf::First),
+            "error" => Ok(OverrideSelf::Error),
+            _ => Err(syn::Error::new(
+                lit.span(),
+                "expected \"last\", \"first\" or \"error\"",
+            )),
+        }
+    }
+}
+
 /// `#[arg(...)]` on the struct: options declared there rather than on a field.
 #[derive(Default)]
 struct StructOptions {
+    /// What a flag of this struct given twice does, unless it says.
+    override_self: Option<OverrideSelf>,
     groups: Vec<Group>,
     /// The word that starts a new invocation of this command.
     restart_token: Option<String>,
@@ -5997,6 +6086,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.arg_required_else_help = true;
                 return Ok(());
             }
+            if meta.path.is_ident("override_self") {
+                options.override_self = Some(OverrideSelf::parse(&meta)?);
+                return Ok(());
+            }
             if meta.path.is_ident("long_only") {
                 options.long_only = true;
                 return Ok(());
@@ -6095,7 +6188,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `unknown_flags`, `long_only`, \
+                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `unknown_flags`, `long_only`, \
                      `plus_options`, `multicall`, `validate`, `name`, `version`, `author`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `brief_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
@@ -6973,6 +7066,10 @@ fn subcommand_type(f: &Field) -> &Type {
     }
 }
 
+fn seen_flag(ident: &Ident) -> Ident {
+    format_ident!("__seen_{}", ident)
+}
+
 fn displaced_flag(ident: &Ident) -> Ident {
     format_ident!("__displaced_{}", ident)
 }
@@ -7147,6 +7244,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut value_names = Vec::new();
     let mut effect = None;
     let (mut conflicts, mut overrides, mut requires) = (Vec::new(), Vec::new(), Vec::new());
+    let mut override_self = None;
     let (mut required, mut required_unless, mut group) = (false, Vec::new(), None);
     let (mut required_unless_all, mut required_ifs) = (Vec::new(), Vec::new());
     let mut required_if_all = Vec::new();
@@ -7341,6 +7439,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 });
             } else if meta.path.is_ident("conflicts") {
                 conflicts.extend(related(&meta)?);
+            } else if meta.path.is_ident("override_self") {
+                override_self = Some(OverrideSelf::parse(&meta)?);
             } else if meta.path.is_ident("overrides") {
                 overrides.extend(aliases(&meta)?);
             } else if meta.path.is_ident("requires") {
@@ -7437,7 +7537,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
-                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
+                     `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
                      `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
                 ));
             }
@@ -7797,6 +7897,14 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     } else {
         (flag_value_name, require_equals, choices)
     };
+    if override_self.is_some()
+        && (!matches!(role, Role::Flag { .. })
+            || keywords
+            || tristate
+            || !matches!(kind, Kind::Switch | Kind::Optional(_) | Kind::Required(_)))
+    {
+        return error("`override_self` is for a flag that holds one value, or a switch".into());
+    }
     if short.is_none() && !short_aliases.is_empty() {
         return error("`short_alias` is another letter beside a `short`, which this lacks".into());
     }
@@ -7843,6 +7951,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         defaults,
         conflicts,
         overrides,
+        override_self,
         requires,
         required,
         required_unless,

@@ -210,3 +210,27 @@ struct AliasWithoutShort {
     #[arg(long, short_alias = 'L')]
     list: bool,
 }
+
+#[derive(Args)]
+struct OverrideSelfOnACount {
+    #[arg(short, long, count, override_self = "first")]
+    verbose: u8,
+}
+
+#[derive(Args)]
+struct OverrideSelfUnknown {
+    #[arg(long, override_self = "newest")]
+    name: Option<String>,
+}
+
+#[derive(Args)]
+struct OverrideSelfOnAList {
+    #[arg(long, override_self = "error")]
+    with: Vec<String>,
+}
+
+#[derive(Args)]
+struct OverrideSelfOnAPositional {
+    #[arg(positional, override_self = "error")]
+    file: Option<String>,
+}
