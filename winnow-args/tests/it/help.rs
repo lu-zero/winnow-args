@@ -161,7 +161,7 @@ fn a_visible_long_alias_is_listed_and_a_hidden_one_is_not() {
         /// Resume a session.
         #[arg(
             short = 'r',
-            short = 's',
+            short_alias = 's',
             long,
             visible_alias = "session",
             alias = "old"
@@ -873,7 +873,7 @@ struct Spellings {
     enable: Vec<String>,
     #[arg(plus = 'o', value_name = "OPT")]
     disable: Vec<String>,
-    #[arg(short = 'l', short = 'L')]
+    #[arg(short = 'l', short_alias = 'L')]
     list: bool,
     #[arg(long, require_equals, value_name = "PORT")]
     inspect: Option<u16>,

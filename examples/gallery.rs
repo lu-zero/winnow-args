@@ -46,7 +46,7 @@ struct Gallery {
     #[arg(short, long, count, global)]
     verbose: u8,
     /// Two short letters
-    #[arg(short = 'q', short = 's', long)]
+    #[arg(short = 'q', short_alias = 's', long)]
     quiet: bool,
     /// An optional value, attached with `=`
     #[arg(long, default_missing = "always", require_equals)]

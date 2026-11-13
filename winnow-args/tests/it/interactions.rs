@@ -280,7 +280,7 @@ fn the_flag_that_overrode_a_required_one_satisfies_it() {
 struct Spelled {
     #[arg(long, requires("-L"))]
     both: bool,
-    #[arg(short = 'l', short = 'L', long)]
+    #[arg(short = 'l', short_alias = 'L', long)]
     list: bool,
 }
 
@@ -294,7 +294,7 @@ fn a_rule_resolves_a_second_short() {
 struct Aliased {
     #[arg(long = "own", alias = "shared")]
     own: bool,
-    #[arg(short = 'y', short = 'x')]
+    #[arg(short = 'y', short_alias = 'x')]
     two: bool,
 }
 

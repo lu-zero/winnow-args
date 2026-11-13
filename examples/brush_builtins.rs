@@ -322,7 +322,7 @@ struct KillCommand {
     signal_number: Option<usize>,
 
     /// List known signal names.
-    #[arg(short = 'l', short = 'L')]
+    #[arg(short = 'l', short_alias = 'L')]
     list_signals: bool,
 
     #[arg(positional, allow_negative_numbers)]

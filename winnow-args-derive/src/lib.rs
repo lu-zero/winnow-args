@@ -262,7 +262,8 @@ mod spec;
 /// # Flag names
 ///
 /// - `short`, or `short = 'x'`: `-x`. With no letter, the field name's first
-///   character. A second `short` is another letter, and help lists both.
+///   character. `short_alias = 'x'`, or a second `short`, is another letter
+///   beside it, and help lists both (clap's `visible_short_alias`).
 /// - `long`, or `long = "name"`: `--name`, matched in full. With no string,
 ///   `_` in the field name is written `-`. Help lists the first `long` only.
 /// - `alias = "…"`, or `alias("…", …)`: further long names. Help leaves them out.
@@ -3209,7 +3210,7 @@ struct Field {
     /// Its values are words of a vocabulary of their own, the field's type
     /// (`Args`): `-z now -z max-page-size=4096` (ld).
     keywords: bool,
-    /// More letters it answers to, from a second `short` (`kill -l`/`-L`).
+    /// More letters it answers to, from `short_alias` or a second `short` (`kill -l`/`-L`).
     short_aliases: Vec<char>,
     /// More long names, listed in help. `alias` stays hidden.
     visible_aliases: Vec<String>,
@@ -7172,6 +7173,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("keywords") {
                 keywords = true;
             } else if skip_spec(&meta)? || meta.path.is_ident("verbatim_doc_comment") {
+            } else if meta.path.is_ident("short_alias") {
+                short_aliases.push(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("plus") {
                 plus = Some(meta.value()?.parse::<LitChar>()?.value());
             } else if meta.path.is_ident("stop_flags") {
@@ -7711,6 +7714,9 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             Some(vec!["true".to_owned(), "false".to_owned()]),
         )
     } else {
+    if short.is_none() && !short_aliases.is_empty() {
+        return error("`short_alias` is another letter beside a `short`, which this lacks".into());
+    }
         (flag_value_name, require_equals, choices)
     };
     let spec = spec_name(&f.attrs)?;

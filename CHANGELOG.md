@@ -11,6 +11,9 @@ released together. Versions follow [semver](https://semver.org).
   a variable names (`error=01;31:flag=38;5;71`, the roles the field names of
   `Palette`). `Palette::with_spec` takes the text, and `Paint::parse_sgr`
   one paint; an entry that is not understood is skipped.
+- **Added**: `short_alias = 'x'`, another letter for a flag, shown as a
+  second `short` is. A second `short` still works, but clippy's
+  `duplicated_attributes` flags it in a derive's attributes.
 
 ## 0.6.1 (2026-11-07)
 

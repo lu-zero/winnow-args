@@ -204,3 +204,9 @@ struct HelpFromConcat {
 }
 
 fn main() {}
+
+#[derive(Args)]
+struct AliasWithoutShort {
+    #[arg(long, short_alias = 'L')]
+    list: bool,
+}

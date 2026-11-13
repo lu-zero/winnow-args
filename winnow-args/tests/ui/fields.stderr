@@ -178,6 +178,12 @@ error: expected a string literal or `env!("VAR")`
 194 |     #[arg(long, help_heading = HEADING)]
     |                                ^^^^^^^
 
+error: `short_alias` is another letter beside a `short`, which this lacks
+   --> tests/ui/fields.rs:210:5
+    |
+210 |     #[arg(long, short_alias = 'L')]
+    |     ^
+
 warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the pages leave this doc comment out: they read a string literal or `env!("VAR")`
    --> tests/ui/fields.rs:201:13
     |

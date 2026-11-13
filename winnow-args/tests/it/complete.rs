@@ -239,7 +239,7 @@ fn the_walk_reads_the_line_as_the_parser_does() {
 #[arg(name = "forms", plus_options, disable_help_flag)]
 #[allow(dead_code, reason = "only the help data is completed")]
 struct Forms {
-    #[arg(short = 'l', short = 'L', value_name = "FILE")]
+    #[arg(short = 'l', short_alias = 'L', value_name = "FILE")]
     list: Option<PathBuf>,
     #[arg(short = 'v', long)]
     verbose: bool,

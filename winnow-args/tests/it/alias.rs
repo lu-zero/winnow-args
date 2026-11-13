@@ -143,11 +143,11 @@ fn a_repeated_long_adds_a_spelling() {
     }
 }
 
-/// A second `short` is another letter: `kill -l` and `kill -L`.
+/// `short_alias` is another letter: `kill -l` and `kill -L`.
 #[derive(Args, Debug, PartialEq, Default)]
 #[arg(unknown_flags = "value")]
 struct Kill {
-    #[arg(short = 'l', short = 'L')]
+    #[arg(short = 'l', short_alias = 'L')]
     list: bool,
     #[arg(positional, allow_negative_numbers)]
     args: Vec<String>,
@@ -166,6 +166,20 @@ fn short_aliases_are_letters_too() {
     assert!(k.list);
     assert_eq!(k.args, ["9"]);
     assert_eq!(parse(&["-LX"]).args, ["-LX"]);
+}
+
+/// A second `short` still works, as the older spelling of `short_alias`.
+#[derive(Args, Debug)]
+#[allow(clippy::duplicated_attributes)]
+struct Twice {
+    #[arg(short = 'l', short = 'L')]
+    list: bool,
+}
+
+#[test]
+fn a_repeated_short_is_a_short_alias() {
+    let words = crate::words(&["-L"]);
+    assert!(Twice::parse_words(&words).unwrap().list);
 }
 
 #[derive(Args, Debug)]
