@@ -18,6 +18,9 @@ released together. Versions follow [semver](https://semver.org).
   its ASCII case, as clap's `ignore_case`. The exact spelling is tried first
   and an enum without it generates the same code as before; two spellings
   that differ only in case are a compile error.
+- **Added**: `ValueEnum::help()`, what a variant means: its `help`, else
+  the doc comment's first paragraph, beside `name()`. It is empty for a
+  hand-written implementation, which needs no change.
 
 ## 0.6.1 (2026-11-07)
 

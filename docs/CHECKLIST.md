@@ -248,7 +248,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       kept; `verbatim_doc_comment` keeps every line
 - [ ] `note`, a logo, `help <topic>`
 - [ ] A doc comment from `include_str!` or `concat!`, left out with a warning
-- [ ] A `ValueEnum` variant's help from the value, beside `name()`
+- [x] A `ValueEnum` variant's help from the value, beside `name()`
 - [ ] Rendered diagnostics with the command line and a caret
 - [x] A user palette from the environment (as `GCC_COLORS`): `Palette::with_env`
 

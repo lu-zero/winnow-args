@@ -147,6 +147,13 @@ pub trait ValueEnum: Sized + 'static {
     fn name(&self) -> &'static str {
         self.names()[0]
     }
+
+    /// What the variant means: its `help`, else the first paragraph of its
+    /// doc comment. Empty when it says nothing, and in a binary built without
+    /// the `help-text` feature.
+    fn help(&self) -> &'static str {
+        ""
+    }
 }
 
 /// The cause of an [`ErrorKind::InvalidChoice`](crate::ErrorKind::InvalidChoice):

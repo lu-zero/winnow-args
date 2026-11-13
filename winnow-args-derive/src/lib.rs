@@ -2449,6 +2449,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let mut visible_help: Vec<Option<TokenStream2>> = Vec::new();
     let mut variants = Vec::new();
     let mut name_arms = Vec::new();
+    let mut help_of = Vec::new();
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new(
@@ -2477,7 +2478,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 spec_choice_help.push(doc.clone());
             }
             visible.push(name);
-            visible_help.push(match about_constant {
+            visible_help.push(match &about_constant {
                 Some(c) => Some(quote!(::winnow_args::__text!(@expr #c))),
                 None => (!doc.is_empty()).then(|| text(&doc)),
             });
@@ -2510,6 +2511,11 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let enum_name = &input.ident;
         variants.push(quote!(#enum_name::#ident));
         name_arms.push(quote!(Self::#ident => &[#(#spellings),*],));
+        let about = match &about_constant {
+            Some(c) => quote!(::winnow_args::__text!(@expr #c)),
+            None => text(&doc),
+        };
+        help_of.push(quote!(Self::#ident => #about,));
     }
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -2598,6 +2604,12 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 // By value, so an enum with no variants matches nothing.
                 match *self {
                     #(#name_arms)*
+                }
+            }
+
+            fn help(&self) -> &'static str {
+                match *self {
+                    #(#help_of)*
                 }
             }
         }

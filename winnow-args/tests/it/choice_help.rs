@@ -9,6 +9,9 @@ enum Speed {
     /// As fast as it goes.
     Fast,
     Slow,
+    /// Not listed.
+    ///
+    /// Nor is this paragraph.
     #[arg(hide)]
     Secret,
 }
@@ -258,4 +261,24 @@ fn help_for_a_brief_command_is_short_however_asked() {
     // Not inherited: the command above has its long page.
     let e = Above::parse_from(["--help"]).unwrap_err();
     assert!(e.render_help("above").unwrap().contains("see a summary"));
+}
+
+#[test]
+fn a_variant_says_what_it_means() {
+    assert_eq!(Speed::Fast.help(), "As fast as it goes.");
+    assert_eq!(Speed::Slow.help(), "");
+    // A hidden variant has its help too: help leaves it out, the value is there.
+    assert_eq!(Speed::Secret.help(), "Not listed.");
+    assert_eq!(Plain::Up.help(), "");
+}
+
+#[derive(ValueEnum, Debug, PartialEq, Clone, Copy)]
+enum Pace {
+    #[arg(help = LEVEL)]
+    Brisk,
+}
+
+#[test]
+fn a_variant_says_its_help_from_a_constant() {
+    assert_eq!(Pace::Brisk.help(), LEVEL);
 }
