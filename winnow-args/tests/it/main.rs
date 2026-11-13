@@ -55,6 +55,7 @@ mod response;
 mod run;
 mod sequence;
 mod subcommand;
+mod subcommand_rules;
 mod suggest;
 mod unknown_flags;
 mod validate;

@@ -26,6 +26,12 @@ released together. Versions follow [semver](https://semver.org).
   first, or fails with the new `ErrorKind::RepeatedFlag`. It is usage's
   `args_override_self`, which is a boolean and has no `first`. A count and a
   list collect whatever it says, and say so at compile time if it is set.
+- **Added**: three command settings after clap's and usage's, each on a struct
+  with a `subcommand` field: `subcommand_negates_reqs` (naming a subcommand
+  leaves the struct's requirements unmet), `args_conflicts_with_subcommands`
+  (its own flags and positionals exclude one, `ErrorKind::Conflict`) and
+  `subcommand_precedence_over_arg` (a subcommand's name ends a `values = n..`
+  flag, and wins over a filled positional).
 
 ## 0.6.1 (2026-11-07)
 

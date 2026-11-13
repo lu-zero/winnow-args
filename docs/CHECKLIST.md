@@ -230,8 +230,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 
 - [x] `override_self = "last" | "first" | "error"` (usage's
       `args_override_self`, with `first` beyond it), per field or per struct
-- [ ] `subcommand_negates_reqs`, `args_conflicts_with_subcommands`,
-      `subcommand_precedence_over_arg`, `dont_delimit_trailing_values`
+- [x] `subcommand_negates_reqs`, `args_conflicts_with_subcommands`,
+      `subcommand_precedence_over_arg`
+- [ ] `dont_delimit_trailing_values`
 - [x] `default_subcommand_help`; completion of the default subcommand's flags
       before it is named
 - [x] `default_subcommand_on_empty`

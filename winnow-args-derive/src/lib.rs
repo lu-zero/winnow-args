@@ -170,6 +170,24 @@ mod spec;
 ///   long texts are for the pages. It is this struct's: a subcommand's
 ///   struct has its own.
 /// - `arg_required_else_help`: an empty command line asks for help.
+/// - `subcommand_negates_reqs`: naming a subcommand leaves this struct's
+///   requirements unmet: `required`, `required_unless*`, `required_if*` and a
+///   required group. What a given argument `requires` still holds. A field
+///   that must have a value is then an `Option` marked `required`, which a
+///   plain `T` cannot be: it is a compile error, unless it has a default. A
+///   flattened struct's requirements still apply. It needs a `subcommand`
+///   field.
+/// - `args_conflicts_with_subcommands`: naming a subcommand after this
+///   struct's own flags or positionals fails with `ErrorKind::Conflict`.
+///   The default subcommand taken for an empty line or an unknown flag counts
+///   as named; one taken for a word, or an external one, does not. Global
+///   flags and those of a flattened struct do not count, and a default is not
+///   an argument given. It needs a `subcommand` field.
+/// - `subcommand_precedence_over_arg`: a word that names a subcommand ends a
+///   flag that takes `values = n..` after its first value, and is the
+///   subcommand even after a positional is filled, which would take it as a
+///   value; `help` is still a value then. A fixed `values = n`, and a global
+///   flag, take it as before. It needs a `subcommand` field.
 /// - `override_self = "last"`, `"first"` or `"error"`: what a flag of this
 ///   struct given twice does, unless the field says. The last one is kept by
 ///   default. It is this struct's: a subcommand's struct has its own.
@@ -3995,6 +4013,9 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
     let StructOptions {
         override_self,
+        subcommand_negates_reqs,
+        args_conflicts_with_subcommands,
+        subcommand_precedence_over_arg,
         groups,
         restart_token,
         default_subcommand,
@@ -4143,17 +4164,28 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    // What a flag given twice does, for a field that holds one value or is a switch.
-    let repeat_of = |f: &Field| match f.override_self.or(override_self).unwrap_or_default() {
-        _ if f.keywords
+    // A flag that holds one value, or a switch: one that can be said to have been given.
+    let given_once = |f: &Field| {
+        !(f.keywords
             || f.tristate
             || !matches!(f.role, Role::Flag { .. })
-            || !matches!(f.kind, Kind::Switch | Kind::Optional(_) | Kind::Required(_)) =>
-        {
-            OverrideSelf::Last
-        }
+            || !matches!(f.kind, Kind::Switch | Kind::Optional(_) | Kind::Required(_)))
+    };
+    // What such a flag given twice does.
+    let repeat_of = |f: &Field| match f.override_self.or(override_self).unwrap_or_default() {
+        _ if !given_once(f) => OverrideSelf::Last,
         mode => mode,
     };
+    // Whether the flag's own occurrence is recorded: for `override_self`, and
+    // for `args_conflicts_with_subcommands` where it must be told from a default.
+    let remembers = |f: &Field| {
+        repeat_of(f) != OverrideSelf::Last
+            || args_conflicts_with_subcommands && given_once(f) && !f.is_global()
+    };
+    let sub_type = fields
+        .iter()
+        .find(|f| matches!(f.role, Role::Subcommand))
+        .map(subcommand_type);
 
     // Each field's slot: its name, type and starting value.
     let mut slot_parts: Vec<(Ident, TokenStream2, TokenStream2)> = fields
@@ -4181,7 +4213,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     slot_parts.extend(
         fields
             .iter()
-            .filter(|f| repeat_of(f) != OverrideSelf::Last)
+            .filter(|f| remembers(f))
             .map(|f| (seen_flag(&f.ident), quote!(bool), quote!(false))),
     );
     let slots = slot_parts
@@ -4193,6 +4225,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let ident = slot(&f.ident);
         let seen = seen_flag(&f.ident);
         match repeat_of(f) {
+            OverrideSelf::Last if remembers(f) => quote!(#seen = true; #stored),
             OverrideSelf::Last => stored,
             OverrideSelf::Error => quote! {
                 if #seen {
@@ -4349,11 +4382,24 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                                 }
                                 None => quote!(::core::option::Option::None),
                             };
+                            let read_more = match &sub_type {
+                                Some(ty) if subcommand_precedence_over_arg && !f.is_global() => {
+                                    quote! {
+                                        __arg.read_more_unless(
+                                            __input,
+                                            #options,
+                                            #terminator,
+                                            <#ty as __wa::Subcommand>::has,
+                                        )
+                                    }
+                                }
+                                _ => quote!(__arg.read_more(__input, #options, #terminator)),
+                            };
                             Some(quote! {
                                 let mut __taken = 1usize;
                                 while __taken < #max {
                                     let ::core::option::Option::Some(__value) =
-                                        __arg.read_more(__input, #options, #terminator)
+                                        #read_more
                                     else {
                                         break;
                                     };
@@ -4703,6 +4749,41 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
         });
+        // This struct's own arguments given so far, each by what the error calls it.
+        let conflicts_with = |token: TokenStream2, offset: TokenStream2| {
+            let bound = fields
+                .iter()
+                .filter(|f| !f.is_global() && !f.keywords)
+                .filter(|f| matches!(f.role, Role::Flag { .. } | Role::Positional { .. }))
+                .map(|f| {
+                    let given = if remembers(f) {
+                        let seen = seen_flag(&f.ident);
+                        quote!(#seen)
+                    } else {
+                        f.has()
+                    };
+                    let name = f.display();
+                    quote! {
+                        if #given {
+                            return ::core::result::Result::Err(
+                                __wa::Error::conflict(#offset, #token, #name),
+                            );
+                        }
+                    }
+                });
+            quote!(#(#bound)*)
+        };
+        let conflicts = args_conflicts_with_subcommands.then(|| {
+            conflicts_with(
+                quote!(::std::string::ToString::to_string(&__word.value)),
+                quote!(__word.offset),
+            )
+        });
+        // The default subcommand taken for a line or a flag is a subcommand named too.
+        let default_conflicts = |name: &str| {
+            args_conflicts_with_subcommands
+                .then(|| conflicts_with(quote!(#name), quote!(__input.offset())))
+        };
         // Any other word selects the default subcommand, which reads it again as its own.
         let fallback = default_subcommand.as_ref().map(|name| {
             let name = LitByteStr::new(name.as_bytes(), Span::call_site());
@@ -4723,12 +4804,17 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         });
         // A flag this struct does not take selects it too, and is read again as its own.
-        let flag_fallback = fallback.as_ref().filter(|_| default_subcommand_flags).map(
-            |fallback| match track_filled {
-                true => quote!(if __filled { #unexpected; } #fallback),
-                false => fallback.clone(),
-            },
-        );
+        let flag_fallback =
+            fallback
+                .as_ref()
+                .filter(|_| default_subcommand_flags)
+                .map(|fallback| {
+                    let conflicts = default_subcommand.as_deref().and_then(&default_conflicts);
+                    match track_filled {
+                        true => quote!(if __filled { #unexpected; } #conflicts #fallback),
+                        false => quote!(#conflicts #fallback),
+                    }
+                });
         // A negative number read for this struct's own positional stays here.
         let route_fallback = match &negative_lookup {
             Some(lookup) if track_number => quote! {
@@ -4738,20 +4824,37 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             },
             _ => quote!(#fallback),
         };
-        let route = quote! {
-            if #not_filled !__word.after_separator {
-                if <#ty as __wa::Subcommand>::has(&**__word.value) {
-                    let __sub = {
-                        #inherit
-                        <#ty as __wa::Subcommand>::parse_subcommand(
-                            &**__word.value, __input, #handler,
-                        )?
-                    };
-                    #ident = ::core::option::Option::Some(__sub);
-                    break;
+        let named = quote! {
+            if <#ty as __wa::Subcommand>::has(&**__word.value) {
+                #conflicts
+                let __sub = {
+                    #inherit
+                    <#ty as __wa::Subcommand>::parse_subcommand(
+                        &**__word.value, __input, #handler,
+                    )?
+                };
+                #ident = ::core::option::Option::Some(__sub);
+                break;
+            }
+        };
+        let route = if subcommand_precedence_over_arg {
+            // A known name wins over a positional already filled, as well as over a flag's values.
+            quote! {
+                if !__word.after_separator {
+                    #named
+                    if #not_filled true {
+                        #help_word
+                        #route_fallback
+                    }
                 }
-                #help_word
-                #route_fallback
+            }
+        } else {
+            quote! {
+                if #not_filled !__word.after_separator {
+                    #named
+                    #help_word
+                    #route_fallback
+                }
             }
         };
         // A line that took no subcommand, no positional and no `--` runs the
@@ -4760,6 +4863,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .as_ref()
             .filter(|_| default_subcommand_on_empty)
             .map(|name| {
+                let conflicts = default_conflicts(name);
                 let name = LitByteStr::new(name.as_bytes(), Span::call_site());
                 let no_positional = track_filled.then(|| quote!(&&!__filled));
                 quote! {
@@ -4767,6 +4871,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                         #no_positional
                         && __input.mode() != ::winnow_args::stream::Mode::Stopped
                     {
+                        #conflicts
                         let __sub = {
                             #inherit
                             <#ty as __wa::Subcommand>::parse_subcommand(#name, __input, #handler)?
@@ -5071,6 +5176,40 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             "`flatten_help` needs an `#[arg(subcommand)]` field",
         ));
     }
+    for (set, name) in [
+        (subcommand_negates_reqs, "subcommand_negates_reqs"),
+        (
+            args_conflicts_with_subcommands,
+            "args_conflicts_with_subcommands",
+        ),
+        (
+            subcommand_precedence_over_arg,
+            "subcommand_precedence_over_arg",
+        ),
+    ] {
+        if set && subcommand.is_none() {
+            return Err(syn::Error::new(
+                input.ident.span(),
+                format!("`{name}` needs an `#[arg(subcommand)]` field"),
+            ));
+        }
+    }
+    if subcommand_negates_reqs {
+        // Left unset by a subcommand, the field must be able to hold nothing.
+        if let Some(f) = fields.iter().find(|f| {
+            matches!(f.kind, Kind::Required(_))
+                && !matches!(f.role, Role::Subcommand)
+                && !f.keywords
+                && f.defaults.is_empty()
+                && f.default_fn.is_none()
+                && f.default_from.is_none()
+        }) {
+            return Err(syn::Error::new(
+                f.ident.span(),
+                "with `subcommand_negates_reqs` a required field is an `Option` marked `required`, so a subcommand can leave it unset",
+            ));
+        }
+    }
     if multicall && subcommand.is_none() {
         return Err(syn::Error::new(
             input.ident.span(),
@@ -5318,7 +5457,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let supplied = rules.supplied(&fields);
     let default_ifs = rules.default_ifs(&fields);
     let default_froms = default_froms(&fields, &rules, !input.generics.params.is_empty())?;
-    let required = rules.required(&fields, &groups);
+    let negated = subcommand_negates_reqs
+        .then(|| subcommand.map(|f| slot(&f.ident)))
+        .flatten()
+        .map(|ident| quote!(#ident.is_none()));
+    let required = rules.required(&fields, &groups, negated.as_ref());
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
@@ -5909,6 +6052,12 @@ impl OverrideSelf {
 struct StructOptions {
     /// What a flag of this struct given twice does, unless it says.
     override_self: Option<OverrideSelf>,
+    /// A subcommand being chosen leaves this struct's requirements unmet.
+    subcommand_negates_reqs: bool,
+    /// This struct's own flags and positionals exclude a subcommand.
+    args_conflicts_with_subcommands: bool,
+    /// A word naming a subcommand ends a variadic flag or positional.
+    subcommand_precedence_over_arg: bool,
     groups: Vec<Group>,
     /// The word that starts a new invocation of this command.
     restart_token: Option<String>,
@@ -6090,6 +6239,18 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.override_self = Some(OverrideSelf::parse(&meta)?);
                 return Ok(());
             }
+            if meta.path.is_ident("subcommand_negates_reqs") {
+                options.subcommand_negates_reqs = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("args_conflicts_with_subcommands") {
+                options.args_conflicts_with_subcommands = true;
+                return Ok(());
+            }
+            if meta.path.is_ident("subcommand_precedence_over_arg") {
+                options.subcommand_precedence_over_arg = true;
+                return Ok(());
+            }
             if meta.path.is_ident("long_only") {
                 options.long_only = true;
                 return Ok(());
@@ -6188,7 +6349,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `unknown_flags`, `long_only`, \
+                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `subcommand_negates_reqs`, `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`, `unknown_flags`, `long_only`, \
                      `plus_options`, `multicall`, `validate`, `name`, `version`, `author`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `brief_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
@@ -6688,7 +6849,19 @@ impl Rules {
 
     /// `required`, `required_unless`, required groups and `requires`, judged on
     /// what has a value, defaults included.
-    fn required(&self, fields: &[Field], groups: &[Group]) -> TokenStream2 {
+    /// The checks of what must be given. With `negated`, a condition that holds
+    /// when a subcommand was chosen, the requirements are checked only while it
+    /// does not; what a given argument needs (`requires`) stays checked.
+    fn required(
+        &self,
+        fields: &[Field],
+        groups: &[Group],
+        negated: Option<&TokenStream2>,
+    ) -> TokenStream2 {
+        let unless_negated = |checks: TokenStream2| match negated {
+            Some(negated) => quote!(if #negated { #checks }),
+            None => checks,
+        };
         let missing = |f: &Field| {
             let name = f.display();
             match f.role {
@@ -6801,13 +6974,13 @@ impl Rules {
         });
         let missing: Vec<TokenStream2> = plain.chain(unless).chain(unless_all).collect();
         let missing = (!missing.is_empty()).then(|| {
-            quote! {
+            unless_negated(quote! {
                 let mut __missing = ::core::option::Option::None;
                 #(#missing)*
                 if let ::core::option::Option::Some(__error) = __missing {
                     return ::core::result::Result::Err(__error);
                 }
-            }
+            })
         });
         let required_ifs = self
             .required_ifs
@@ -6870,7 +7043,10 @@ impl Rules {
                     }
                 }
             });
-        quote!(#missing #(#required_ifs)* #(#required_if_all)* #(#requires_ifs)* #(#one_of)* #(#requires)*)
+        let required_ifs = unless_negated(quote!(#(#required_ifs)*));
+        let required_if_all = unless_negated(quote!(#(#required_if_all)*));
+        let one_of = unless_negated(quote!(#(#one_of)*));
+        quote!(#missing #required_ifs #required_if_all #(#requires_ifs)* #one_of #(#requires)*)
     }
 }
 

@@ -234,3 +234,33 @@ struct OverrideSelfOnAPositional {
     #[arg(positional, override_self = "error")]
     file: Option<String>,
 }
+
+#[derive(winnow_args::Subcommand)]
+enum Sub {
+    Run,
+}
+
+#[derive(Args)]
+#[arg(subcommand_negates_reqs)]
+struct NegatesWithARequiredValue {
+    #[arg(long)]
+    name: String,
+    #[arg(subcommand)]
+    sub: Option<Sub>,
+}
+
+#[derive(Args)]
+#[arg(args_conflicts_with_subcommands)]
+struct ConflictsWithNoSubcommand {
+    #[arg(long)]
+    name: Option<String>,
+}
+
+#[derive(Args)]
+#[arg(subcommand_negates_reqs)]
+struct NegatesWithARequiredEnv {
+    #[arg(long, env = "NAME")]
+    name: String,
+    #[arg(subcommand)]
+    sub: Option<Sub>,
+}

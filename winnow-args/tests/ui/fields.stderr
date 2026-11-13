@@ -208,6 +208,24 @@ error: `override_self` is for a flag that holds one value, or a switch
 234 |     #[arg(positional, override_self = "error")]
     |     ^
 
+error: with `subcommand_negates_reqs` a required field is an `Option` marked `required`, so a subcommand can leave it unset
+   --> tests/ui/fields.rs:247:5
+    |
+247 |     name: String,
+    |     ^^^^
+
+error: `args_conflicts_with_subcommands` needs an `#[arg(subcommand)]` field
+   --> tests/ui/fields.rs:254:8
+    |
+254 | struct ConflictsWithNoSubcommand {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: with `subcommand_negates_reqs` a required field is an `Option` marked `required`, so a subcommand can leave it unset
+   --> tests/ui/fields.rs:263:5
+    |
+263 |     name: String,
+    |     ^^^^
+
 warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the pages leave this doc comment out: they read a string literal or `env!("VAR")`
    --> tests/ui/fields.rs:201:13
     |

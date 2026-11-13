@@ -210,6 +210,22 @@ impl<'i> Arg<'i> {
         detached(input, options)
     }
 
+    /// [`Arg::read_more`], but the word is left where it is when `stops` says
+    /// it is a subcommand's name.
+    #[inline]
+    pub fn read_more_unless(
+        &self,
+        input: &mut Argv<'i>,
+        options: ValueOptions,
+        terminator: Option<&BStr>,
+        stops: impl FnOnce(&[u8]) -> bool,
+    ) -> Option<&'i BStr> {
+        if !input.is_empty() && stops(input.front()) {
+            return None;
+        }
+        self.read_more(input, options, terminator)
+    }
+
     /// Fail if a flag declared to take at least `min` values got fewer.
     #[inline]
     pub fn check_values(&self, got: usize, min: usize) -> Result<(), Error> {
