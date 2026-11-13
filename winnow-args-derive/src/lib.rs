@@ -1474,6 +1474,9 @@ pub fn derive_occurrence(input: TokenStream) -> TokenStream {
 ///   `DRYRUN`, `dry_run` or `DryRun`. A variant's `name` replaces this.
 /// - `spec = "…"`: the name the pages file the choices under, instead of the
 ///   enum's own.
+/// - `ignore_case`: a value matches whatever its ASCII case (`ALWAYS` for
+///   `always`). The exact spelling is tried first. Spellings of two
+///   variants that differ only in case are an error.
 /// - `name = "…"`: the value that selects this variant.
 /// - `alias = "…"`, `alias("…", …)` or `alias_hidden`: other values that
 ///   select it. Help and errors list the primary name only.
@@ -2419,6 +2422,22 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         ));
     };
     let case = rename_all(input, None)?;
+    let ignore_case = input.attrs.iter().filter(|a| is_ours(a)).any(|attr| {
+        let mut found = false;
+        // `rename_all` has already accepted every option; this one is a flag.
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("ignore_case") {
+                found = true;
+            } else if meta.input.peek(syn::Token![=]) {
+                meta.value()?.parse::<syn::Expr>()?;
+            }
+            Ok(())
+        });
+        found
+    });
+    let mut folded: Vec<(String, &Ident)> = Vec::new();
+    let mut fold_arms = Vec::new();
+    let mut longest = 0;
     let mut names: Vec<(String, &Ident)> = Vec::new();
     let mut arms = Vec::new();
     let mut visible = Vec::new();
@@ -2465,6 +2484,28 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
         let pattern = byte_patterns(&spellings);
         let ident = &variant.ident;
+        if ignore_case {
+            let mut lower: Vec<String> = Vec::new();
+            for spelling in &spellings {
+                let spelling = spelling.to_ascii_lowercase();
+                longest = longest.max(spelling.len());
+                if let Some((_, other)) = folded.iter().find(|(seen, _)| *seen == spelling) {
+                    if *other != ident {
+                        return Err(syn::Error::new(
+                            variant.span(),
+                            format!("`{spelling}` is also `{other}`'s, ignoring case"),
+                        ));
+                    }
+                } else {
+                    folded.push((spelling.clone(), ident));
+                    lower.push(spelling);
+                }
+            }
+            if !lower.is_empty() {
+                let pattern = byte_patterns(&lower);
+                fold_arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
+            }
+        }
         arms.push(quote!(#pattern => ::core::result::Result::Ok(Self::#ident),));
         let enum_name = &input.ident;
         variants.push(quote!(#enum_name::#ident));
@@ -2500,6 +2541,33 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     });
+    // What the exact match missed: the value in lowercase, on the stack.
+    let miss = if ignore_case {
+        quote! {{
+            let mut __buffer = [0u8; #longest];
+            match __buffer.get_mut(..__value.len()) {
+                ::core::option::Option::Some(__lower) => {
+                    __lower.copy_from_slice(&**__value);
+                    __lower.make_ascii_lowercase();
+                    match &*__lower {
+                        #(#fold_arms)*
+                        _ => ::core::result::Result::Err(::std::boxed::Box::new(
+                            ::winnow_args::ChoiceError { choices: Self::CHOICES },
+                        )),
+                    }
+                }
+                ::core::option::Option::None => ::core::result::Result::Err(::std::boxed::Box::new(
+                    ::winnow_args::ChoiceError { choices: Self::CHOICES },
+                )),
+            }
+        }}
+    } else {
+        quote! {
+            ::core::result::Result::Err(::std::boxed::Box::new(
+                ::winnow_args::ChoiceError { choices: Self::CHOICES },
+            ))
+        }
+    };
     Ok(quote! {
         #[automatically_derived]
         impl #impl_generics ::winnow_args::FromArg for #name #ty_generics #where_clause {
@@ -2512,9 +2580,7 @@ fn expand_value_enum(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ) -> ::core::result::Result<Self, ::winnow_args::__private::BoxError> {
                 match &**__value {
                     #(#arms)*
-                    _ => ::core::result::Result::Err(::std::boxed::Box::new(
-                        ::winnow_args::ChoiceError { choices: Self::CHOICES },
-                    )),
+                    _ => #miss,
                 }
             }
         }
@@ -2619,6 +2685,9 @@ fn rename_all(input: &DeriveInput, options: Option<&mut EnumOptions>) -> syn::Re
             if skip_spec(&meta)? || (may_run && meta.path.is_ident("verbatim_doc_comment")) {
                 return Ok(());
             }
+            if !may_run && meta.path.is_ident("ignore_case") {
+                return Ok(());
+            }
             if may_run && meta.path.is_ident("multicall") {
                 multicall = true;
                 return Ok(());
@@ -2637,7 +2706,7 @@ fn rename_all(input: &DeriveInput, options: Option<&mut EnumOptions>) -> syn::Re
             if !meta.path.is_ident("rename_all") {
                 return Err(meta.error(match may_run {
                     true => "expected `rename_all`, `run`, `run_async`, `multicall` or `spec`",
-                    false => "expected `rename_all` or `spec`",
+                    false => "expected `rename_all`, `ignore_case` or `spec`",
                 }));
             }
             let lit = lit_text(meta.value()?)?;
@@ -7714,11 +7783,11 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             Some(vec!["true".to_owned(), "false".to_owned()]),
         )
     } else {
+        (flag_value_name, require_equals, choices)
+    };
     if short.is_none() && !short_aliases.is_empty() {
         return error("`short_alias` is another letter beside a `short`, which this lacks".into());
     }
-        (flag_value_name, require_equals, choices)
-    };
     let spec = spec_name(&f.attrs)?;
     if spec.is_some() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`spec` names the type of a field's value, and this field has none".into());

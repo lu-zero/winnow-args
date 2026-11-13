@@ -199,7 +199,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Grammar and values
 
 - [ ] A variadic positional that is not last; `allow_missing_positional`
-- [ ] A `ValueEnum` matched ignoring case (clap's `ignore_case`)
+- [x] A `ValueEnum` matched ignoring case (clap's `ignore_case`): `#[arg(ignore_case)]`
 - [x] A negative number routed into a default subcommand's positional
       where it opts in, at any depth, and kept by the root's where only
       that one does

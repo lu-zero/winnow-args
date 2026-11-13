@@ -14,6 +14,10 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `short_alias = 'x'`, another letter for a flag, shown as a
   second `short` is. A second `short` still works, but clippy's
   `duplicated_attributes` flags it in a derive's attributes.
+- **Added**: `#[arg(ignore_case)]` on a `ValueEnum`: a value matches whatever
+  its ASCII case, as clap's `ignore_case`. The exact spelling is tried first
+  and an enum without it generates the same code as before; two spellings
+  that differ only in case are a compile error.
 
 ## 0.6.1 (2026-11-07)
 

@@ -198,3 +198,37 @@ fn a_visible_alias_parses_like_the_long_name() {
         assert_eq!(parse(line).resume.as_deref(), Some("a"), "{line:?}");
     }
 }
+
+#[derive(winnow_args::ValueEnum, Debug, PartialEq, Clone, Copy)]
+#[arg(ignore_case)]
+enum Level {
+    Debug,
+    #[arg(alias = "WARNING")]
+    Warn,
+    #[arg(name = "Trace")]
+    Trace,
+}
+
+#[derive(Args, Debug)]
+struct Logging {
+    #[arg(long)]
+    level: Option<Level>,
+}
+
+#[test]
+fn ignore_case_matches_any_ascii_case() {
+    let level = |value: &str| {
+        let line = ["--level", value];
+        let words = crate::words(&line);
+        Logging::parse_words(&words).map(|l| l.level)
+    };
+    assert_eq!(level("debug").unwrap(), Some(Level::Debug));
+    assert_eq!(level("DEBUG").unwrap(), Some(Level::Debug));
+    assert_eq!(level("dEbUg").unwrap(), Some(Level::Debug));
+    assert_eq!(level("warning").unwrap(), Some(Level::Warn));
+    assert_eq!(level("trace").unwrap(), Some(Level::Trace));
+    // Longer than any spelling, and not a spelling.
+    assert!(level("debugging").is_err());
+    assert!(level("verbose").is_err());
+    assert!(level("").is_err());
+}

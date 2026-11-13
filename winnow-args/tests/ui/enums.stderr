@@ -46,7 +46,7 @@ error: `run` or `run_async`, once
 57 | #[arg(run, run_async)]
    |            ^^^^^^^^^
 
-error: expected `rename_all` or `spec`
+error: expected `rename_all`, `ignore_case` or `spec`
   --> tests/ui/enums.rs:63:7
    |
 63 | #[arg(run)]
@@ -87,3 +87,9 @@ error: `external` takes no other option
     |
 113 |     #[arg(external, name = "x")]
     |                     ^^^^^^^^^^
+
+error: `warn` is also `Warn`'s, ignoring case
+   --> tests/ui/enums.rs:121:5
+    |
+121 |     #[arg(name = "WARN")]
+    |     ^

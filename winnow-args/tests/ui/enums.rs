@@ -114,4 +114,12 @@ enum ExternalNamed {
     Other(Vec<String>),
 }
 
+#[derive(ValueEnum)]
+#[arg(ignore_case)]
+enum Folded {
+    Warn,
+    #[arg(name = "WARN")]
+    Warning,
+}
+
 fn main() {}
