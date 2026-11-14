@@ -473,6 +473,8 @@ struct SpecChoices {
     // Stated, with a word of its own for one.
     #[arg(long, choices("fast", "slow" = "mine"))]
     stated: Option<SpecSpeed>,
+    #[arg(long, choices("x", "y"), choices_strict = false)]
+    open: Option<String>,
 }
 
 #[test]
@@ -502,6 +504,12 @@ fn what_each_choice_means_is_in_the_fragments() {
         Some(vec![("name", "The file's name"), ("size", "")])
     );
     assert!(item("log").hide_choices && !item("log").description().contains("possible"));
+    assert!(item("open").choices_open && !item("sort").choices_open);
+    assert!(
+        item("open")
+            .description()
+            .contains("[suggested values: x, y]")
+    );
     assert_eq!(
         listed("stated"),
         Some(vec![("fast", "As fast as it goes."), ("slow", "mine")])

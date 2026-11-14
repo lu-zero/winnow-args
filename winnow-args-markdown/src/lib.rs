@@ -167,6 +167,9 @@ fn push_subcommand(out: &mut String, page: &Page<'_>, sub: &Sub, about: &str) {
 fn push_item(out: &mut String, item: &Item, indent: &str) {
     push_term(out, &item.synopsis(), &escape(&item.description()), indent);
     if let Some(choices) = item.listed_choices() {
+        if item.choices_open {
+            out.push_str(&format!("{indent}  Suggested values:\n"));
+        }
         for (name, help) in choices {
             out.push_str(&format!("{indent}  * `{name}`"));
             if !help.is_empty() {
@@ -634,5 +637,25 @@ mod choice_tests {
         let list =
             "* `--sort <KEY>` — What to sort by.\n  * `name`: The *file's* name\n  * `size`\n";
         assert!(page.contains(list), "{page}");
+    }
+
+    #[test]
+    fn open_choices_are_called_suggested() {
+        let command = Command {
+            name: "tool".to_owned(),
+            items: vec![Item {
+                long: Some("sort".to_owned()),
+                choices: vec!["name".to_owned()],
+                choice_help: vec!["The name".to_owned()],
+                choices_open: true,
+                ..Item::default()
+            }],
+            ..Command::default()
+        };
+        let page = &render_pages(&command, "tool").unwrap()[0].1;
+        assert!(
+            page.contains("  Suggested values:\n  * `name`: The name\n"),
+            "{page}"
+        );
     }
 }

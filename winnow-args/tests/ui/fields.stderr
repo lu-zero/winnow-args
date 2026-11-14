@@ -1,4 +1,4 @@
-error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `note`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
+error: unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, `delimiter`, `choices`, `choices_strict`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `note`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`
  --> tests/ui/fields.rs:6:17
   |
 6 |     #[arg(long, hdie)]
@@ -238,6 +238,12 @@ error: `dont_delimit_trailing_values` needs a positional with a `delimiter`
 276 | struct NoDelimiterToKeepWhole {
     |        ^^^^^^^^^^^^^^^^^^^^^^
 
+error: `choices_strict = false` is for a value with `choices`
+   --> tests/ui/fields.rs:283:5
+    |
+283 |     #[arg(long, choices_strict = false)]
+    |     ^
+
 warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the pages leave this doc comment out: they read a string literal or `env!("VAR")`
    --> tests/ui/fields.rs:201:13
     |
@@ -245,3 +251,9 @@ warning: use of deprecated constant `_::DOC_COMMENT_LEFT_OUT`: help and the page
     |             ^^^^^^
     |
     = note: `#[warn(deprecated)]` on by default
+
+error[E0080]: evaluation panicked: `choices_strict = false` is for a type that takes any text: this one has choices of its own
+   --> tests/ui/fields.rs:296:19
+    |
+296 |     speed: Option<Speed>,
+    |                   ^^^^^ evaluation of `_` failed here

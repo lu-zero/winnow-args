@@ -585,10 +585,9 @@ fn values(item: &'static Item, prefix: &str, typed: &str, out: &mut Completions)
         }));
         return;
     }
-    if item.choices.is_empty() {
+    if item.choices.is_empty() || item.choices_open {
         out.hint = item.hint;
         prefix.clone_into(&mut out.before);
-        return;
     }
     for choice in item.choices {
         if choice.starts_with(typed) {

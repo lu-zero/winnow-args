@@ -204,7 +204,7 @@ pub struct Item {
     pub default: Option<&'static str>,
     /// The environment variable consulted.
     pub env: Option<&'static str>,
-    /// The only values accepted.
+    /// The only values accepted, unless `choices_open`.
     pub choices: &'static [&'static str],
     /// What the choice at an index of `choices` means, `""` when nothing
     /// is said: [`FromArg::choice_help`](crate::FromArg::choice_help) given
@@ -216,6 +216,9 @@ pub struct Item {
     /// The choices are left out of help and the pages, though still
     /// accepted and completed.
     pub hide_choices: bool,
+    /// The choices are suggestions: any other value is accepted. Help and the
+    /// pages call them `suggested values`.
+    pub choices_open: bool,
     /// Why, and until when, it is deprecated: help marks it, and giving it
     /// records a [`Warning`](crate::warn::Warning).
     pub deprecated: Option<&'static crate::warn::Deprecation>,
@@ -271,6 +274,7 @@ impl Item {
         choices: &[],
         choice_help: None,
         hide_choices: false,
+        choices_open: false,
         deprecated: None,
         require_equals: false,
         global: false,
@@ -1441,9 +1445,14 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
         _ => Vec::new(),
     };
     if !item.choices.is_empty() && !item.hide_choices {
+        let (long_label, short_label) = if item.choices_open {
+            ("Suggested values:", "[suggested values: ")
+        } else {
+            ("Possible values:", "[possible values: ")
+        };
         if helps.iter().any(|help| !help.is_empty()) {
             // One a line, as clap's long help has them.
-            let mut list = format!("\n{}", label("Possible values:"));
+            let mut list = format!("\n{}", label(long_label));
             for (choice, help) in item.choices.iter().zip(&helps) {
                 let name = Style::paint(style.choice(), choice);
                 list.push_str(&format!("\n- {name}"));
@@ -1460,7 +1469,7 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
                 .collect();
             add(format!(
                 "{}{}{}",
-                label("[possible values: "),
+                label(short_label),
                 choices.join(", "),
                 close()
             ));

@@ -146,6 +146,8 @@ empty slice. Keeping the signatures would leave `Other`'s names empty and
 The fix is a `name(&self) -> Cow<'_, str>` with `names` to match, and a
 `variants()` that says it lists the named variants only.
 
-Until then `choices_strict = false` on a `String` field is the only form, if
-it is wanted before: the same note in the pages and no `InvalidChoice` check,
-and a compile error on a `ValueEnum` field, as in usage.
+Until then `choices_strict = false` (0.6.3) is on a field whose type takes any
+text, such as `String`: no `InvalidChoice` check, the list kept for help,
+completion and the pages, which call them `suggested values` where usage keeps
+`possible values`. It is a compile error on a field whose type has choices of
+its own, as in usage.

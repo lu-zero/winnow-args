@@ -286,12 +286,14 @@ pub struct Item {
     pub default: Option<String>,
     /// Environment variable.
     pub env: Option<String>,
-    /// The only values accepted.
+    /// The only values accepted, unless `choices_open`.
     pub choices: Vec<String>,
     /// What each of `choices` means, in their order; empty when none is said.
     pub choice_help: Vec<String>,
     /// The pages leave the choices out.
     pub hide_choices: bool,
+    /// The choices are suggestions: any other value is accepted.
+    pub choices_open: bool,
     /// More environment variables after `env`, read in order.
     pub env_fallback: Vec<String>,
     /// Old names of `env`, read last.
@@ -930,9 +932,14 @@ impl Item {
             append_note(&mut text, &format!("[default: {default}]"));
         }
         if self.listed_choices().is_none() && !self.choices.is_empty() && !self.hide_choices {
+            let label = if self.choices_open {
+                "suggested values"
+            } else {
+                "possible values"
+            };
             append_note(
                 &mut text,
-                &format!("[possible values: {}]", self.choices.join(", ")),
+                &format!("[{label}: {}]", self.choices.join(", ")),
             );
         }
         if self.prefix {
@@ -1404,6 +1411,7 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 choices: strings(row, "choices")?,
                 choice_help: strings(row, "choice_help")?,
                 hide_choices: flag(row, "hide_choices")?,
+                choices_open: flag(row, "choices_open")?,
                 env_fallback: strings(row, "env_fallback")?,
                 deprecated_env: strings(row, "deprecated_env")?,
                 deprecated: deprecated(row)?,

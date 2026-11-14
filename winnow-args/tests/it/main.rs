@@ -8,6 +8,7 @@ mod cfg;
 #[cfg(feature = "help-text")]
 mod choice_help;
 mod choices;
+mod choices_open;
 mod compile_fail;
 mod complete;
 mod constraints;

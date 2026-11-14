@@ -1,5 +1,5 @@
 //! Field attributes used where they mean nothing.
-use winnow_args::Args;
+use winnow_args::{Args, ValueEnum};
 
 #[derive(Args)]
 struct Unknown {
@@ -276,4 +276,22 @@ struct EmptyShortAlias {
 struct NoDelimiterToKeepWhole {
     #[arg(positional)]
     ids: Vec<String>,
+}
+
+#[derive(Args)]
+struct OpenWithoutChoices {
+    #[arg(long, choices_strict = false)]
+    name: Option<String>,
+}
+
+#[derive(ValueEnum, Clone)]
+enum Speed {
+    Fast,
+    Slow,
+}
+
+#[derive(Args)]
+struct OpenOnAnEnum {
+    #[arg(long, choices("fast"), choices_strict = false)]
+    speed: Option<Speed>,
 }

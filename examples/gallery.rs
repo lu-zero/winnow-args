@@ -80,6 +80,9 @@ struct Gallery {
     /// Choices that help leaves out (`hide_choices`)
     #[arg(long, choices("a", "b"), hide_choices)]
     mode: Option<String>,
+    /// Choices that are only suggestions (`choices_strict = false`)
+    #[arg(long, choices("stdout", "stderr"), choices_strict = false)]
+    sink: Option<String>,
     /// A doc comment the pages show, where help shows a constant
     #[arg(long, help = HELP_FROM_A_CONSTANT)]
     made: bool,

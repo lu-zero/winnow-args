@@ -347,7 +347,12 @@ fn item_tp(doc: &mut Roff, item: &Item) {
     term(doc, tag(item), &item.description());
     if let Some(choices) = item.listed_choices() {
         doc.control("sp", std::iter::empty::<&str>());
-        doc.text([roman("Possible values:")]);
+        let heading = if item.choices_open {
+            "Suggested values:"
+        } else {
+            "Possible values:"
+        };
+        doc.text([roman(heading)]);
         // A bullet a value, indented past the tag's column, as clap's pages.
         doc.control("RS", ["14"]);
         for (name, help) in choices {
@@ -762,5 +767,18 @@ mod choice_tests {
         });
         let list = ".sp\nPossible values:\n.RS 14\n.IP \\(bu 2\n\\fBname\\fR: The file\\*(Aqs name\n.IP \\(bu 2\n\\fBsize\\fR\n.RE\n";
         assert!(page.contains(list), "{page}");
+    }
+
+    #[test]
+    fn open_choices_are_called_suggested() {
+        let page = page(Item {
+            long: Some("sort".to_owned()),
+            choices: vec!["name".to_owned()],
+            choice_help: vec!["The name".to_owned()],
+            choices_open: true,
+            ..Item::default()
+        });
+        assert!(page.contains("Suggested values:"), "{page}");
+        assert!(!page.contains("Possible values:"), "{page}");
     }
 }

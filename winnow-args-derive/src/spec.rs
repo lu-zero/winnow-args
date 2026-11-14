@@ -118,6 +118,7 @@ pub(crate) struct ItemDoc {
     pub choices: Vec<String>,
     pub choice_help: Vec<String>,
     pub hide_choices: bool,
+    pub choices_open: bool,
     pub env_fallback: Vec<String>,
     pub deprecated_env: Vec<String>,
     /// `(message, warn_at, remove_at)`.
@@ -276,6 +277,7 @@ fn item_toml(item: &ItemDoc) -> String {
     strings(&mut out, "choices", &item.choices);
     strings(&mut out, "choice_help", &item.choice_help);
     flag(&mut out, "hide_choices", item.hide_choices);
+    flag(&mut out, "choices_open", item.choices_open);
     strings(&mut out, "env_fallback", &item.env_fallback);
     strings(&mut out, "deprecated_env", &item.deprecated_env);
     deprecated(&mut out, &item.deprecated);

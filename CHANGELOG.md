@@ -17,9 +17,14 @@ released together. Versions follow [semver](https://semver.org).
   The long `--help` shows `Note: …` and `Warning: …` in the order they are
   written, and either may be given again; the spec catalog (`admonitions`),
   man and Markdown pages carry them. The short page leaves them out.
-- **Changed**: `help::Item` and `winnow_args_spec::Item` have the field
-  `admonitions`. A value written by hand that ends in `..Item::EMPTY` or
-  `..Default::default()` is unaffected; one written out in full needs it.
+- **Added**: `choices_strict = false` on a field with `choices(…)`: the choices
+  are suggestions, any other value is accepted. Help, completion and the
+  pages list them as `suggested values`. A field whose type has choices of
+  its own (a `ValueEnum`) fails the build; the enum form waits for 0.7.
+- **Changed**: `help::Item` and `winnow_args_spec::Item` have the fields
+  `admonitions` and `choices_open`. A value written by hand that ends in
+  `..Item::EMPTY` or `..Default::default()` is unaffected; one written out in
+  full needs them.
   `warning` stays and is shown after the admonitions, but the derive now
   puts a field's warnings in `admonitions` and leaves `warning` empty.
 

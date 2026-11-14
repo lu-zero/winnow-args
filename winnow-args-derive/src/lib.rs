@@ -335,12 +335,19 @@ mod spec;
 ///   like a flag. A positional after this flag needs a flag, or `--`, before it.
 /// - `value_terminator = ";"`: the word that ends a `values` range. The word
 ///   is dropped.
-/// - `choices("a", "b")`: the only values accepted. `choices("fast" = "…",
+/// - `choices("a", "b")`: the only values accepted (see `choices_strict`). `choices("fast" = "…",
 ///   "slow")` says what a value means: the long help and the pages list each
 ///   value with it, one a line, as for a `ValueEnum` whose variants say. Help
 ///   asks the value's type, which answers this text unless its `FromArg`
 ///   says otherwise (see `FromArg::choice_help`); the pages show it as
 ///   written.
+/// - `choices_strict = false`: the choices are suggestions. Help, the pages
+///   and completion list them, and any other value is accepted: the value's
+///   type decides what it takes, as for a `String`. Help and the pages call
+///   them `suggested values`; completion also offers the type's hint. A type
+///   with choices of its own is refused where the derive can see it, which is
+///   not a type naming a generic parameter. With `from_str` or `parse_with`
+///   the parser must accept the other values.
 /// - `hide_choices`: help and the pages leave the choices out; they are
 ///   still the only values accepted, still completed, and still listed by
 ///   the error for a value that is none of them.
@@ -2139,6 +2146,7 @@ fn occurrence_item(
         choices: #choices,
         choice_help: #choice_help,
         hide_choices: false,
+        choices_open: false,
         deprecated: ::core::option::Option::None,
         require_equals: #require_equals,
         global: false,
@@ -2448,6 +2456,7 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         choices: field.choices.clone().unwrap_or_default(),
         choice_help: field.choice_help.clone(),
         hide_choices: field.hide_choices,
+        choices_open: field.choices_open,
         env_fallback: field.env_fallback.clone(),
         deprecated_env: field.deprecated_env.clone(),
         deprecated: field.deprecation.as_ref().map(DeprecationDoc::spec),
@@ -3261,6 +3270,9 @@ struct Field {
     choice_help: Vec<String>,
     /// `hide_choices`: help and the pages leave the choices out.
     hide_choices: bool,
+    /// `choices_strict = false`: the choices are suggestions, any value is
+    /// accepted.
+    choices_open: bool,
     /// `help = EXPR`, not a literal: the `&'static str` help shows in place
     /// of the doc comment, which the pages keep.
     help_expr: Option<TokenStream2>,
@@ -3469,6 +3481,7 @@ impl Field {
         };
         let choice_help = choice_help_fn(&self.choice_help, self.choices.as_deref(), value_ty);
         let hide_choices = self.hide_choices;
+        let choices_open = self.choices_open;
         let deprecated = DeprecationDoc::tokens(self.deprecation.as_ref());
         quote! {
             ::winnow_args::help::Item {
@@ -3493,6 +3506,7 @@ impl Field {
                 choices: #choices,
                 choice_help: #choice_help,
                 hide_choices: #hide_choices,
+                choices_open: #choices_open,
                 deprecated: #deprecated,
                 require_equals: #require_equals,
                 global: #global,
@@ -3555,7 +3569,7 @@ impl Field {
         value: TokenStream2,
         error: impl FnOnce(TokenStream2) -> TokenStream2,
     ) -> TokenStream2 {
-        let Some(choices) = &self.choices else {
+        let Some(choices) = self.choices.as_ref().filter(|_| !self.choices_open) else {
             return quote!();
         };
         let pattern = byte_patterns(choices);
@@ -5909,6 +5923,30 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             const _: () = assert!(!<#ty as ::winnow_args::Subcommand>::EXTERNAL, #message);
         });
     }
+    spec_checks.extend(
+        fields
+            .iter()
+            .filter(|field| field.choices_open)
+            .filter_map(|field| {
+                let ty = value_type(field)?;
+                let names_parameter = |tokens: TokenStream2| {
+                    let text = tokens.to_string();
+                    input.generics.type_params().any(|p| {
+                        text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                            .any(|word| p.ident == word)
+                    })
+                };
+                if names_parameter(quote!(#ty)) {
+                    return None;
+                }
+                Some(quote::quote_spanned! {ty.span()=>
+                    const _: () = ::core::assert!(
+                        <#ty as ::winnow_args::FromArg>::CHOICES.is_empty(),
+                        "`choices_strict = false` is for a type that takes any text: this one has choices of its own",
+                    );
+                })
+            }),
+    );
     // Its first word takes a negative number where its first positional opts
     // in, or where its default subcommand's first word does, at any depth.
     let own_negative = positionals.first().is_some_and(|f| f.negative_numbers);
@@ -7483,6 +7521,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut choices = None;
     let mut choice_help = Vec::new();
     let mut hide_choices = false;
+    let mut choices_open = false;
     let (mut help_expr, mut long_help_expr) = (None, None);
     let mut deprecation = None;
     let mut env_fallback = Vec::new();
@@ -7595,6 +7634,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 hide = true;
             } else if meta.path.is_ident("hide_choices") {
                 hide_choices = true;
+            } else if meta.path.is_ident("choices_strict") {
+                choices_open = !meta.value()?.parse::<syn::LitBool>()?.value;
             } else if DeprecationDoc::option(&meta, &mut deprecation)? {
             } else if meta.path.is_ident("env_fallback") {
                 env_fallback.extend(aliases(&meta)?);
@@ -7809,7 +7850,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 return Err(meta.error(
                     "unknown `arg` option; expected one of `short`, `long`, `alias`, `visible_alias`, `global`, `count`, \
                      `positional`, `value_name`, `double_dash`, `subcommand`, `flatten`, `sequence`, `unknown`, `skip`, \
-                     `delimiter`, `choices`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
+                     `delimiter`, `choices`, `choices_strict`, `hide_choices`, `env`, `env_fallback`, `deprecated_env`, `default`, `default_missing`, `allow_negative_numbers`, \
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
@@ -8193,6 +8234,15 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 .into(),
         );
     }
+    if choices_open && bool_value {
+        return error(
+            "`choices_strict = false` is not for `bool_value`, whose values are `true` and `false`"
+                .into(),
+        );
+    }
+    if choices_open && choices.is_none() {
+        return error("`choices_strict = false` is for a value with `choices`".into());
+    }
     if hide_choices && choices.is_none() && matches!(kind, Kind::Switch | Kind::Count(_)) {
         return error("`hide_choices` is for a value with choices".into());
     }
@@ -8217,6 +8267,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         choices,
         choice_help,
         hide_choices,
+        choices_open,
         help_expr,
         long_help_expr,
         deprecation,
