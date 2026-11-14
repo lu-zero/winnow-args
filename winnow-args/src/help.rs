@@ -144,6 +144,25 @@ pub struct Heading {
     pub help: &'static str,
 }
 
+/// What an [`Admonition`] says: what to know, or what to know before using it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AdmonitionKind {
+    /// `Note: …`.
+    Note,
+    /// `Warning: …`.
+    Warning,
+}
+
+/// A block under an item in the long help, as usage's `note` and `warning`.
+#[derive(Debug, Clone, Copy)]
+pub struct Admonition {
+    /// Which label it has.
+    pub kind: AdmonitionKind,
+    /// What it says; a block with no text is not shown.
+    pub text: &'static str,
+}
+
 /// A flag or positional.
 #[derive(Debug, Clone, Copy)]
 pub struct Item {
@@ -219,8 +238,11 @@ pub struct Item {
     /// What its value can be, given what is typed of it: asked when a shell
     /// completes it, in place of its choices and its hint.
     pub complete: Option<fn(&str) -> Vec<crate::complete::Candidate>>,
-    /// What to know before using it, shown by `--help` as `Warning: …`;
-    /// empty for none.
+    /// Its `note`s and `warning`s, in the order they were given, shown by
+    /// `--help` after the description.
+    pub admonitions: &'static [Admonition],
+    /// What to know before using it, shown by `--help` as `Warning: …` after
+    /// the [`admonitions`](Item::admonitions); empty for none.
     pub warning: &'static str,
 }
 
@@ -259,6 +281,7 @@ impl Item {
         more_values: false,
         hint: crate::complete::Hint::Nothing,
         complete: None,
+        admonitions: &[],
         warning: "",
     };
 }
@@ -1442,6 +1465,17 @@ fn describe(item: &Item, long: bool, style: Style) -> String {
                 close()
             ));
         }
+    }
+    for block in item
+        .admonitions
+        .iter()
+        .filter(|b| long && !b.text.is_empty())
+    {
+        let label = match block.kind {
+            AdmonitionKind::Warning => Style::paint(style.error(), "Warning:"),
+            _ => Style::paint(style.emphasis(), "Note:"),
+        };
+        add(format!("{label} {}", painted_marks(block.text, style)));
     }
     if long && !item.warning.is_empty() {
         let label = Style::paint(style.error(), "Warning:");

@@ -456,7 +456,10 @@ mod spec;
 ///   variant take it too.
 /// - `help_heading = "…"`: list the field under this heading. Fields with none
 ///   are listed under "Options", or under the struct's `next_help_heading`.
-/// - `warning = "…"`: `--help` shows it as `Warning: …`.
+/// - `note = "…"`, `warning = "…"`: the long `--help` shows them as `Note: …`
+///   and `Warning: …` under the description. Either may be given again, and
+///   they keep the order they are written in.
+///   Clippy's `duplicated_attributes` only flags two with the same text.
 /// - `deprecated`, or `deprecated = "use --new"`: giving it records a
 ///   `winnow_args::warn::Warning`, which `Args::parse` prints and
 ///   `Args::warnings` returns. Help marks it `[deprecated]`, and the long help
@@ -549,6 +552,29 @@ fn const_text(input: syn::parse::ParseStream<'_>) -> syn::Result<(TokenStream2, 
     }
     let expr = input.parse::<syn::Expr>()?;
     Ok((quote!(#expr), None))
+}
+
+/// Which label an admonition has.
+#[derive(Clone, Copy)]
+enum Admonition {
+    Note,
+    Warning,
+}
+
+impl Admonition {
+    fn name(self) -> &'static str {
+        match self {
+            Admonition::Note => "note",
+            Admonition::Warning => "warning",
+        }
+    }
+
+    fn tokens(self) -> TokenStream2 {
+        match self {
+            Admonition::Note => quote!(::winnow_args::help::AdmonitionKind::Note),
+            Admonition::Warning => quote!(::winnow_args::help::AdmonitionKind::Warning),
+        }
+    }
 }
 
 /// Help prose: text the pages say too, or a constant only help reads.
@@ -2123,6 +2149,7 @@ fn occurrence_item(
         more_values: false,
         hint: #hint,
         complete: ::core::option::Option::None,
+        admonitions: &[],
         warning: "",
     }))
 }
@@ -2434,7 +2461,12 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         prefix: field.prefix,
         stop_flags: field.stop_flags,
         keywords,
-        warning: field.warning.page(""),
+        admonitions: field
+            .admonitions
+            .iter()
+            .map(|(kind, said)| [kind.name().to_owned(), said.page("")])
+            .filter(|[_, text]| !text.is_empty())
+            .collect(),
         effect: field.effect.clone(),
     })
 }
@@ -3287,7 +3319,8 @@ struct Field {
     /// The function a shell's completion of the value asks.
     complete: Option<syn::Path>,
     /// What to know before using it, shown by `--help`.
-    warning: Said,
+    /// Its `note`s and `warning`s, in the order given.
+    admonitions: Vec<(Admonition, Said)>,
     /// Help and the pages leave the default out.
     hide_default_value: bool,
     /// Help and the pages leave the environment variable out.
@@ -3387,7 +3420,11 @@ impl Field {
             (None, None) => (text(&self.help), text(&self.long_help)),
         };
         let heading = opt_str(self.heading.as_deref());
-        let warning = self.warning.help();
+        let admonitions = self.admonitions.iter().map(|(kind, said)| {
+            let kind = kind.tokens();
+            let text = said.help();
+            quote!(::winnow_args::help::Admonition { kind: #kind, text: #text })
+        });
         let hide = self.hide;
         let more_shorts = self.short_aliases.iter();
         let plus = opt_char(self.plus);
@@ -3466,7 +3503,8 @@ impl Field {
                 more_values: #more_values,
                 hint: #hint,
                 complete: #complete,
-                warning: #warning,
+                admonitions: &[#(#admonitions),*],
+                warning: "",
             }
         }
     }
@@ -7471,7 +7509,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs)?;
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
-    let mut warning = Said::default();
+    let mut admonitions = Vec::new();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
     let mut parse_with = None;
@@ -7572,8 +7610,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 hide_env = true;
             } else if meta.path.is_ident("display_order") {
                 display_order = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse::<usize>()?);
+            } else if meta.path.is_ident("note") {
+                admonitions.push((Admonition::Note, Said::read(meta.value()?)?));
             } else if meta.path.is_ident("warning") {
-                warning = Said::read(meta.value()?)?;
+                admonitions.push((Admonition::Warning, Said::read(meta.value()?)?));
             } else if meta.path.is_ident("effect") {
                 effect = Some(effect_name(&meta)?);
             } else if meta.path.is_ident("negate") {
@@ -7773,7 +7813,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
-                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `note`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -8204,7 +8244,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         value_name: if tristate { None } else { flag_value_name },
         hint,
         complete,
-        warning,
+        admonitions,
         hide_default_value,
         hide_env,
         display_order,

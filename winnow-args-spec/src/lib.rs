@@ -113,6 +113,35 @@ pub struct Heading {
     pub help: String,
 }
 
+/// What an [`Admonition`] says it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AdmonitionKind {
+    /// What to know.
+    Note,
+    /// What to know before using it.
+    Warning,
+}
+
+impl AdmonitionKind {
+    /// The label a page puts before the text.
+    pub fn label(self) -> &'static str {
+        match self {
+            AdmonitionKind::Note => "Note",
+            AdmonitionKind::Warning => "Warning",
+        }
+    }
+}
+
+/// A `note` or `warning` on a flag or positional.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Admonition {
+    /// Which label it has.
+    pub kind: AdmonitionKind,
+    /// What it says.
+    pub text: String,
+}
+
 /// What a command, or a flag, does to what it works on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -288,7 +317,9 @@ pub struct Item {
     pub prefix: bool,
     /// Flags stop once this positional has a value.
     pub stop_flags: bool,
-    /// What to know before using it. Empty for none.
+    /// Its notes and warnings, in the order they were given.
+    pub admonitions: Vec<Admonition>,
+    /// What to know before using it, after the `admonitions`. Empty for none.
     pub warning: String,
     /// What giving it does to what the command works on.
     pub effect: Option<Effect>,
@@ -916,6 +947,12 @@ impl Item {
         if let Some(effect) = self.effect {
             append_note(&mut text, &format!("Effect: {}.", effect.label()));
         }
+        for block in self.admonitions.iter().filter(|b| !b.text.is_empty()) {
+            append_note(
+                &mut text,
+                &format!("{}: {}", block.kind.label(), block.text),
+            );
+        }
         if !self.warning.is_empty() {
             append_note(&mut text, &format!("Warning: {}", self.warning));
         }
@@ -1288,6 +1325,29 @@ fn deprecated(table: &Table) -> Result<Option<Deprecated>, Error> {
     }))
 }
 
+fn admonitions(table: &Table) -> Result<Vec<Admonition>, Error> {
+    let mut out = Vec::new();
+    for value in array(table, "admonitions")? {
+        let pair = value.as_array().map(Vec::as_slice);
+        let [kind, text] = pair.unwrap_or_default() else {
+            return Err(Error::new("`admonitions` holds a pair of strings each"));
+        };
+        let (Some(kind), Some(text)) = (kind.as_str(), text.as_str()) else {
+            return Err(Error::new("`admonitions` holds a non-string"));
+        };
+        let kind = match kind {
+            "note" => AdmonitionKind::Note,
+            "warning" => AdmonitionKind::Warning,
+            other => return Err(Error::new(format!("unknown admonition `{other}`"))),
+        };
+        out.push(Admonition {
+            kind,
+            text: text.to_owned(),
+        });
+    }
+    Ok(out)
+}
+
 fn effect(table: &Table) -> Result<Option<Effect>, Error> {
     opt_present(table, "effect")?
         .map(|name| Effect::named(&name))
@@ -1355,6 +1415,7 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 two_dashes: flag(row, "two_dashes")?,
                 prefix: flag(row, "prefix")?,
                 stop_flags: flag(row, "stop_flags")?,
+                admonitions: admonitions(row)?,
                 warning: opt_str(row, "warning")?,
                 effect: effect(row)?,
                 vocabulary: None,

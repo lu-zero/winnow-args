@@ -133,7 +133,8 @@ pub(crate) struct ItemDoc {
     pub prefix: bool,
     pub stop_flags: bool,
     pub keywords: Option<String>,
-    pub warning: String,
+    /// `[kind, text]` for each `note` and `warning`, in order.
+    pub admonitions: Vec<[String; 2]>,
     pub effect: Option<String>,
 }
 
@@ -292,7 +293,7 @@ fn item_toml(item: &ItemDoc) -> String {
     flag(&mut out, "prefix", item.prefix);
     flag(&mut out, "stop_flags", item.stop_flags);
     opt(&mut out, "keywords", &item.keywords);
-    field(&mut out, "warning", &item.warning);
+    pairs(&mut out, "admonitions", &item.admonitions);
     opt(&mut out, "effect", &item.effect);
     out
 }
@@ -350,6 +351,25 @@ fn deprecated(out: &mut String, doc: &Option<(String, Option<String>, Option<Str
     pair(out, "deprecated", message);
     opt(out, "deprecated_warn_at", warn_at);
     opt(out, "deprecated_remove_at", remove_at);
+}
+
+fn pairs(out: &mut String, key: &str, values: &[[String; 2]]) {
+    if values.is_empty() {
+        return;
+    }
+    out.push_str(key);
+    out.push_str(" = [");
+    for (index, [first, second]) in values.iter().enumerate() {
+        if index > 0 {
+            out.push_str(", ");
+        }
+        out.push('[');
+        out.push_str(&quote_basic(first));
+        out.push_str(", ");
+        out.push_str(&quote_basic(second));
+        out.push(']');
+    }
+    out.push_str("]\n");
 }
 
 fn strings(out: &mut String, key: &str, values: &[String]) {

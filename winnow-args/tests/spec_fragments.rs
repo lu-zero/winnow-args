@@ -218,7 +218,9 @@ struct SpecRoots {
         long,
         help_heading = "Other",
         effect = "destructive",
-        warning = "Not for use."
+        note = "Kept for old scripts.",
+        warning = "Not for use.",
+        note = "Say --reset instead."
     )]
     wipe: bool,
 }
@@ -241,7 +243,7 @@ enum SpecPagesCommand {
 
 #[test]
 fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
-    use winnow_args_spec::{Effect, ExitCode};
+    use winnow_args_spec::{AdmonitionKind, Effect, ExitCode};
     let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
         return;
     };
@@ -289,7 +291,19 @@ fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
             command.heading_help("Other"),
             Some("Only the group says this.")
         );
-        assert_eq!(command.items[1].warning, "Not for use.");
+        let blocks: Vec<_> = command.items[1]
+            .admonitions
+            .iter()
+            .map(|b| (b.kind, b.text.as_str()))
+            .collect();
+        assert_eq!(
+            blocks,
+            [
+                (AdmonitionKind::Note, "Kept for old scripts."),
+                (AdmonitionKind::Warning, "Not for use."),
+                (AdmonitionKind::Note, "Say --reset instead."),
+            ]
+        );
         assert_eq!(command.exit_codes[1].help, "no such root");
     }
 }
@@ -692,7 +706,7 @@ fn a_constant_is_help_s_and_the_pages_say_what_they_would_without_it() {
     {
         assert_eq!((help.about, help.after_help), (SAID, SAID));
         assert_eq!((help.items[0].help, help.items[0].long_help), (kept, SAID));
-        assert_eq!(help.items[0].warning, SAID);
+        assert_eq!(help.items[0].admonitions[0].text, SAID);
         assert_eq!(help.items[1].help, "winnow-args");
         assert_eq!(help.subcommands[0].about, SAID);
         assert_eq!(help.subcommands[0].command.long_about, SAID);
@@ -718,7 +732,8 @@ fn a_constant_is_help_s_and_the_pages_say_what_they_would_without_it() {
     #[cfg(feature = "help-text")]
     {
         assert_eq!(command.about, kept);
-        assert_eq!((old.long_help.as_str(), old.warning.as_str()), (kept, ""));
+        assert_eq!(old.long_help, kept);
+        assert!(old.admonitions.is_empty());
         assert_eq!(command.items[1].help, "winnow-args");
         assert_eq!(command.subcommands[0].about, kept);
     }

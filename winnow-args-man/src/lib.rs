@@ -615,12 +615,27 @@ mod tests {
 
     /// A command that says all a page says beyond its lists.
     fn telling() -> Command {
-        use winnow_args_spec::{Effect, Example, ExitCode, Heading, Output, Sub};
+        use winnow_args_spec::{
+            Admonition, AdmonitionKind, Effect, Example, ExitCode, Heading, Output, Sub,
+        };
         let wipe = Item {
             long: Some("wipe".to_owned()),
             help: "Start over.".to_owned(),
             heading: Some("Roots".to_owned()),
-            warning: "Not for use.".to_owned(),
+            admonitions: vec![
+                Admonition {
+                    kind: AdmonitionKind::Note,
+                    text: "Kept for old scripts.".to_owned(),
+                },
+                Admonition {
+                    kind: AdmonitionKind::Warning,
+                    text: "Not for use.".to_owned(),
+                },
+                Admonition {
+                    kind: AdmonitionKind::Note,
+                    text: "Say --reset instead.".to_owned(),
+                },
+            ],
             effect: Some(Effect::Destructive),
             ..Item::default()
         };
@@ -712,7 +727,7 @@ mod tests {
             ".SH DESCRIPTION\nA package manager.\n.PP\nEffect: modifies state.\n",
             "\\fBemerge\\fR\nMerge. (default)\n",
             ".SH ROOTS\nWhich tree is read.\n.TP\n",
-            "Warning: Not for use.",
+            "Note: Kept for old scripts. Warning: Not for use. Note: Say \\-\\-reset instead.",
             ".SH \"OUTPUT FORMATS\"\n.TP\n\\fBpretty\\fR\nFor people. The default.\n.TP\n\\fBjson\\fR\nFraming: json.\n",
             ".SH \"EXIT STATUS\"\n.TP\n\\fB64\\fR\nNo such root.\n",
             ".SH EXAMPLES\n.PP\nUpdate:\n.br\nRebuilds what changed.\n.br\n$ \\fBem\\fR \\fB\\-\\-wipe\\fR \\fI<ROOT>\\fR @world\n.PP\n$ \\fBem\\fR \\fBquery\\fR\n",

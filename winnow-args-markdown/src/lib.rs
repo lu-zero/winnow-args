@@ -474,12 +474,27 @@ mod tests {
 
     /// A command that says all a page says beyond its lists.
     fn telling() -> Command {
-        use winnow_args_spec::{Effect, Example, ExitCode, Heading, Output, Sub};
+        use winnow_args_spec::{
+            Admonition, AdmonitionKind, Effect, Example, ExitCode, Heading, Output, Sub,
+        };
         let wipe = Item {
             long: Some("wipe".to_owned()),
             help: "Start over.".to_owned(),
             heading: Some("Roots".to_owned()),
-            warning: "Not for use.".to_owned(),
+            admonitions: vec![
+                Admonition {
+                    kind: AdmonitionKind::Note,
+                    text: "Kept for old scripts.".to_owned(),
+                },
+                Admonition {
+                    kind: AdmonitionKind::Warning,
+                    text: "Not for use.".to_owned(),
+                },
+                Admonition {
+                    kind: AdmonitionKind::Note,
+                    text: "Say --reset instead.".to_owned(),
+                },
+            ],
             effect: Some(Effect::Destructive),
             ..Item::default()
         };
@@ -573,7 +588,8 @@ mod tests {
         assert!(
             root.contains(
                 "## Roots\n\nWhich tree is read.\n\n* `--wipe` — Start over. \
-                 Effect: destructive (may delete or irreversibly overwrite). Warning: Not for use.\n"
+                 Effect: destructive (may delete or irreversibly overwrite). Note: Kept for old scripts. \
+                 Warning: Not for use. Note: Say --reset instead.\n"
             ),
             "{root}"
         );

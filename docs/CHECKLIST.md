@@ -252,7 +252,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `hide_default_value`, `hide_env`, `display_order`
 - [x] A doc comment's paragraph wrapped to the terminal, an indented line
       kept; `verbatim_doc_comment` keeps every line
-- [ ] `note`, a logo, `help <topic>`
+- [x] `note = "…"` on a flag or positional (usage's `note`), beside `warning`,
+      in the order written
+- [ ] A logo, `help <topic>`
 - [ ] A doc comment from `include_str!` or `concat!`, left out with a warning
 - [x] A `ValueEnum` variant's help from the value, beside `name()`
 - [ ] Rendered diagnostics with the command line and a caret

@@ -13,6 +13,15 @@ released together. Versions follow [semver](https://semver.org).
   `delimiter` splits no word after `--`, nor those of a
   `double_dash = "automatic"` positional. Unlike clap's, it is not inherited
   by subcommands.
+- **Added**: `#[arg(note = "…")]` on a flag or positional, as usage's `note`.
+  The long `--help` shows `Note: …` and `Warning: …` in the order they are
+  written, and either may be given again; the spec catalog (`admonitions`),
+  man and Markdown pages carry them. The short page leaves them out.
+- **Changed**: `help::Item` and `winnow_args_spec::Item` have the field
+  `admonitions`. A value written by hand that ends in `..Item::EMPTY` or
+  `..Default::default()` is unaffected; one written out in full needs it.
+  `warning` stays and is shown after the admonitions, but the derive now
+  puts a field's warnings in `admonitions` and leaves `warning` empty.
 
 ## 0.6.2 (2026-11-13)
 

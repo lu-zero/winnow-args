@@ -64,7 +64,9 @@ struct Emerge {
     /// Carry on after a failure
     #[arg(
         long,
-        warning = "Exists for parity; a failed package must stop the run."
+        note = "Accepted so scripts written for emerge keep working.",
+        warning = "Exists for parity; a failed package must stop the run.",
+        note = "Say so in the log when it is used."
     )]
     keep_going: bool,
     /// What to merge
@@ -262,15 +264,19 @@ fn flatten_help_lays_the_subcommands_out() {
 }
 
 #[test]
-fn a_warning_is_on_the_long_page() {
+fn a_note_and_a_warning_are_on_the_long_page() {
     let long = help(&["emerge", "--help"]);
     assert!(
         long.contains(
-            "      --keep-going\n          Carry on after a failure\n          Warning: Exists for parity; a failed package must stop the run.\n"
+            "      --keep-going\n          Carry on after a failure\n          Note: Accepted so scripts written for emerge keep working.\n          Warning: Exists for parity; a failed package must stop the run.\n          Note: Say so in the log when it is used.\n"
         ),
         "{long}"
     );
-    assert!(!help(&["emerge", "-h"]).contains("Warning"));
+    let short = help(&["emerge", "-h"]);
+    assert!(
+        !short.contains("Warning") && !short.contains("Note:"),
+        "{short}"
+    );
 }
 
 #[test]
