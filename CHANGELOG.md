@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.3 (2026-11-14)
 
 - **Added**: `short_alias('P', 'd')`, several letters in one `short_alias`,
   as `alias("a", "b")` is for long names. A repeated `short_alias` is
