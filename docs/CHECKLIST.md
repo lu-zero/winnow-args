@@ -232,7 +232,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       `args_override_self`, with `first` beyond it), per field or per struct
 - [x] `subcommand_negates_reqs`, `args_conflicts_with_subcommands`,
       `subcommand_precedence_over_arg`
-- [ ] `dont_delimit_trailing_values`
+- [x] `dont_delimit_trailing_values`: per struct, not inherited by subcommands
 - [x] `default_subcommand_help`; completion of the default subcommand's flags
       before it is named
 - [x] `default_subcommand_on_empty`

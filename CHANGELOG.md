@@ -9,6 +9,10 @@ released together. Versions follow [semver](https://semver.org).
 - **Added**: `short_alias('P', 'd')`, several letters in one `short_alias`,
   as `alias("a", "b")` is for long names. A repeated `short_alias` is
   flagged by clippy's `duplicated_attributes` as a repeated `short` is.
+- **Added**: `#[arg(dont_delimit_trailing_values)]` on a struct: a positional's
+  `delimiter` splits no word after `--`, nor those of a
+  `double_dash = "automatic"` positional. Unlike clap's, it is not inherited
+  by subcommands.
 
 ## 0.6.2 (2026-11-13)
 

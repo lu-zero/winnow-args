@@ -75,3 +75,63 @@ fn a_bad_piece_is_reported_on_its_own() {
         (ErrorKind::InvalidValue, Some("bad"), 3)
     );
 }
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(dont_delimit_trailing_values)]
+struct Tail {
+    #[arg(positional, delimiter = ',')]
+    ids: Vec<String>,
+}
+
+#[derive(Args, Debug, PartialEq)]
+struct Split {
+    #[arg(positional, delimiter = ',')]
+    ids: Vec<String>,
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(dont_delimit_trailing_values)]
+struct Rest {
+    #[arg(positional, double_dash = "automatic", delimiter = ',')]
+    words: Vec<String>,
+}
+
+#[derive(Args, Debug, PartialEq)]
+#[arg(dont_delimit_trailing_values)]
+struct After {
+    #[arg(positional, delimiter = ',')]
+    ids: Vec<String>,
+    #[arg(positional, double_dash = "required", delimiter = ',')]
+    tail: Vec<String>,
+}
+
+fn strings(v: &[&str]) -> Vec<String> {
+    v.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn a_word_after_the_separator_is_kept_whole() {
+    let words = crate::words(&["a,b", "--", "c,d", "e"]);
+    let tail = Tail::parse_words(&words).unwrap();
+    assert_eq!(tail.ids, strings(&["a", "b", "c,d", "e"]));
+    // Without the setting the same line splits everywhere.
+    let split = Split::parse_words(&words).unwrap();
+    assert_eq!(split.ids, strings(&["a", "b", "c", "d", "e"]));
+}
+
+#[test]
+fn an_automatic_positional_is_never_split() {
+    let words = crate::words(&["a,b", "c,d"]);
+    assert_eq!(
+        Rest::parse_words(&words).unwrap().words,
+        strings(&["a,b", "c,d"])
+    );
+}
+
+#[test]
+fn a_required_double_dash_positional_is_kept_whole() {
+    let words = crate::words(&["a,b", "--", "c,d"]);
+    let after = After::parse_words(&words).unwrap();
+    assert_eq!(after.ids, strings(&["a", "b"]));
+    assert_eq!(after.tail, strings(&["c,d"]));
+}

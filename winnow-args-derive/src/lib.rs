@@ -188,6 +188,11 @@ mod spec;
 ///   subcommand even after a positional is filled, which would take it as a
 ///   value; `help` is still a value then. A fixed `values = n`, and a global
 ///   flag, take it as before. It needs a `subcommand` field.
+/// - `dont_delimit_trailing_values`: a positional's `delimiter` splits no word
+///   after `--`, and none of a `double_dash = "automatic"` positional's, whose
+///   words all follow the point flags stop. A word before the `--` is split as
+///   before. Unlike clap's, it is this struct's: a subcommand's struct says it
+///   too. It needs a positional with a `delimiter`.
 /// - `override_self = "last"`, `"first"` or `"error"`: what a flag of this
 ///   struct given twice does, unless the field says. The last one is kept by
 ///   default. It is this struct's: a subcommand's struct has its own.
@@ -4035,6 +4040,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         subcommand_negates_reqs,
         args_conflicts_with_subcommands,
         subcommand_precedence_over_arg,
+        dont_delimit_trailing_values,
         groups,
         restart_token,
         default_subcommand,
@@ -4598,7 +4604,11 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     }
                 }
                 Kind::Many(ty) => {
-                    let push = match f.delimiter {
+                    // An automatic positional's words are all trailing.
+                    let delimiter = f.delimiter.filter(|_| {
+                        !(dont_delimit_trailing_values && f.double_dash() == DoubleDash::Automatic)
+                    });
+                    let push = match delimiter {
                         None => f.pushing(|ident| {
                             let value = f.word_value(ty, quote!(__word), &display);
                             // Sized once, for at most every word left: the
@@ -4611,10 +4621,20 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                             }
                         }),
                         Some(d) => f.pushing(|ident| {
-                            let value = f.word_value(ty, quote!(__piece), &display);
+                            let piece = f.word_value(ty, quote!(__piece), &display);
+                            let whole = f.word_value(ty, quote!(__word), &display);
+                            let whole = dont_delimit_trailing_values.then(|| {
+                                quote! {
+                                    if __word.after_separator {
+                                        #ident.push(#whole);
+                                    } else
+                                }
+                            });
                             quote! {
-                                for __piece in __word.split(#d) {
-                                    #ident.push(#value);
+                                #whole {
+                                    for __piece in __word.split(#d) {
+                                        #ident.push(#piece);
+                                    }
                                 }
                             }
                         }),
@@ -4649,6 +4669,10 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             let store = match &t.kind {
                 Kind::Many(ty) => match t.delimiter {
                     None => t.pushing(|ident| {
+                        let value = t.word_value(ty, quote!(__word), &display);
+                        quote!(#ident.push(#value);)
+                    }),
+                    Some(_) if dont_delimit_trailing_values => t.pushing(|ident| {
                         let value = t.word_value(ty, quote!(__word), &display);
                         quote!(#ident.push(#value);)
                     }),
@@ -5193,6 +5217,16 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         return Err(syn::Error::new(
             input.ident.span(),
             "`flatten_help` needs an `#[arg(subcommand)]` field",
+        ));
+    }
+    if dont_delimit_trailing_values
+        && !fields
+            .iter()
+            .any(|f| f.is_positional() && f.delimiter.is_some())
+    {
+        return Err(syn::Error::new(
+            input.ident.span(),
+            "`dont_delimit_trailing_values` needs a positional with a `delimiter`",
         ));
     }
     for (set, name) in [
@@ -6077,6 +6111,8 @@ struct StructOptions {
     args_conflicts_with_subcommands: bool,
     /// A word naming a subcommand ends a variadic flag or positional.
     subcommand_precedence_over_arg: bool,
+    /// A positional's `delimiter` splits nothing after `--`.
+    dont_delimit_trailing_values: bool,
     groups: Vec<Group>,
     /// The word that starts a new invocation of this command.
     restart_token: Option<String>,
@@ -6270,6 +6306,10 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 options.subcommand_precedence_over_arg = true;
                 return Ok(());
             }
+            if meta.path.is_ident("dont_delimit_trailing_values") {
+                options.dont_delimit_trailing_values = true;
+                return Ok(());
+            }
             if meta.path.is_ident("long_only") {
                 options.long_only = true;
                 return Ok(());
@@ -6368,7 +6408,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if !meta.path.is_ident("group") {
                 return Err(meta.error(
                     "expected `group(\"name\", ...)`, `restart_token`, `default_subcommand`, \
-                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `subcommand_negates_reqs`, `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`, `unknown_flags`, `long_only`, \
+                     `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `subcommand_negates_reqs`, `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`, `dont_delimit_trailing_values`, `unknown_flags`, `long_only`, \
                      `plus_options`, `multicall`, `validate`, `name`, `version`, `author`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `brief_help`, `example`, \
                      `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \

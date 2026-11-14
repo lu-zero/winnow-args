@@ -270,3 +270,10 @@ struct EmptyShortAlias {
     #[arg(short = 'a', short_alias(), long)]
     quiet: bool,
 }
+
+#[derive(Args)]
+#[arg(dont_delimit_trailing_values)]
+struct NoDelimiterToKeepWhole {
+    #[arg(positional)]
+    ids: Vec<String>,
+}
