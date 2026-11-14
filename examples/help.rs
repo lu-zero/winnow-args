@@ -1,7 +1,7 @@
 //! What derived help looks like: a small mise-like CLI whose help covers
 //! subcommands (one of them the default, one a variant with fields), aliases,
 //! value names, defaults, environment variables, possible values, a heading
-//! with a paragraph, a warning, examples, and long help. Its descriptions
+//! with a paragraph, a note, a warning, examples, and long help. Its descriptions
 //! use each mark help paints: `` `code` ``, `*emphasis*` and `**strong**`. An
 //! example's command line is shown as typed.
 //!
@@ -74,7 +74,9 @@ struct Cli {
     #[arg(
         long,
         help_heading = "Performance",
-        warning = "Only for a mirror you trust."
+        note = "A mirror that signs its packages needs no such flag.",
+        warning = "Only for a mirror you trust.",
+        note = "Packages it installs are not checked later either."
     )]
     unverified: bool,
     #[arg(subcommand)]

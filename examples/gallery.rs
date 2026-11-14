@@ -57,8 +57,12 @@ struct Gallery {
     /// A `plus` flag: `-x` sets it, `+x` clears it
     #[arg(short = 'x', plus = 'x')]
     trace: Option<bool>,
-    /// A flag with a `warning`
-    #[arg(long, warning = "The warning, on `--help` only.")]
+    /// A flag with a `note` and a `warning`
+    #[arg(
+        long,
+        note = "The note, on `--help` only.",
+        warning = "The warning, on `--help` only."
+    )]
     unsafe_mode: bool,
     /// A `deprecated` flag
     #[arg(
