@@ -14,3 +14,13 @@ scripts/performance.py docs/performance.svg
   new measurement.
 
 Both need only Python 3.
+
+## Release image
+
+`docs/release-template.svg` is the 1600 × 900 image for a release post, in the
+colors of `Palette::DEFAULT_256`. Replace `{{VERSION}}`, rewrite the four
+feature rows and the mock `--help` to match the changelog, then render it:
+
+```sh
+sed 's/{{VERSION}}/0.6.3/' docs/release-template.svg | rsvg-convert -w 1600 -o release.png
+```

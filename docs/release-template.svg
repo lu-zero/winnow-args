@@ -1,0 +1,59 @@
+<svg xml:space="preserve" xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<style>
+.m{font-family:Menlo,"SF Mono",Monaco,monospace;font-size:27px;white-space:pre}
+.s{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif}
+.h{fill:#5fafaf;font-weight:700}
+.f{fill:#5faf5f;font-weight:700}
+.p{fill:#87afaf}
+.e{fill:#00afaf}
+.d{fill:#5faf87}
+.c{fill:#5faf5f}
+.g{fill:#8a8a8a}
+.t{fill:#d8dadc}
+.r{fill:#d75f5f;font-weight:700}
+</style>
+<rect width="1600" height="900" fill="#17181a"/>
+<rect x="0" y="0" width="1600" height="8" fill="#5fafaf"/>
+<text x="80" y="130" class="s" font-size="40" font-weight="600" fill="#8a8a8a" letter-spacing="2">RELEASE</text>
+<text x="80" y="235" class="s" font-size="104" font-weight="700" fill="#e8eaec">winnow-args</text>
+<text x="80" y="325" class="s" font-size="84" font-weight="700" fill="#5faf5f">{{VERSION}}</text>
+<text x="80" y="400" class="s" font-size="32" fill="#8a8a8a">Declarative CLI parsing for Rust, on winnow.</text>
+
+<g transform="translate(80,470)">
+<text y="0" class="s" font-size="30" fill="#5fafaf" font-weight="700">What's new</text>
+<text y="58" class="m f" font-size="26">short_alias('P', 'd')</text>
+<text y="108" class="m f" font-size="26">dont_delimit_trailing_values</text>
+<text y="158" class="m f" font-size="26">note = "…"</text>
+<text y="208" class="m f" font-size="26">choices_strict = false</text>
+</g>
+<g class="s" font-size="26" fill="#8a8a8a">
+<text x="600" y="528">many letters, one alias</text>
+<text x="600" y="578">no splitting after --</text>
+<text x="600" y="628">Note: lines in help, man</text>
+<text x="600" y="678">choices as suggestions</text>
+</g>
+
+<!-- terminal -->
+<rect x="860" y="90" width="660" height="0" fill="none"/>
+<g transform="translate(930,110)">
+<rect width="640" height="660" rx="16" fill="#0f1011" stroke="#2a2c2f" stroke-width="2"/>
+<circle cx="32" cy="32" r="8" fill="#d75f5f"/><circle cx="60" cy="32" r="8" fill="#d7af5f"/><circle cx="88" cy="32" r="8" fill="#5faf5f"/>
+<g transform="translate(32,110)">
+<text class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --help</text>
+<text y="60" class="m h" font-size="22.5">Options:</text>
+<text y="108" class="m" font-size="22.5"><tspan class="f">  -f</tspan><tspan class="t">, </tspan><tspan class="f">--format</tspan> <tspan class="p">&lt;FORMAT&gt;</tspan></text>
+<text y="144" class="m t" font-size="22.5">      Output format</text>
+<text y="180" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">suggested values:</tspan> <tspan class="c">json</tspan><tspan class="g">,</tspan> <tspan class="c">yaml</tspan><tspan class="g">]</tspan></text>
+<text y="216" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">env:</tspan> <tspan class="e">PROG_FORMAT</tspan><tspan class="g">]</tspan></text>
+<text y="252" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">default:</tspan> <tspan class="d">json</tspan><tspan class="g">]</tspan></text>
+<text y="304" class="m t" font-size="22.5"><tspan class="h">      Note:</tspan> any other value</text>
+<text y="340" class="m t" font-size="22.5">      is accepted</text>
+<text y="392" class="m" font-size="22.5"><tspan class="f">  -P</tspan><tspan class="t">, </tspan><tspan class="f">-d</tspan><tspan class="t">, </tspan><tspan class="f">--path</tspan> <tspan class="p">&lt;PATH&gt;</tspan></text>
+<text y="456" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --bogus</text>
+<text y="496" class="m" font-size="22.5"><tspan class="r">error:</tspan> <tspan class="t">unexpected</tspan> <tspan fill="#d78787">--bogus</tspan></text>
+</g>
+</g>
+
+<text x="80" y="820" class="m g" font-size="26">cargo add winnow-args</text>
+<text x="80" y="862" class="s" font-size="22" fill="#6a6a6a">github.com/lu-zero/winnow-args</text>
+</svg>
