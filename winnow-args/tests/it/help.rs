@@ -153,6 +153,43 @@ fn the_help_word_follows_subcommand_names() {
     assert!(help(&["help"]).contains("mise prepares your development environment"));
 }
 
+#[derive(Args, Debug)]
+#[arg(
+    name = "topics",
+    heading("Speed", help = "How fast to go.\n\nTuning for parallel work.")
+)]
+struct TopicCli {
+    /// How many jobs to run.
+    #[arg(long, help_heading = "Speed")]
+    jobs: Option<u32>,
+    #[arg(subcommand)]
+    command: Option<TopicCommand>,
+}
+
+#[derive(Subcommand, Debug)]
+enum TopicCommand {
+    /// Run it.
+    Run,
+}
+
+#[test]
+fn the_help_word_finds_a_topic() {
+    let error = TopicCli::parse_words(&crate::words(&["help", "Speed"])).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::HelpRequested);
+    assert_eq!(
+        error.render_help("topics").unwrap(),
+        "Speed:\n  How fast to go.\n\n  Tuning for parallel work.\n"
+    );
+    // A word that names no heading still shows the whole page.
+    let error = TopicCli::parse_words(&crate::words(&["help", "Nope"])).unwrap_err();
+    assert!(
+        error
+            .render_help("topics")
+            .unwrap()
+            .contains("Usage: topics")
+    );
+}
+
 #[test]
 fn a_visible_long_alias_is_listed_and_a_hidden_one_is_not() {
     #[derive(Args, Debug)]

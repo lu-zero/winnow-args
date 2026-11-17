@@ -904,16 +904,20 @@ pub mod __private {
         fn finish(slots: Self::Slots, input: &Argv<'_>) -> Result<Self, Error>;
     }
 
-    /// `help a b …`: the long help of the command the words name, below `root`.
+    /// `help a b …`: the long help of the command the words name, below `root`,
+    /// or just the paragraph under a heading the last word names.
     pub fn help_word(root: &'static crate::help::Command, input: &mut Argv<'_>) -> Error {
         let mut words = Vec::new();
         while !input.is_empty() && !is_flag_like(input.front()) {
             words.push(input.take_word());
         }
-        let (command, path) = crate::help::resolve(root, words.iter().map(|w| &***w));
-        path.into_iter()
-            .rev()
-            .fold(Error::help(command, true), Error::within)
+        let (command, path, topic) = crate::help::resolve_topic(root, words.iter().map(|w| &***w));
+        let error = Error::help(command, true);
+        let error = match topic {
+            Some(topic) => error.topic(topic),
+            None => error,
+        };
+        path.into_iter().rev().fold(error, Error::within)
     }
 
     /// `error`, a required flag or positional left without a value, added to

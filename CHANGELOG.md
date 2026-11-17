@@ -6,6 +6,10 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `help <topic>` shows just the paragraph under that heading,
+  after following subcommand names. `help::resolve_topic` finds it, and
+  `Error::topic` asks for it; a word that names no heading still shows the
+  command's page.
 - **Added**: `Error::render_with_line(program, words, style)` renders a failure
   with the command line and a caret under the byte it points at. `report_argv`
   and `report_with_argv` print that report. `Error::render` and `report` keep

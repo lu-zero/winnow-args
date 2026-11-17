@@ -81,6 +81,8 @@ struct Request {
     /// The command the names start from, once [`Error::suggested`] says:
     /// its page lists the global flags of the commands above it.
     root: Option<&'static crate::help::Command>,
+    /// A heading title named by `help <title>`, for just its paragraph.
+    topic: Option<&'static str>,
     /// The program was run under its subcommand's name (`multicall`): the
     /// first name in `path` is the one the program was run by.
     applet: bool,
@@ -268,6 +270,7 @@ impl Error {
                     bare,
                     path: Vec::new(),
                     root: None,
+                    topic: None,
                     applet: false,
                 }),
                 ..Detail::default()
@@ -297,6 +300,19 @@ impl Error {
     /// `--version`: the command's `long_version`, else its version.
     pub fn long_version(command: &'static crate::help::Command) -> Self {
         Self::request(ErrorKind::VersionRequested, command, true, false)
+    }
+
+    /// Ask for the paragraph under the heading `title` instead of the whole
+    /// page, as `help <title>` does.
+    #[cold]
+    #[inline(never)]
+    pub fn topic(mut self, title: &'static str) -> Self {
+        if let Some(detail) = self.detail.as_deref_mut()
+            && let Some(request) = detail.request.as_mut()
+        {
+            request.topic = Some(title);
+        }
+        self
     }
 
     /// Record that this came from within subcommand `name`, for the usage line
@@ -646,6 +662,9 @@ impl Error {
         let request = self.detail.as_deref()?.request.as_ref()?;
         if self.kind != ErrorKind::HelpRequested {
             return None;
+        }
+        if let Some(topic) = request.topic {
+            return crate::help::render_topic(request.command, topic, style);
         }
         // Run as a subcommand, `program` is the name it was run by, in
         // place of the subcommand's, which may be an alias's.

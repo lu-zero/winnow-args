@@ -264,7 +264,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       kept; `verbatim_doc_comment` keeps every line
 - [x] `note = "…"` on a flag or positional (usage's `note`), beside `warning`,
       in the order written
-- [ ] A logo, `help <topic>`
+- [x] `help <topic>`: a last word naming a heading shows just its paragraph,
+      after following any subcommand names
+- [ ] A logo in help
 - [x] A doc comment from `include_str!` or `concat!`, left out with a warning
 - [x] A `ValueEnum` variant's help from the value, beside `name()`
 - [x] Rendered diagnostics with the command line and a caret:

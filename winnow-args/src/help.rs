@@ -501,6 +501,38 @@ pub fn resolve<'w>(
     (command, path)
 }
 
+/// [`resolve`] with a heading title as the last word: `help build Speed`
+/// names a topic of the `build` command. An unknown word ends the walk as it
+/// does for `resolve`; the caller then shows the command's page.
+pub fn resolve_topic<'w>(
+    root: &'static Command,
+    words: impl IntoIterator<Item = &'w [u8]>,
+) -> (&'static Command, Vec<&'static str>, Option<&'static str>) {
+    let mut words = words.into_iter().peekable();
+    let (mut command, mut path) = (root, Vec::new());
+    while let Some(word) = words.peek() {
+        if let Some(sub) = command
+            .subcommands
+            .iter()
+            .find(|s| s.names.iter().any(|n| n.as_bytes() == *word))
+        {
+            path.push(sub.name);
+            command = sub.command;
+            words.next();
+            continue;
+        }
+        if let Some(heading) = command
+            .headings
+            .iter()
+            .find(|h| h.title.as_bytes() == *word)
+        {
+            return (command, path, Some(heading.title));
+        }
+        break;
+    }
+    (command, path, None)
+}
+
 /// The width help wraps to: `COLUMNS` when it is a positive number, so a user
 /// or a test can say what to assume; else, with the `terminal-size` feature,
 /// the width of the terminal on standard output; else 100.
@@ -791,6 +823,29 @@ pub(crate) fn render_page(
     }
     trim_blank_lines(&mut out);
     out
+}
+
+/// The paragraph under the heading `title`, for `help <title>`.
+pub(crate) fn render_topic(command: &Command, title: &str, style: Style) -> Option<String> {
+    let prose = command.heading_help(title)?;
+    let mut out = String::new();
+    heading(&mut out, &format!("{title}:"), style);
+    out.push('\n');
+    indented(
+        &mut out,
+        prose,
+        2,
+        Layout {
+            long: true,
+            width: width(),
+            style,
+        },
+    );
+    trim_blank_lines(&mut out);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    Some(out)
 }
 
 /// End `out` with one newline.
