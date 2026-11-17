@@ -213,8 +213,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       type takes any text; the enum form, a catch-all variant, waits for 0.7
       (see DESIGN.md)
 - [x] Custom value parsers in the derive (`parse_with`)
-- [ ] Lossless non-UTF-8 on Windows without `unsafe`; non-UTF-8 flag names
-      rejected cleanly
+- [ ] Lossless non-UTF-8 on Windows without `unsafe`
+- [x] Non-UTF-8 flag names rejected cleanly: an unknown flag, matched as bytes
+      and reported with a lossy token
 - [x] A short flag whose value is only the next word, never attached
       (`detached_only`): bash's `set -oe` is a bare `-o` (list), then `-e`
 - [x] An unreadable `@file` kept as a word, as GNU ld does; a parse error or
@@ -230,7 +231,10 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime
-- [ ] Relations on positionals and across `flatten`
+- [x] Relations on positionals within one struct: a positional can name a
+      conflict or a requirement
+- [ ] Relations across `flatten`: selectors cannot reach a flattened struct's
+      fields yet
 
 ### Commands
 

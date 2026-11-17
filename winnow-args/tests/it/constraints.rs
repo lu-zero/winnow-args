@@ -280,6 +280,43 @@ fn required_and_required_unless() {
 }
 
 #[derive(Args, Debug)]
+struct RequiresPositional {
+    #[arg(long, requires = "FILE")]
+    check: bool,
+    #[arg(positional)]
+    file: Option<String>,
+}
+
+#[derive(Args, Debug)]
+struct ConflictsWithPositional {
+    #[arg(long, conflicts = "file")]
+    check: bool,
+    #[arg(positional)]
+    file: Option<String>,
+}
+
+#[test]
+fn relations_can_name_a_positional() {
+    let e = err::<RequiresPositional>(&["--check"], &[]);
+    assert_eq!(
+        (e.kind(), e.token()),
+        (ErrorKind::MissingRequired, Some("FILE"))
+    );
+    assert_eq!(
+        parse::<RequiresPositional>(&["--check", "x"], &[])
+            .unwrap()
+            .file
+            .as_deref(),
+        Some("x")
+    );
+    assert!(parse::<RequiresPositional>(&["x"], &[]).is_ok());
+
+    let e = err::<ConflictsWithPositional>(&["--check", "x"], &[]);
+    assert_eq!(e.kind(), ErrorKind::Conflict);
+    assert!(parse::<ConflictsWithPositional>(&["x"], &[]).is_ok());
+}
+
+#[derive(Args, Debug)]
 struct RequiredSwitch {
     /// `mise sync ruby --brew`: the switch must be given.
     #[arg(long, required)]

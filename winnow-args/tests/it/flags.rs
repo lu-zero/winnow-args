@@ -253,6 +253,23 @@ fn non_utf8_values_survive() {
     assert_eq!(e.kind(), ErrorKind::InvalidValue);
 }
 
+#[cfg(unix)]
+#[test]
+fn non_utf8_flag_names_are_unknown_flags() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt as _;
+
+    let args = [OsStr::from_bytes(b"--\xff")];
+    let argv = words(&args);
+    for e in [
+        Derived::parse_words(&argv).unwrap_err(),
+        combinator(&mut Argv::new(&argv)).unwrap_err(),
+    ] {
+        assert_eq!(e.kind(), ErrorKind::UnknownFlag);
+        assert_eq!(e.token(), Some("--\u{fffd}"));
+    }
+}
+
 #[test]
 fn composes_as_a_winnow_parser() {
     // `Derived::parse_argv` is a plain `Parser<Argv, Derived, Error>`.
