@@ -6,6 +6,11 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `response::split(text)` splits one string with the response-file
+  rules, for a value read from the environment or a configuration file. It
+  borrows the words with nothing to unquote and copies only the rest. An
+  unclosed quote, a trailing `\` or bytes left invalid UTF-8 by unquoting is a
+  `SplitError`, with the cause in its Display; `@x` stays an ordinary word.
 - **Changed**: an unreadable `@file` is kept as a word instead of failing the
   expansion, both as an argument and nested in another response file, as GNU
   ld does. A file that cannot be tokenized, or a depth or count limit, is

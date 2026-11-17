@@ -66,6 +66,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       named after the field; `default` repeated on a `Vec`
 - [x] `keywords`: `-z now` is `--now` of a nested `Args` type, in order
 - [x] `@file` response files (`response`): nested 10 deep, 4096 files, GNU quoting
+- [x] `response::split`: the same quoting rules on one string, borrowing the
+      words with nothing to unquote; an unclosed quote or trailing `\` is an error
 
 ### Positionals and subcommands
 

@@ -32,7 +32,21 @@
 //! nothing turns `@file` on but that call. `examples/ld.rs` does it.
 //! Off Unix a response path is Unicode: bytes that are not UTF-8 are an
 //! I/O error, not a file named by an empty path.
+//!
+//! [`split`] applies the same rules to one string without reading files, for
+//! a value from an environment variable or a configuration file:
+//!
+//! ```
+//! use std::borrow::Cow;
+//! use winnow_args::response::split;
+//!
+//! let words = split("--jobs=4 --load-average 8").unwrap();
+//! assert_eq!(words, [Cow::<str>::Borrowed("--jobs=4"), Cow::<str>::Borrowed("--load-average"), Cow::<str>::Borrowed("8")]);
+//! let quoted = split("--exclude 'sys-apps/foo bar'").unwrap();
+//! assert_eq!(quoted[1], Cow::<str>::Owned("sys-apps/foo bar".to_owned()));
+//! ```
 
+use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -114,7 +128,9 @@ enum Word {
 /// Replace every `@file` argument with the words of the file, recursively.
 ///
 /// Every other argument is kept as it is. Inside a file, a word that starts
-/// with `@` once unquoted names a file too, as in GNU ld and mold.
+/// with `@` once unquoted names a file too, as in GNU ld and mold. A file that
+/// cannot be read stays a word, as GNU ld does; a file that cannot be parsed,
+/// or a depth or count limit, is an error.
 pub fn expand<'a, S: AsRef<OsStr>>(
     args: &'a [S],
     files: &'a mut ResponseFiles,
@@ -151,6 +167,59 @@ pub fn expand<'a, S: AsRef<OsStr>>(
         .collect())
 }
 
+/// Why a string could not be split by [`split`].
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum SplitError {
+    /// A `'` or `"` was not closed; the field says which.
+    UnclosedQuote(char),
+    /// The text ends in a `\`.
+    TrailingBackslash,
+    /// Unquoting a `\` before a byte of a multi-byte character left bytes
+    /// that are not UTF-8.
+    InvalidUtf8(std::string::FromUtf8Error),
+}
+
+impl fmt::Display for SplitError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SplitError::UnclosedQuote(quote) => write!(f, "unclosed `{quote}`"),
+            SplitError::TrailingBackslash => f.write_str("trailing `\\`"),
+            SplitError::InvalidUtf8(error) => write!(f, "invalid UTF-8 after unquoting: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for SplitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SplitError::InvalidUtf8(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+/// Split one string into words with the response-file rules: whitespace
+/// separates, `'…'` and `"…"` quote, and `\` escapes one byte.
+///
+/// A word with nothing to unquote borrows from `text`; only a quoted or
+/// escaped word is copied. `@x` is an ordinary word: no file is read.
+pub fn split(text: &str) -> Result<Vec<Cow<'_, str>>, SplitError> {
+    let tokens = tokenize(text.as_bytes()).map_err(|error| match error {
+        TokenError::UnclosedQuote(quote) => SplitError::UnclosedQuote(char::from(quote)),
+        TokenError::TrailingBackslash => SplitError::TrailingBackslash,
+    })?;
+    tokens
+        .into_iter()
+        .map(|token| match token {
+            Token::Range(start, end) => Ok(Cow::<str>::Borrowed(&text[start..end])),
+            Token::Owned(bytes) => String::from_utf8(bytes)
+                .map(Cow::Owned)
+                .map_err(SplitError::InvalidUtf8),
+        })
+        .collect()
+}
+
 fn read(
     files: &mut ResponseFiles,
     path: &Path,
@@ -169,7 +238,7 @@ fn read(
     }
     let data = std::fs::read(path).map_err(|e| error(ResponseErrorKind::Io(e)))?;
     let file = files.files.len();
-    let tokens = tokenize(&data).ok_or_else(|| error(ResponseErrorKind::PrematureEnd))?;
+    let tokens = tokenize(&data).map_err(|_| error(ResponseErrorKind::PrematureEnd))?;
     files.files.push(data);
 
     for token in tokens {
@@ -240,6 +309,12 @@ enum Token {
     Owned(Vec<u8>),
 }
 
+#[derive(Debug)]
+enum TokenError {
+    UnclosedQuote(u8),
+    TrailingBackslash,
+}
+
 fn is_space(c: u8) -> bool {
     matches!(c, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
 }
@@ -247,7 +322,7 @@ fn is_space(c: u8) -> bool {
 /// Split a response file into words: ranges of `data` where nothing was
 /// unquoted, copies where something was. `None` on an unclosed quote or a
 /// trailing `\`.
-fn tokenize(data: &[u8]) -> Option<Vec<Token>> {
+fn tokenize(data: &[u8]) -> Result<Vec<Token>, TokenError> {
     let mut tokens = Vec::new();
     let mut i = 0;
     while i < data.len() {
@@ -269,7 +344,7 @@ fn tokenize(data: &[u8]) -> Option<Vec<Token>> {
         while i < data.len() {
             let c = data[i];
             if c == b'\\' {
-                word.push(*data.get(i + 1)?);
+                word.push(*data.get(i + 1).ok_or(TokenError::TrailingBackslash)?);
                 i += 2;
             } else if let Some(q) = quote {
                 if c == q {
@@ -288,12 +363,12 @@ fn tokenize(data: &[u8]) -> Option<Vec<Token>> {
                 i += 1;
             }
         }
-        if quote.is_some() {
-            return None;
+        if let Some(quote) = quote {
+            return Err(TokenError::UnclosedQuote(quote));
         }
         tokens.push(Token::Owned(word));
     }
-    Some(tokens)
+    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -301,7 +376,7 @@ mod tests {
     use super::*;
 
     fn words(data: &str) -> Option<Vec<String>> {
-        let tokens = tokenize(data.as_bytes())?;
+        let tokens = tokenize(data.as_bytes()).ok()?;
         Some(
             tokens
                 .into_iter()

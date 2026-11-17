@@ -1,8 +1,9 @@
 //! `@file` response files, with mold's and wild's cases.
 
+use std::borrow::Cow;
 use std::path::PathBuf;
 
-use winnow_args::response::{ResponseErrorKind, ResponseFiles, expand};
+use winnow_args::response::{ResponseErrorKind, ResponseFiles, expand, split};
 
 fn dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("winnow-args-{}-{name}", std::process::id()));
@@ -161,4 +162,46 @@ fn the_number_of_files_is_capped() {
     let mut files = ResponseFiles::default();
     let error = expand(&args, &mut files).unwrap_err();
     assert!(matches!(error.kind, ResponseErrorKind::TooMany), "{error}");
+}
+
+#[test]
+fn split_applies_the_response_rules_to_one_string() {
+    assert!(split("").unwrap().is_empty());
+    assert_eq!(
+        split("  \t a\n\n b\r ").unwrap(),
+        [Cow::<str>::Borrowed("a"), Cow::<str>::Borrowed("b")]
+    );
+    assert_eq!(
+        split(r#"'a b' "c d" '' a"b c"d e\ f \\"#).unwrap(),
+        [
+            Cow::<str>::Owned("a b".to_owned()),
+            Cow::<str>::Owned("c d".to_owned()),
+            Cow::<str>::Owned(String::new()),
+            Cow::<str>::Owned("ab cd".to_owned()),
+            Cow::<str>::Owned("e f".to_owned()),
+            Cow::<str>::Owned("\\".to_owned()),
+        ]
+    );
+    assert_eq!(split("@file").unwrap(), [Cow::<str>::Borrowed("@file")]);
+    assert!(matches!(
+        split("plain").unwrap()[0],
+        Cow::<str>::Borrowed(_)
+    ));
+    assert!(matches!(
+        split("'quoted'").unwrap()[0],
+        Cow::<str>::Owned(_)
+    ));
+}
+
+#[test]
+fn split_errors_name_the_cause() {
+    for (text, message) in [
+        ("'open", "unclosed `'`"),
+        ("\"open", "unclosed `\"`"),
+        ("trailing\\", "trailing `\\`"),
+    ] {
+        let error = split(text).unwrap_err();
+        assert_eq!(error.to_string(), message);
+        assert!(std::error::Error::source(&error).is_none());
+    }
 }
