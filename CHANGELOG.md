@@ -4,6 +4,17 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Changed**: an unreadable `@file` is kept as a word instead of failing the
+  expansion, both as an argument and nested in another response file, as GNU
+  ld does. A file that cannot be tokenized, or a depth or count limit, is
+  still an error, and `expand` no longer returns `ResponseErrorKind::Io` for a
+  file it cannot read.
+- **Changed**: a `complete` candidate with a space or a shell character is
+  stated to be inserted as one word by each shell's script and covered by a
+  test. A tab or a newline still cannot be sent in one answer line.
+
 ## 0.6.3 (2026-11-14)
 
 - **Added**: `short_alias('P', 'd')`, several letters in one `short_alias`,

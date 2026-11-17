@@ -486,8 +486,9 @@ mod spec;
 ///   file for `PathBuf`, `String` and `OsString`, and nothing for any other type.
 /// - `complete = path`: `fn(&str) -> Vec<winnow_args::complete::Candidate>`,
 ///   called with the text typed so far. It is the value's only completion, so
-///   the field has no `hint`. Each candidate is one word, and the script
-///   inserts it as it is.
+///   the field has no `hint`. Each candidate is inserted as one word, a space
+///   or a shell character included; a tab or a newline cannot be sent in one
+///   answer line.
 /// - `hide`: left out of help and of completion.
 #[proc_macro_derive(Args, attributes(arg, winnow_args))]
 pub fn derive_args(input: TokenStream) -> TokenStream {

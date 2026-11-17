@@ -144,7 +144,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       rather than given that enum's choices
 - [x] In those pages: a `use` inside a function is the function's, not
       its module's; a type derived in it sees it, and the module's
-- [ ] In those pages: a `use` inside a macro's braces at module level
+- [x] In those pages: a `use` inside a macro's braces at module level
       (`cfg_if! { … }`) is not the module's
 - [x] In a man page: a description's code and strong spans are bold, its
       emphasized ones italic, without their stars; in Markdown, they are
@@ -215,9 +215,12 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       rejected cleanly
 - [x] A short flag whose value is only the next word, never attached
       (`detached_only`): bash's `set -oe` is a bare `-o` (list), then `-e`
-- [ ] GNU ld's extras: errors spelling a single-dash long option as written,
-      unambiguous abbreviations (`--whole-arch`), an unreadable `@file` kept
-      as a word
+- [x] An unreadable `@file` kept as a word, as GNU ld does; a parse error or
+      a depth or count limit still fails the expansion
+- [~] GNU ld's extras: errors spelling a single-dash long option as written,
+      unambiguous abbreviations (`--whole-arch`). Both wait for 0.7: keeping
+      the dash style grows `Arg`, a measured regression, and abbreviations
+      conflict with exact names
 
 ### Defaults and rules
 
@@ -256,15 +259,17 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `note = "…"` on a flag or positional (usage's `note`), beside `warning`,
       in the order written
 - [ ] A logo, `help <topic>`
-- [ ] A doc comment from `include_str!` or `concat!`, left out with a warning
+- [x] A doc comment from `include_str!` or `concat!`, left out with a warning
 - [x] A `ValueEnum` variant's help from the value, beside `name()`
 - [ ] Rendered diagnostics with the command line and a caret
 - [x] A user palette from the environment (as `GCC_COLORS`): `Palette::with_env`
 
 ### Completion
 
-- [ ] A hint that keeps to some extensions
-- [ ] A candidate of `complete` with a space or a shell character in it,
+- [ ] A hint that keeps to some extensions. Waits for 0.7: the filter needs
+      data in `help::Item` and a new mark in all five completion scripts,
+      with a `PERF.md` entry
+- [x] A candidate of `complete` with a space or a shell character in it,
       quoted for each shell; clap and usage leave it split in bash
 
 ### Program surface

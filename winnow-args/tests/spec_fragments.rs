@@ -243,7 +243,9 @@ enum SpecPagesCommand {
 
 #[test]
 fn what_a_page_says_beyond_its_lists_is_in_the_fragments() {
-    use winnow_args_spec::{AdmonitionKind, Effect, ExitCode};
+    #[cfg(feature = "help-text")]
+    use winnow_args_spec::AdmonitionKind;
+    use winnow_args_spec::{Effect, ExitCode};
     let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
         return;
     };

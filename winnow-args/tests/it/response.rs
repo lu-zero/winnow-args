@@ -87,12 +87,35 @@ fn errors_name_the_file() {
         error.to_string(),
         format!("{}: premature end of input", open.display())
     );
+}
 
+#[test]
+fn an_unreadable_file_stays_a_word() {
+    let dir = dir("unreadable");
     let missing = dir.join("missing.rsp");
-    let args = [at(&missing)];
+    let at_missing = at(&missing);
+    let outer = dir.join("outer.rsp");
+    std::fs::write(&outer, format!("-o out {at_missing} '{at_missing}' in.o")).unwrap();
+    let args = [
+        "-shared".to_owned(),
+        at_missing.clone(),
+        at(&outer),
+        "-lc".to_owned(),
+    ];
     let mut files = ResponseFiles::default();
-    let error = expand(&args, &mut files).unwrap_err();
-    assert!(matches!(error.kind, ResponseErrorKind::Io(_)));
+    assert_eq!(
+        strings(&expand(&args, &mut files).unwrap()),
+        [
+            "-shared",
+            at_missing.as_str(),
+            "-o",
+            "out",
+            at_missing.as_str(),
+            at_missing.as_str(),
+            "in.o",
+            "-lc"
+        ]
+    );
 }
 
 #[cfg(feature = "derive")]

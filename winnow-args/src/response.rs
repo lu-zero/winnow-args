@@ -122,7 +122,19 @@ pub fn expand<'a, S: AsRef<OsStr>>(
     let mut words = Vec::with_capacity(args.len());
     for (index, arg) in args.iter().enumerate() {
         match arg.as_ref().as_encoded_bytes().strip_prefix(b"@") {
-            Some(path) => read(files, path_of(path)?, 1, &mut words)?,
+            Some(path) => {
+                let Ok(path) = path_of(path) else {
+                    words.push(Word::Arg(index));
+                    continue;
+                };
+                match read(files, path, 1, &mut words) {
+                    Ok(()) => {}
+                    Err(error) if matches!(error.kind, ResponseErrorKind::Io(_)) => {
+                        words.push(Word::Arg(index));
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
             None => words.push(Word::Arg(index)),
         }
     }
@@ -166,19 +178,35 @@ fn read(
             Token::Owned(bytes) => bytes,
         };
         if let Some(nested) = bytes.strip_prefix(b"@") {
-            let nested = path_of(nested)?.to_owned();
-            read(files, &nested, depth + 1, words)?;
+            let nested = match path_of(nested) {
+                Ok(path) => path.to_owned(),
+                Err(_) => {
+                    words.push(word(files, file, token));
+                    continue;
+                }
+            };
+            match read(files, &nested, depth + 1, words) {
+                Ok(()) => {}
+                Err(error) if matches!(error.kind, ResponseErrorKind::Io(_)) => {
+                    words.push(word(files, file, token));
+                }
+                Err(error) => return Err(error),
+            }
             continue;
         }
-        words.push(match token {
-            Token::Range(start, end) => Word::File { file, start, end },
-            Token::Owned(bytes) => {
-                files.owned.push(bytes);
-                Word::Owned(files.owned.len() - 1)
-            }
-        });
+        words.push(word(files, file, token));
     }
     Ok(())
+}
+
+fn word(files: &mut ResponseFiles, file: usize, token: Token) -> Word {
+    match token {
+        Token::Range(start, end) => Word::File { file, start, end },
+        Token::Owned(bytes) => {
+            files.owned.push(bytes);
+            Word::Owned(files.owned.len() - 1)
+        }
+    }
 }
 
 #[cfg(unix)]

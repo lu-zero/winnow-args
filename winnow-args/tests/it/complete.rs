@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use winnow_args::complete::{Candidate, Hint, Shell, complete};
+use winnow_args::complete::{Candidate, Hint, Shell, complete, render};
 use winnow_args::{Args, Subcommand, ValueEnum};
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -307,6 +307,16 @@ fn branches(_typed: &str) -> Vec<Candidate> {
         .collect()
 }
 
+fn labels(_typed: &str) -> Vec<Candidate> {
+    ["two words", "price$", "a:b", "back\\slash"]
+        .into_iter()
+        .map(|value| Candidate {
+            value: value.to_owned(),
+            help: "a label",
+        })
+        .collect()
+}
+
 #[derive(Args, Debug)]
 #[arg(name = "hinted")]
 struct Hinted {
@@ -322,6 +332,9 @@ struct Hinted {
     /// The branch to start from.
     #[arg(long, complete = branches)]
     from: Option<String>,
+    /// A name of its own.
+    #[arg(long, complete = labels)]
+    label: Option<String>,
     /// Unhinted: each type says what it is.
     #[arg(long)]
     config: Option<PathBuf>,
@@ -430,6 +443,32 @@ fn a_value_is_what_its_hint_or_its_function_says() {
             assert!(script.contains(line), "{shell}: {line}");
         }
     }
+}
+
+#[test]
+fn a_candidate_with_a_space_or_shell_character_is_one_word() {
+    let answers = complete(Hinted::HELP, &["--label", ""]);
+    let values = ["two words", "price$", "a:b", "back\\slash"];
+    for &shell in Shell::ALL {
+        let rendered = render(&answers, shell);
+        let lines: Vec<_> = rendered.lines().collect();
+        assert_eq!(lines.len(), values.len(), "{shell}: {rendered}");
+        for (line, value) in lines.iter().zip(values) {
+            let line = if shell == Shell::Zsh {
+                line.replace("\\:", ":")
+            } else {
+                (*line).to_owned()
+            };
+            assert!(line.starts_with(value), "{shell}: {line}");
+        }
+    }
+    // A line with a space is still one candidate in every shell's script.
+    let script = |shell| Hinted::completion_script(shell);
+    assert!(script(Shell::Bash).contains("COMPREPLY+=(\"$line\")"));
+    assert!(script(Shell::Zsh).contains("candidates+=(\"$line\")"));
+    assert!(script(Shell::Fish).contains("printf '%s\\n' $line"));
+    assert!(script(Shell::Elvish).contains("edit:complex-candidate $parts[0]"));
+    assert!(script(Shell::PowerShell).contains("CompletionResult]::new("));
 }
 
 #[derive(Args, Debug)]

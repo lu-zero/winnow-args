@@ -806,6 +806,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_use_in_a_macros_braces_is_not_the_modules() {
+        let tokens = "use std::net::IpAddr; macro_rules! keep { ($($t:tt)*) => {} } \
+                      keep! { use other::IpAddr; }"
+            .parse::<TokenStream>()
+            .unwrap();
+        let mut names = Names::default();
+        declare(tokens, &mut Vec::new(), &mut names);
+        let module: Vec<_> = names.imported[&(Vec::new(), "IpAddr".to_owned())]
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(module, ["std", "net", "IpAddr"]);
+        let ((scope, name), path) = names
+            .imported
+            .iter()
+            .find(|(_, path)| path.as_ref().is_some_and(|path| path[0] == "other"))
+            .unwrap();
+        assert_eq!(name, "IpAddr");
+        assert_eq!(scope.len(), 1);
+        assert!(is_block(&scope[0]));
+        let path: Vec<_> = path.as_ref().unwrap().iter().map(String::as_str).collect();
+        assert_eq!(path, ["other", "IpAddr"]);
+    }
+
+    #[test]
     fn strings_stay_text_and_empty_fields_are_omitted() {
         let item = ItemDoc {
             long: Some("ok".to_owned()),

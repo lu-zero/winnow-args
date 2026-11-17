@@ -20,6 +20,15 @@ check:
       local out warnings failed=""
       out=$("$@" 2>&1)
       local code=$?
+      # A dependency meant for another member is unused in a one-package
+      # build, which cargo 1.100 warns about even though the workspace uses it.
+      out=$(printf '%s\n' "$out" | awk '
+        /unused workspace dependency/ { drop = 1; next }
+        /workspace \(manifest\) generated [0-9]+ warnings/ { next }
+        drop && /^(warning|error):/ { drop = 0 }
+        drop { next }
+        { print }
+      ')
       # A diagnostic's location is its first `-->` line.
       warnings=$(printf '%s\n' "$out" | grep -cE '^ *--> ')
       if [ "$code" -ne 0 ] || [ "$warnings" -ne 0 ]; then
