@@ -209,6 +209,9 @@ mod spec;
 /// - `heading("Title", help = "…")`: the paragraph `--help` shows under that
 ///   heading, before the entries. A flattened struct's paragraph is used for
 ///   a title unless the parent gives one.
+/// - `surface = "…"` and `available_if("…", …)`: who the command is for and
+///   the conditions it is available under. They are carried into the
+///   documentation data; help and parsing do not use them.
 /// - `flatten_help`: each subcommand's usage line, description and arguments
 ///   replace the subcommand list. It needs a `subcommand` field.
 /// - `default_subcommand_help`: the default subcommand's page follows this
@@ -463,6 +466,9 @@ mod spec;
 ///   variant take it too.
 /// - `help_heading = "…"`: list the field under this heading. Fields with none
 ///   are listed under "Options", or under the struct's `next_help_heading`.
+/// - `surface = "…"` and `available_if("…", …)`: who the flag or positional
+///   is for and when it is available. They are carried into the documentation
+///   data; help and parsing do not use them.
 /// - `note = "…"`, `warning = "…"`: the long `--help` shows them as `Note: …`
 ///   and `Warning: …` under the description. Either may be given again, and
 ///   they keep the order they are written in.
@@ -2447,6 +2453,8 @@ fn spec_item(field: &Field) -> syn::Result<spec::ItemDoc> {
         help: field.help.clone(),
         long_help: field.long_help.clone(),
         heading: field.heading.clone(),
+        surface: field.surface.clone(),
+        available_if: field.available_if.clone(),
         hide: field.hide,
         positional: field.is_positional(),
         required,
@@ -3323,6 +3331,10 @@ struct Field {
     help: String,
     long_help: String,
     heading: Option<String>,
+    /// The audience this flag or positional is for.
+    surface: Option<String>,
+    /// Conditions under which it is available.
+    available_if: Vec<String>,
     hide: bool,
     /// A flag's value placeholder.
     value_name: Option<String>,
@@ -4120,6 +4132,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         before_help,
         before_long_help,
         usage,
+        surface,
+        available_if,
         long_version,
         disable_help_flag,
         disable_help_short,
@@ -6015,6 +6029,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 before_help: before_text,
                 before_long_help: before_long_text,
                 usage: usage_text,
+                surface: surface.clone(),
+                available_if: available_if.clone(),
                 package_version: with_version.then(|| version_text.clone()),
                 author: author.clone(),
                 items,
@@ -6207,6 +6223,10 @@ struct StructOptions {
     next_help_heading: Option<String>,
     /// What is said under a heading: its title and the paragraph.
     headings: Vec<(String, String)>,
+    /// The audience this command is for, as the program's own name for it.
+    surface: Option<String>,
+    /// Conditions under which the command is available.
+    available_if: Vec<String>,
     /// Command lines to try: the line, its header and what it does.
     examples: Vec<[String; 3]>,
     /// What running it does, for the documentation.
@@ -6296,6 +6316,14 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
             if meta.path.is_ident("heading") {
                 let (title, [help]) = titled(&meta, ["help"])?;
                 options.headings.push((title, help));
+                return Ok(());
+            }
+            if meta.path.is_ident("surface") {
+                options.surface = Some(lit_text(meta.value()?)?.value());
+                return Ok(());
+            }
+            if meta.path.is_ident("available_if") {
+                options.available_if = aliases(&meta)?;
                 return Ok(());
             }
             if meta.path.is_ident("effect") {
@@ -6488,8 +6516,8 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                      `default_subcommand_flags`, `default_subcommand_help`, `default_subcommand_on_empty`, `arg_required_else_help`, `override_self`, `subcommand_negates_reqs`, `args_conflicts_with_subcommands`, `subcommand_precedence_over_arg`, `dont_delimit_trailing_values`, `unknown_flags`, `long_only`, \
                      `plus_options`, `multicall`, `validate`, `name`, `version`, `author`, `about`, `long_about`, `verbatim_doc_comment`, `after_help`, `after_long_help`, `before_help`, `before_long_help`, `usage`, \
                      `long_version`, `brief_help`, `example`, \
-                     `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `effect`, `output(\"name\", ...)`, \
-                     `exit_code(n, \"meaning\")` or a `disable_*` option",
+                     `heading(\"title\", help = ...)`, `next_help_heading`, `flatten_help`, `surface`, `available_if`, \
+                     `effect`, `output(\"name\", ...)`, `exit_code(n, \"meaning\")` or a `disable_*` option",
                 ));
             }
             let content;
@@ -7549,6 +7577,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
     let mut negate: Option<Option<String>> = None;
     let (doc_help, doc_long_help) = docs(&f.attrs)?;
     let (mut help, mut long_help, mut heading, mut hide) = (None, None, None, false);
+    let (mut surface, mut available_if) = (None, Vec::new());
     let mut admonitions = Vec::new();
     let (mut hide_default_value, mut hide_env, mut display_order) = (false, false, None);
     let mut from_str = false;
@@ -7631,6 +7660,10 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                 }
             } else if meta.path.is_ident("help_heading") {
                 heading = Some(lit_text(meta.value()?)?.value());
+            } else if meta.path.is_ident("surface") {
+                surface = Some(lit_text(meta.value()?)?.value());
+            } else if meta.path.is_ident("available_if") {
+                available_if = aliases(&meta)?;
             } else if meta.path.is_ident("hide") {
                 hide = true;
             } else if meta.path.is_ident("hide_choices") {
@@ -7855,7 +7888,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
                      `allow_hyphen_values`, `require_equals`, `keep_equals`, `detached_only`, `negate`, `bool_value`, `two_dashes`, `prefix`, `values`, `value_names`, \
                      `value_terminator`, `default_fn`, `default_from`, `default_note`, `default_if`, `from_str`, `parse_with`, \
                      `stop_flags`, `plus`, `keywords`, `conflicts`, `overrides`, `override_self`, `requires`, `required`, `required_unless`, `required_unless_all`, `required_if`, `required_if_all`, `requires_if`, `exclusive`, \
-                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `note`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
+                     `group`, `help`, `long_help`, `verbatim_doc_comment`, `help_heading`, `surface`, `available_if`, `note`, `warning`, `effect`, `hide`, `hide_default_value`, `hide_env`, `display_order`, `deprecated`, `deprecated_warn_at`, `deprecated_remove_at`, `hint`, `complete`",
                 ));
             }
             Ok(())
@@ -8292,6 +8325,8 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
         long_help: long_help.or_else(|| help.clone()).unwrap_or(doc_long_help),
         help: help.unwrap_or(doc_help),
         heading,
+        surface,
+        available_if,
         hide,
         value_name: if tristate { None } else { flag_value_name },
         hint,

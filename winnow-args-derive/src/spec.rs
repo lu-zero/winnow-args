@@ -63,6 +63,8 @@ pub(crate) struct ArgsDoc {
     pub examples: Vec<[String; 3]>,
     /// Each a title and the paragraph under it.
     pub headings: Vec<(String, String)>,
+    pub surface: Option<String>,
+    pub available_if: Vec<String>,
     pub effect: Option<String>,
     pub outputs: Vec<OutputDoc>,
     /// Each a status and what it means.
@@ -108,6 +110,8 @@ pub(crate) struct ItemDoc {
     pub help: String,
     pub long_help: String,
     pub heading: Option<String>,
+    pub surface: Option<String>,
+    pub available_if: Vec<String>,
     pub hide: bool,
     pub positional: bool,
     pub required: bool,
@@ -209,6 +213,8 @@ fn args_toml(doc: &ArgsDoc) -> String {
     field(&mut out, "before_help", &doc.before_help);
     field(&mut out, "before_long_help", &doc.before_long_help);
     field(&mut out, "usage", &doc.usage);
+    opt(&mut out, "surface", &doc.surface);
+    strings(&mut out, "available_if", &doc.available_if);
     opt(&mut out, "package_version", &doc.package_version);
     opt(&mut out, "author", &doc.author);
     strings(&mut out, "flatten", &doc.flatten);
@@ -267,6 +273,8 @@ fn item_toml(item: &ItemDoc) -> String {
     field(&mut out, "help", &item.help);
     field(&mut out, "long_help", &item.long_help);
     opt(&mut out, "heading", &item.heading);
+    opt(&mut out, "surface", &item.surface);
+    strings(&mut out, "available_if", &item.available_if);
     flag(&mut out, "hide", item.hide);
     flag(&mut out, "positional", item.positional);
     flag(&mut out, "required", item.required);

@@ -16,13 +16,19 @@ use winnow_args_spec::Catalog;
 
 /// Root.
 #[derive(Args)]
-#[arg(name = "spec-tool", long_only, author = "Ann:Bo")]
+#[arg(
+    name = "spec-tool",
+    long_only,
+    author = "Ann:Bo",
+    surface = "advanced",
+    available_if("debug", "tests")
+)]
 struct SpecCli {
     /// say "hi"
     #[arg(positional)]
     names: Vec<String>,
     /// Verbose.
-    #[arg(short, long, global)]
+    #[arg(short, long, global, surface = "public", available_if = "new")]
     verbose: bool,
     #[arg(flatten)]
     plain: SpecPlain,
@@ -180,6 +186,26 @@ fn types_of_one_name_are_told_apart() {
         error.contains("add::Opts") && error.contains("remove::Opts"),
         "{error}"
     );
+}
+
+#[test]
+fn availability_metadata_is_carried() {
+    let Some(dir) = option_env!("WINNOW_ARGS_SPEC").filter(|dir| !dir.is_empty()) else {
+        return;
+    };
+    let catalog = Catalog::load(Path::new(dir)).unwrap_or_else(|error| panic!("{error}"));
+    let command = catalog
+        .stitch("SpecCli")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(command.surface.as_deref(), Some("advanced"));
+    assert_eq!(command.available_if, ["debug", "tests"]);
+    let verbose = command
+        .items
+        .iter()
+        .find(|item| item.long.as_deref() == Some("verbose"))
+        .unwrap();
+    assert_eq!(verbose.surface.as_deref(), Some("public"));
+    assert_eq!(verbose.available_if, ["new"]);
 }
 
 /// What a page says beyond its lists.

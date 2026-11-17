@@ -289,7 +289,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] Config-file settings (`setting = "key"`), between env and default
 - [ ] Emit usage's KDL spec, so its tools (SDKs, spec diff, completion from
       a spec) work from a winnow-args program
-- [ ] Metadata usage carries: `surface`, `available_if`
+- [~] Metadata usage carries: `surface`, `available_if`, on commands and
+      their flags and positionals in the documentation data; subcommand
+      variants do not carry them yet
 - [ ] `no_std` + `alloc`
 
 ### Conformance, size, ports

@@ -6,6 +6,10 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `surface = "…"` and `available_if("…", …)` on a struct or a field,
+  carried into the documentation data (`winnow_args_spec::Command` and
+  `Item`). They do not affect help or parsing, and subcommand variants do not
+  carry them yet.
 - **Added**: `help <topic>` shows just the paragraph under that heading,
   after following subcommand names. `help::resolve_topic` finds it, and
   `Error::topic` asks for it; a word that names no heading still shows the

@@ -81,6 +81,10 @@ pub struct Command {
     /// What is said under a heading, before its entries: the command's own,
     /// then those of what it flattens.
     pub headings: Vec<Heading>,
+    /// The audience this command is for, as the program names it.
+    pub surface: Option<String>,
+    /// Conditions under which the command is available.
+    pub available_if: Vec<String>,
     /// What running it does to what it works on.
     pub effect: Option<Effect>,
     /// The forms its output takes.
@@ -325,6 +329,10 @@ pub struct Item {
     pub warning: String,
     /// What giving it does to what the command works on.
     pub effect: Option<Effect>,
+    /// The audience this flag or positional is for.
+    pub surface: Option<String>,
+    /// Conditions under which it is available.
+    pub available_if: Vec<String>,
     /// The flags of a `-z` keyword vocabulary.
     pub vocabulary: Option<Box<Command>>,
 }
@@ -429,6 +437,8 @@ struct ArgsFrag {
     default_subcommand: Option<String>,
     examples: Vec<Example>,
     headings: Vec<Heading>,
+    surface: Option<String>,
+    available_if: Vec<String>,
     effect: Option<Effect>,
     outputs: Vec<Output>,
     exit_codes: Vec<ExitCode>,
@@ -1283,6 +1293,8 @@ fn parse_args(table: &Table) -> Result<ArgsFrag, Error> {
                 help: opt_str(row, "help")?,
             })
         })?,
+        surface: opt_present(table, "surface")?,
+        available_if: strings(table, "available_if")?,
         effect: effect(table)?,
         outputs: rows(table, "output", |row| {
             Ok(Output {
@@ -1401,6 +1413,8 @@ fn parse_items(table: &Table) -> Result<Vec<ItemDraft>, Error> {
                 help: opt_str(row, "help")?,
                 long_help: opt_str(row, "long_help")?,
                 heading: opt_present(row, "heading")?,
+                surface: opt_present(row, "surface")?,
+                available_if: strings(row, "available_if")?,
                 hide: flag(row, "hide")?,
                 positional: flag(row, "positional")?,
                 required: flag(row, "required")?,
@@ -1615,6 +1629,8 @@ impl Catalog {
             default_subcommand: args.default_subcommand.clone(),
             examples: args.examples.clone(),
             headings,
+            surface: args.surface.clone(),
+            available_if: args.available_if.clone(),
             effect: args.effect,
             outputs,
             exit_codes,
