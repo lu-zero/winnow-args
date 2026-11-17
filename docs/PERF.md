@@ -15,7 +15,9 @@ Method (`just perf`, aarch64 host):
 - **cold ns**: first parse in a fresh process, median of 31 processes; ±~300 noise.
 - **warm ns**: in-process min over 2000 rounds (`time-sweep`); ±~5 noise.
 
-Compare ratios and deltas larger than the noise, not individual digits.
+Compare ratios and deltas larger than the noise, not individual digits. The
+re-measurement with rustc 1.100.0, and what it did to warm times, is in
+[`benchmarks/TOOLCHAIN.md`](../benchmarks/TOOLCHAIN.md).
 
 ## 0. Flags: `-v/--verbose -p/--path=PATH`
 

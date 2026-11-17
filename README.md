@@ -49,16 +49,16 @@ declared. Instructions for one parse in a fresh process, and time per parse in
 a hot loop.
 
 Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
-profile, pinned to one core.
+profile, pinned to one core, rustc/cargo 1.100.0.
 
 ![Time per parse for the two command lines, log scale](./docs/performance.svg)
 
 | | example, instructions | time | mise, instructions | time |
 |---|---:|---:|---:|---:|
-| winnow-args | 2 896 | 184 ns | 3 968 | 322 ns |
-| usage 7 | 5 227 | 505 ns | 7 306 | 826 ns |
-| clap 4 | 135 612 | 15.2 µs | 4 883 517 | 760 µs |
-| bpaf 0.9 | 141 555 | 14.7 µs | 21 878 142 | 2.66 ms |
+| winnow-args | 2 875 | 195 ns | 3 919 | 334 ns |
+| usage 7 | 5 265 | 504 ns | 7 197 | 770 ns |
+| clap 4 | 134 855 | 15.1 µs | 4 884 524 | 760 µs |
+| bpaf 0.9 | 142 090 | 15.0 µs | 21 866 919 | 2.63 ms |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which grows with the number of commands. Parse

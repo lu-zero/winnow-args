@@ -66,30 +66,32 @@ and the brush and mold ports; they are described in the `justfile`.
 ## Results
 
 Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz). `release`
-profile, pinned to one core, `perf stat`, winnow 1.0.4, usage 7.3, bpaf 0.9, clap 4.6. Cold
-instructions, warm time, stripped size.
+profile, pinned to one core, `perf stat`, rustc/cargo 1.100.0, winnow 1.0.4,
+usage 7.3, bpaf 0.9, clap 4.6. Cold instructions, warm time, stripped size.
+[TOOLCHAIN.md](./TOOLCHAIN.md) records the change from the 1.99.1 run and
+compares the two compilers on the same host.
 
 `example -v --path /tmp/x a b c`:
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 2 896 | 0.6 | 184 ns | 380 KB |
-| winnow-args, `dispatch!` | 3 171 | 0.6 | 249 ns | 370 KB |
-| winnow-args, combinators | 4 428 | 0.8 | 399 ns | 379 KB |
-| usage | 5 227 | 1 | 505 ns | 371 KB |
-| clap 4 | 135 612 | 26 | 15.2 µs | 751 KB |
-| bpaf 0.9 | 141 555 | 27 | 14.7 µs | 571 KB |
-| bpaf 0.10, pre-release (`844357f`) | 143 786 | 28 | 17.2 µs | 812 KB |
+| winnow-args, derive | 2 875 | 0.5 | 195 ns | 389 KB |
+| winnow-args, `dispatch!` | 3 339 | 0.6 | 274 ns | 389 KB |
+| winnow-args, combinators | 4 498 | 0.9 | 417 ns | 389 KB |
+| usage | 5 265 | 1 | 504 ns | 389 KB |
+| clap 4 | 134 855 | 25 | 15.1 µs | 773 KB |
+| bpaf 0.9 | 142 090 | 26 | 15.0 µs | 581 KB |
+| bpaf 0.10, pre-release (`844357f`) | 143 656 | 26 | 17.2 µs | 837 KB |
 
 `mise use -g node@20`, 211 commands declared:
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 3 968 | 0.5 | 322 ns | 1.72 MB |
-| usage | 7 306 | 1 | 826 ns | 1.14 MB |
-| bpaf 0.10, pre-release (`844357f`) | 1 187 794 | 163 | 164 µs | 2.95 MB |
-| clap 4 | 4 883 517 | 668 | 760 µs | 2.23 MB |
-| bpaf 0.9 | 21 878 142 | 2 995 | 2.66 ms | 1.94 MB |
+| winnow-args, derive | 3 919 | 0.5 | 334 ns | 1.82 MB |
+| usage | 7 197 | 1 | 770 ns | 1.13 MB |
+| bpaf 0.10, pre-release (`844357f`) | 1 187 739 | 163 | 164 µs | 2.88 MB |
+| clap 4 | 4 884 524 | 678 | 760 µs | 2.19 MB |
+| bpaf 0.9 | 21 866 919 | 3 038 | 2.63 ms | 1.88 MB |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which is what grows with the number of commands.
@@ -100,9 +102,9 @@ struct's loop is its own code.
 
 | framework | instructions | × usage | warm | size |
 |---|---:|---:|---:|---:|
-| winnow-args, derive | 1 378 | 0.3 | 139 ns | 370 KB |
-| usage | 4 036 | 1 | 343 ns | 359 KB |
-| clap 4 | 76 273 | 19 | 8.25 µs | 708 KB |
+| winnow-args, derive | 1 479 | 0.4 | 147 ns | 389 KB |
+| usage | 4 001 | 1 | 338 ns | 389 KB |
+| clap 4 | 75 804 | 18 | 8.23 µs | 709 KB |
 
 [`docs/PERF.md`](../docs/PERF.md) has every line, and what each feature cost
 when it was added.
