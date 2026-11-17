@@ -9,11 +9,13 @@
 //! An error that reaches the user is printed by [`Error::render`]: the
 //! message, then a tip when a flag, a subcommand or a choice close to what
 //! was typed is accepted there ([`Error::similar`]). Only a failed parse
-//! looks for one.
+//! looks for one. [`Error::render_with_line`] adds the command line and a
+//! caret under the byte that failed when the caller has the words.
 
 use std::fmt;
 
 use winnow::error::{FromExternalError, ModalError, ParserError};
+use winnow::stream::BStr;
 
 use crate::help::Style;
 use crate::stream::Argv;
@@ -597,6 +599,46 @@ impl Error {
         let tip = self.tip(style).map(|tip| format!("\n\n  {tip}"));
         let tip = tip.unwrap_or_default();
         format!("{error} {}{tip}\n\n{more}", self.message(style))
+    }
+
+    /// [`Error::render`] with the command line and a caret under the byte the
+    /// error points at. `program` is the name it was run by and `words` are
+    /// what the parser read, without the program name; offsets count one
+    /// separator after every word, so that is also the caret's column in the
+    /// line printed here.
+    ///
+    /// ```
+    /// use winnow_args::{BStr, Error, help::Style};
+    ///
+    /// let error = Error::unknown_flag(0, "--bad");
+    /// let words = [BStr::new("--bad")];
+    /// let report = error.render_with_line("tool", &words, Style::PLAIN);
+    /// assert!(report.contains("tool --bad\n     ^"));
+    /// ```
+    pub fn render_with_line(&self, program: &str, words: &[&BStr], style: Style) -> String {
+        let mut line = String::from(program);
+        for word in words {
+            if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(&word.to_string());
+        }
+        let base = if program.is_empty() {
+            0
+        } else {
+            program.len() + 1
+        };
+        let mut column = (base + self.offset()).min(line.len());
+        while !line.is_char_boundary(column) {
+            column -= 1;
+        }
+        let mut caret = " ".repeat(column);
+        caret.push_str(&Style::paint(style.invalid(), "^"));
+        let rendered = self.render(style);
+        let Some((first, rest)) = rendered.split_once('\n') else {
+            return rendered;
+        };
+        format!("{first}\n\n{line}\n{caret}\n{rest}")
     }
 
     /// [`Error::render_help`], painted with `style`.

@@ -267,7 +267,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [ ] A logo, `help <topic>`
 - [x] A doc comment from `include_str!` or `concat!`, left out with a warning
 - [x] A `ValueEnum` variant's help from the value, beside `name()`
-- [ ] Rendered diagnostics with the command line and a caret
+- [x] Rendered diagnostics with the command line and a caret:
+      `Error::render_with_line` and `report_argv`/`report_with_argv`, without
+      changing `Error::render` or what `report` prints
 - [x] A user palette from the environment (as `GCC_COLORS`): `Palette::with_env`
 
 ### Completion

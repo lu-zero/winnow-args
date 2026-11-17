@@ -522,6 +522,13 @@ pub fn report(error: &Error, program: &str) -> i32 {
     report_with(error, program, &color::Theme::DEFAULT)
 }
 
+/// [`report`] with the command line the parser read, so an error's report
+/// shows the words and a caret under the byte that failed. `words` excludes
+/// the program name, as [`Argv::new`] does.
+pub fn report_argv(error: &Error, program: &str, words: &[&BStr]) -> i32 {
+    report_with_argv(error, program, words, &color::Theme::DEFAULT)
+}
+
 /// [`report`], painted with `theme`: its palette for the depth
 /// [`color::Depth::detect`] finds on the stream written to.
 ///
@@ -536,6 +543,21 @@ pub fn report(error: &Error, program: &str) -> i32 {
 /// # let _ = |e: &winnow_args::Error| winnow_args::report_with(e, "prog", &THEME);
 /// ```
 pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
+    report_impl(error, program, None, theme)
+}
+
+/// [`report_with`] with the command line the parser read, so an error's report
+/// shows the words and a caret under the byte that failed.
+pub fn report_with_argv(
+    error: &Error,
+    program: &str,
+    words: &[&BStr],
+    theme: &color::Theme,
+) -> i32 {
+    report_impl(error, program, Some(words), theme)
+}
+
+fn report_impl(error: &Error, program: &str, words: Option<&[&BStr]>, theme: &color::Theme) -> i32 {
     use std::io::IsTerminal as _;
     let stdout = || help::Style::themed(theme, std::io::stdout().is_terminal());
     let stderr = || help::Style::themed(theme, std::io::stderr().is_terminal());
@@ -555,7 +577,11 @@ pub fn report_with(error: &Error, program: &str, theme: &color::Theme) -> i32 {
         println!("{version}");
         return 0;
     }
-    eprintln!("{}", error.render(stderr()));
+    let rendered = match words {
+        Some(words) => error.render_with_line(program, words, stderr()),
+        None => error.render(stderr()),
+    };
+    eprintln!("{rendered}");
     2
 }
 

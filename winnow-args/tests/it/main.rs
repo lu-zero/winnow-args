@@ -17,6 +17,7 @@ mod default_rules;
 mod default_subcommand;
 mod delimiter;
 mod deprecation;
+mod diagnostic;
 mod double_dash;
 mod external;
 mod fallbacks;

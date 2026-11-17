@@ -6,6 +6,10 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Added**: `Error::render_with_line(program, words, style)` renders a failure
+  with the command line and a caret under the byte it points at. `report_argv`
+  and `report_with_argv` print that report. `Error::render` and `report` keep
+  their text, so this is opt-in for programs that want the caret.
 - **Added**: `response::split(text)` splits one string with the response-file
   rules, for a value read from the environment or a configuration file. It
   borrows the words with nothing to unquote and copies only the rest. An
