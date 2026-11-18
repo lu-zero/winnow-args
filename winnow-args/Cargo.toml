@@ -70,6 +70,11 @@ path = "../examples/values.rs"
 required-features = ["derive"]
 
 [[example]]
+name = "caret"
+path = "../examples/caret.rs"
+required-features = ["derive"]
+
+[[example]]
 name = "set"
 path = "../examples/set.rs"
 required-features = ["derive"]

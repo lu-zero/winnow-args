@@ -18,6 +18,7 @@ that package.
 | [`deprecated.rs`](deprecated.rs) | `cargo run --example deprecated -- compile src` |
 | [`rules.rs`](rules.rs) | `cargo run --example rules -- --target production --release v2` |
 | [`values.rs`](values.rs) | `NPROC=8 cargo run --example values -- lib` |
+| [`caret.rs`](caret.rs) | `cargo run --example caret -- --jbs 4 src` |
 | [`subcommands.rs`](subcommands.rs) | `cargo run --example subcommands -- -pu firefox` |
 | [`multicall.rs`](multicall.rs) | `cargo run --example multicall -- frob --fast x` |
 | [`set.rs`](set.rs) | `cargo run --example set -- -o errexit +e -x a b` |
