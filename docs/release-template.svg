@@ -21,16 +21,16 @@
 
 <g transform="translate(80,470)">
 <text y="0" class="s" font-size="30" fill="#5fafaf" font-weight="700">What's new</text>
-<text y="58" class="m f" font-size="26">short_alias('P', 'd')</text>
-<text y="108" class="m f" font-size="26">dont_delimit_trailing_values</text>
-<text y="158" class="m f" font-size="26">note = "…"</text>
-<text y="208" class="m f" font-size="26">choices_strict = false</text>
+<text y="58" class="m f" font-size="26">surface / available_if</text>
+<text y="108" class="m f" font-size="26">help &lt;topic&gt;</text>
+<text y="158" class="m f" font-size="26">render_with_line</text>
+<text y="208" class="m f" font-size="26">response::split</text>
 </g>
 <g class="s" font-size="26" fill="#8a8a8a">
-<text x="600" y="528">many letters, one alias</text>
-<text x="600" y="578">no splitting after --</text>
-<text x="600" y="628">Note: lines in help, man</text>
-<text x="600" y="678">choices as suggestions</text>
+<text x="600" y="528">metadata in the spec</text>
+<text x="600" y="578">one topic, one paragraph</text>
+<text x="600" y="628">caret under the byte</text>
+<text x="600" y="678">split env/config values</text>
 </g>
 
 <!-- terminal -->
@@ -39,18 +39,15 @@
 <rect width="640" height="660" rx="16" fill="#0f1011" stroke="#2a2c2f" stroke-width="2"/>
 <circle cx="32" cy="32" r="8" fill="#d75f5f"/><circle cx="60" cy="32" r="8" fill="#d7af5f"/><circle cx="88" cy="32" r="8" fill="#5faf5f"/>
 <g transform="translate(32,110)">
-<text class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --help</text>
-<text y="60" class="m h" font-size="22.5">Options:</text>
-<text y="108" class="m" font-size="22.5"><tspan class="f">  -f</tspan><tspan class="t">, </tspan><tspan class="f">--format</tspan> <tspan class="p">&lt;FORMAT&gt;</tspan></text>
-<text y="144" class="m t" font-size="22.5">      Output format</text>
-<text y="180" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">suggested values:</tspan> <tspan class="c">json</tspan><tspan class="g">,</tspan> <tspan class="c">yaml</tspan><tspan class="g">]</tspan></text>
-<text y="216" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">env:</tspan> <tspan class="e">PROG_FORMAT</tspan><tspan class="g">]</tspan></text>
-<text y="252" class="m" font-size="22.5"><tspan class="g">      [</tspan><tspan class="g">default:</tspan> <tspan class="d">json</tspan><tspan class="g">]</tspan></text>
-<text y="304" class="m t" font-size="22.5"><tspan class="h">      Note:</tspan> any other value</text>
-<text y="340" class="m t" font-size="22.5">      is accepted</text>
-<text y="392" class="m" font-size="22.5"><tspan class="f">  -P</tspan><tspan class="t">, </tspan><tspan class="f">-d</tspan><tspan class="t">, </tspan><tspan class="f">--path</tspan> <tspan class="p">&lt;PATH&gt;</tspan></text>
-<text y="456" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --bogus</text>
-<text y="496" class="m" font-size="22.5"><tspan class="r">error:</tspan> <tspan class="t">unexpected</tspan> <tspan fill="#d78787">--bogus</tspan></text>
+<text class="m t" font-size="22.5"><tspan class="g">$</tspan> prog help Speed</text>
+<text y="60" class="m h" font-size="22.5">Speed:</text>
+<text y="108" class="m t" font-size="22.5">  How fast to go.</text>
+<text y="156" class="m t" font-size="22.5">  Tuning for parallel work.</text>
+<text y="240" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --jbs 4</text>
+<text y="300" class="m" font-size="22.5"><tspan class="r">error:</tspan><tspan class="t"> unknown flag </tspan><tspan fill="#d78787">`--jbs`</tspan></text>
+<text y="372" class="m t" font-size="22.5">prog --jbs 4</text>
+<text y="408" class="m" font-size="22.5"><tspan class="r">     ^</tspan></text>
+<text y="476" class="m g" font-size="22.5">For more information, try '--help'.</text>
 </g>
 </g>
 
