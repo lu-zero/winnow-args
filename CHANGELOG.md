@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.4 (2026-11-18)
 
 - **Added**: `surface = "…"` and `available_if("…", …)` on a struct or a field,
   carried into the documentation data (`winnow_args_spec::Command` and
