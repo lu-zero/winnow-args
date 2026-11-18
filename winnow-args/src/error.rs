@@ -648,7 +648,7 @@ impl Error {
         while !line.is_char_boundary(column) {
             column -= 1;
         }
-        let mut caret = " ".repeat(column);
+        let mut caret = " ".repeat(line[..column].chars().count());
         caret.push_str(&Style::paint(style.invalid(), "^"));
         let rendered = self.render(style);
         let Some((first, rest)) = rendered.split_once('\n') else {

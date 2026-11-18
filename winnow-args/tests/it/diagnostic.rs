@@ -24,3 +24,13 @@ fn a_caret_marks_the_byte_the_error_is_about() {
         "error: unknown flag `--bad`\n\ntool -v --bad\n        ^\n\nFor more information, try '--help'."
     );
 }
+
+#[test]
+fn the_caret_counts_characters_not_bytes() {
+    let words = [BStr::new("--bad")];
+    let error = Cli::parse_words(&words).unwrap_err();
+    assert_eq!(
+        error.render_with_line("tóol", &words, Style::PLAIN),
+        "error: unknown flag `--bad`\n\ntóol --bad\n     ^\n\nFor more information, try '--help'."
+    );
+}
