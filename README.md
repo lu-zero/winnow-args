@@ -55,10 +55,10 @@ profile, pinned to one core, rustc/cargo 1.100.0.
 
 | | example, instructions | time | mise, instructions | time |
 |---|---:|---:|---:|---:|
-| winnow-args | 2 875 | 195 ns | 3 919 | 334 ns |
-| usage 7 | 5 265 | 504 ns | 7 197 | 770 ns |
-| clap 4 | 134 855 | 15.1 µs | 4 884 524 | 760 µs |
-| bpaf 0.9 | 142 090 | 15.0 µs | 21 866 919 | 2.63 ms |
+| winnow-args | 2 962 | 207 ns | 4 164 | 365 ns |
+| usage 7 | 5 233 | 494 ns | 7 408 | 782 ns |
+| clap 4 | 134 882 | 15.0 µs | 4 886 044 | 755 µs |
+| bpaf 0.9 | 142 110 | 14.9 µs | 21 866 995 | 2.63 ms |
 
 usage and winnow-args generate their parser at compile time; clap and bpaf
 build theirs at each start, which grows with the number of commands. Parse
