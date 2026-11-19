@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="364" viewBox="0 0 760 270" role="img" aria-label="Feature coverage: winnow-args 50, 43 built in, 6 missing.">
+<rect width="760" height="270" fill="none"/>
+<text x="10.0" y="22" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">Features matched</text>
+<text x="10.0" y="40" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">50 features from the full comparison</text>
+<text x="110.0" y="81" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#e8eaec" text-anchor="end" font-weight="600">winnow-args</text>
+<rect x="120.0" y="62" width="447.2" height="18" fill="#5faf5f"/>
+<rect x="567.2" y="62" width="10.4" height="18" fill="#87afaf"/>
+<rect x="577.6" y="62" width="62.4" height="18" fill="#d75f5f"/>
+<text x="652.0" y="77" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#e8eaec" text-anchor="start">43 · 1 · 6</text>
+<text x="110.0" y="125" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage</text>
+<rect x="120.0" y="106" width="436.8" height="18" fill="#5faf5f"/>
+<rect x="556.8" y="106" width="31.2" height="18" fill="#87afaf"/>
+<rect x="588.0" y="106" width="52.0" height="18" fill="#d75f5f"/>
+<text x="652.0" y="121" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#e8eaec" text-anchor="start">42 · 3 · 5</text>
+<text x="110.0" y="169" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf</text>
+<rect x="120.0" y="150" width="176.8" height="18" fill="#5faf5f"/>
+<rect x="296.8" y="150" width="218.4" height="18" fill="#87afaf"/>
+<rect x="515.2" y="150" width="124.8" height="18" fill="#d75f5f"/>
+<text x="652.0" y="165" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#e8eaec" text-anchor="start">17 · 21 · 12</text>
+<text x="110.0" y="213" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap</text>
+<rect x="120.0" y="194" width="260.0" height="18" fill="#5faf5f"/>
+<rect x="380.0" y="194" width="124.8" height="18" fill="#87afaf"/>
+<rect x="504.8" y="194" width="135.2" height="18" fill="#d75f5f"/>
+<text x="652.0" y="209" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#e8eaec" text-anchor="start">25 · 12 · 13</text>
+<rect x="10" y="242" width="11" height="11" fill="#5faf5f"/>
+<text x="28.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">built in</text>
+<rect x="215" y="242" width="11" height="11" fill="#87afaf"/>
+<text x="233.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">with some work</text>
+<rect x="420" y="242" width="11" height="11" fill="#d75f5f"/>
+<text x="438.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">not offered</text>
+</svg>
