@@ -474,7 +474,7 @@ impl Error {
         self.detail.get_or_insert_with(Default::default)
     }
 
-    /// The class of failure.
+    /// The class of failure, which decides how a report is worded.
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }
@@ -489,7 +489,10 @@ impl Error {
         self.detail.as_deref().map(|d| d.token.as_str())
     }
 
-    /// The offending value, for [`ErrorKind::UnexpectedValue`] and [`ErrorKind::InvalidValue`].
+    /// The second name or value a report uses: a rejected value for
+    /// [`ErrorKind::UnexpectedValue`], [`ErrorKind::InvalidValue`] and
+    /// [`ErrorKind::InvalidChoice`], or the other field of a conflict or
+    /// requirement, or a group's members.
     pub fn value(&self) -> Option<&str> {
         self.detail.as_deref()?.value.as_deref()
     }

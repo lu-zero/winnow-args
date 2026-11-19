@@ -310,7 +310,8 @@ pub struct Item {
     pub global: bool,
     /// A bare flag is a value (`--name` and `--name=value`).
     pub optional_value: bool,
-    /// How many words one occurrence takes. Zero is read as one.
+    /// How many words one occurrence takes; absent means 1. A written `0` is
+    /// rejected when the fragment is read.
     pub values: usize,
     /// A placeholder for each of `values`, in place of the value name
     /// repeated. Empty when there are none.
@@ -1122,8 +1123,8 @@ fn unique_stems(paths: impl Iterator<Item = Vec<String>>) -> Result<(), Error> {
 /// The shown aliases of a `multicall` program's commands, each with the
 /// name it stands for: run under the alias, the program is that command,
 /// so a manual has a page by that name that points to the command's.
-/// `pages` are [`pages`]' for `root`: an alias that is a page's name, or
-/// no file name, is an error.
+/// The `pages` argument is the one [`pages`] returns for `root`: a name that
+/// cannot be a file name, or that two pages would share, is an error.
 pub fn applet_aliases<'a>(
     root: &'a Command,
     pages: &[Page<'_>],
