@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let command = catalog.stitch(&catalog.root()?)?;
     // The root, then each visible subcommand at every depth.
     for page in pages(&command, "tool")? {
-        println!("{}: {}", page.stem(), page.command.usage(&page.path));
+        println!("{}: {}", page.stem(), page.usage());
     }
     Ok(())
 }

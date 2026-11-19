@@ -1,8 +1,8 @@
 # Examples
 
-The programs are Cargo examples of the `winnow-args` package. The justfile
-and the xtask are workspace crates that show how to generate their
-documentation.
+The programs are Cargo examples of the `winnow-args` package. The
+`just-docs/` and `xtask-docs/` directories are workspace crates that show how
+to generate their documentation.
 
 ## Programs
 
