@@ -393,3 +393,15 @@ bench-ld +linkers:
           "$name" "$line" "$((${#words[@]} + 1))" "$(((total - base) / (${#words[@]} + 1)))" "$ms"
       done
     done
+
+# The site, from README.md and docs/ staged into target/site-src by site/stage.py.
+[doc("Build the site into target/site")]
+site:
+    python3 site/stage.py
+    mdbook build site
+
+# Serves the staged copy, so edits under docs/ need a re-run.
+[doc("Preview the site on port 3000; HOST is localhost, or 0.0.0.0 for remote work")]
+site-serve host="localhost":
+    python3 site/stage.py
+    mdbook serve site --hostname {{host}}

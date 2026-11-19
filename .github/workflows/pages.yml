@@ -1,0 +1,46 @@
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths: ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "docs/**", "site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: pages
+        uses: actions/configure-pages@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook@0.5.4
+      # lu-zero.github.io/winnow-args/ until a custom domain is set, then the domain's root.
+      - run: python3 site/stage.py && mdbook build site
+        env:
+          MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.pages.outputs.base_path }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
