@@ -18,9 +18,111 @@ crate docs; this page is about the repository.
 
 ## Features
 
-The [crate README](./winnow-args/README.md) lists what the derive and the
-combinators support. [`docs/COMPARISON.md`](./docs/COMPARISON.md) has every row
-of that matrix, including bpaf.
+Of the 50 features in the full comparison, winnow-args builds in 43, offers 1
+with some work and lacks 6. usage is close behind; bpaf and clap cover fewer.
+
+![Features matched against usage, bpaf and clap](./docs/features.svg)
+
+<details>
+<summary>All 50 features, compared with usage, bpaf and clap</summary>
+
+`✓` built in · `~` possible with some work, or in a companion crate · `–` not
+offered. Read from the projects' documentation: usage 7.4, bpaf 0.9, clap 4.
+
+**How the parser is made**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| Derive | ✓ | ✓ | ✓ | ✓ |
+| Parser generated at compile time | ✓ | ✓ | – | – |
+| Combinators, without a macro | ✓ | – | ✓ | ~ builder |
+| A CLI built at runtime | – | ✓ `usage-lib`, `usage-dynamic` | ✓ | ✓ builder |
+| Words borrowed, not copied | ✓ | ✓ | – | – |
+| Non-UTF-8 values | ✓ Unix | ✓ | ✓ | ✓ |
+
+**Flags and values**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| Short bundles, aliases, counts | ✓ | ✓ | ✓ | ✓ |
+| Repeated and delimited values | ✓ | ✓ | ~ no delimiter | ✓ |
+| Value enums, choices | ✓ | ✓ | ~ `FromStr` | ✓ |
+| `env`, defaults | ✓ | ✓ | ✓ | ✓ |
+| Optional value (`--color[=WHEN]`) | ✓ | ✓ | ~ | ✓ |
+| `require_equals`, hyphen values, negative numbers | ✓ | ✓ | ~ | ✓ |
+| `--no-x` negation | ✓ | ✓ | ~ | ~ |
+| A flag taking several words, a fixed number or a range | ✓ | ✓ | ~ | ✓ |
+| Custom value parser in the derive | ✓ `parse_with` | ~ `FromStr` type | ✓ | ✓ |
+| Defaults computed, or depending on another flag | ✓ | ✓ | ~ | ✓ |
+
+**Shell and linker conventions**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| `+x` options (shell builtins) | ✓ | – | ~ | – |
+| Long options with one dash (GNU `ld`) | ✓ | – | ~ | – |
+| Keyword vocabularies (`-z now`) | ✓ | – | ~ | – |
+| Flags kept in command-line order | ✓ | ~ ordered group | ~ | ~ indices |
+| Unknown flags kept as words, or collected | ✓ | ✓ | ~ | ~ |
+| Sigil arguments, clauses | – | ✓ | ~ | – |
+| Response files (`@file`) | ✓ | ✓ | – | ~ |
+
+Unknown flags are errors here unless `unknown_flags = "value"`; usage keeps
+the word. That default is a decision in
+[`CHECKLIST.md`](./docs/CHECKLIST.md). `OsString` and `PathBuf` keep non-UTF-8
+bytes on Unix only.
+
+**Positionals and subcommands**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| Positionals, `--`, a trailing list | ✓ | ✓ | ✓ | ✓ |
+| Words after `--` only, or `--` kept | ✓ | ✓ | ~ | ✓ |
+| Subcommands, nested, with aliases | ✓ | ✓ | ✓ | ✓ |
+| A subcommand declared as a variant with fields | ✓ | ✓ | ✓ | ✓ |
+| Global flags | ✓ | ✓ | – (0.10: ✓) | ✓ |
+| Shared flags (`flatten`) | ✓ | ✓ | ✓ | ✓ |
+| Default subcommand | ✓ | ✓ | ~ | ~ |
+| External subcommands, multicall | ✓ | ✓ | ~ | ✓ |
+| Subcommands discovered at runtime | – | ✓ | ~ | ~ |
+
+**Rules**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| Conflicts, requirements, groups | ✓ | ✓ | ~ by composition | ✓ |
+| Conditional requirements (`required_if`) | ✓ | ✓ | ~ | ✓ |
+| Flag constraints checked at compile time | ✓ | – | ~ types | – |
+| Cross-field validation hook | ✓ `validate` | ✓ | ✓ `guard` | ~ |
+
+**Help, errors, completion**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| Help from doc comments, wrapped, coloured | ✓ | ✓ | ✓ | ✓ |
+| Help prose left out of the binary by a feature | ✓ | ~ help as a whole | – | – |
+| Examples, a paragraph under a heading, a flag's note and warning | ✓ | ✓ | ~ | ~ after-help text |
+| Subcommands laid out on their parent's page | ✓ | ✓ | – | ✓ |
+| The default subcommand's page after the root's | ✓ | ✓ | – | – |
+| "Did you mean" suggestions | ✓ | ✓ | ✓ | ✓ |
+| Completion scripts | ✓ | ✓ | ✓ | ~ `clap_complete` |
+| Completion of values by hint or function | ✓ | ✓ | ✓ | ~ |
+| Man pages, markdown | ~ `winnow-args-man`, `-markdown` | ✓ | ✓ | ~ `clap_mangen` |
+| Deprecated flags with warnings | ✓ | ✓ | – | – |
+
+**Around the parser**
+
+| | winnow-args | usage | bpaf | clap |
+|---|:-:|:-:|:-:|:-:|
+| A portable spec of the CLI | – | ✓ | – | – |
+| Config-file settings | – | ✓ | – | – |
+| Generated dispatch | ✓ `run`, `run_async` | ✓ | – | – |
+| Update a parsed value from another line | – | ✓ | – | ✓ |
+
+</details>
+
+[`docs/COMPARISON.md`](./docs/COMPARISON.md) has the same tables on a page of
+their own; keep the two in sync.
 
 ## Performance
 
@@ -29,9 +131,6 @@ Two command lines: `example -v --path /tmp/x a b c`, for
 `mise use -g node@20` with [mise's 211 commands](./benchmarks/shadows/)
 declared. Instructions for one parse in a fresh process, and time per parse in
 a hot loop.
-
-Test hardware: an Ampere-1a desktop (aarch64, 128 cores, 3.4 GHz), `release`
-profile, pinned to one core, rustc/cargo 1.100.0.
 
 ![Time per parse for the two command lines, log scale](./docs/performance.svg)
 
@@ -45,11 +144,9 @@ profile, pinned to one core, rustc/cargo 1.100.0.
 Parse time comes first here: a feature costs nothing to a program that does
 not use it, and each one was measured as it was added.
 
-The method, the sizes and why clap and bpaf build their parser at each start
-are in [`benchmarks/`](./benchmarks/README.md), which also says where bpaf is
-skipped on a line it cannot represent. [`docs/PERF.md`](./docs/PERF.md) is the
-history of each feature. `just bench-shell` and `just bench-ld` measure the
-brush and mold ports.
+**Details:** [method, sizes and every line](./benchmarks/README.md) ·
+[per-feature history](./docs/PERF.md) · `just bench-shell` and `just bench-ld`
+measure the brush and mold ports.
 
 ## Crates
 
@@ -62,7 +159,7 @@ brush and mold ports.
   and clap, for `just perf`.
 - `xtask/` (unpublished): the generators for the mold port, the examples and
   the mise shadow.
-- `scripts/`: the generators of the two figures under `docs/`.
+- `scripts/`: the generators of the three figures under `docs/`.
 
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) shows how they fit together.
 
