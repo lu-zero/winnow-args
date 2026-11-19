@@ -6,7 +6,7 @@ import pathlib
 import sys
 
 FONT = "ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif"
-INK, MUTED, ACCENT = "#e8eaec", "#8a8a8a", "#5fafaf"
+INK, MUTED, ACCENT = "#17181a", "#8a8a8a", "#5fafaf"
 COLOURS = {"built": "#5faf5f", "partial": "#87afaf", "missing": "#d75f5f"}
 NAMES = ["winnow-args", "usage", "bpaf", "clap"]
 MARKS = {"✓": "built", "~": "partial", "–": "missing"}
