@@ -82,7 +82,8 @@ pub struct ResponseError {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum ResponseErrorKind {
-    /// The file could not be read.
+    /// A path the platform cannot name, such as non-UTF-8 off Unix. An
+    /// unreadable file is kept as a word instead of reported here.
     Io(std::io::Error),
     /// A quote was not closed, or the file ends in a lone `\`.
     PrematureEnd,
