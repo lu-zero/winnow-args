@@ -15,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let command = catalog.stitch(&catalog.root()?)?;
     // The root, then each visible subcommand at every depth.
     for page in pages(&command, "tool")? {
-        println!("{}: {}", page.stem(), page.command.usage(&page.path));
+        println!("{}: {}", page.stem(), page.usage());
     }
     Ok(())
 }
@@ -95,7 +95,10 @@ at that field until it states `spec = "Name"` or `choices(...)`.
 
 ## Limits
 
-- A `use` inside a function is read as if it were its module's.
+- A `use` inside a function is the function's, not its module's; a type
+  derived in that function sees it.
+- A `use` inside a macro's braces at module level (`cfg_if! { … }`) is not
+  the module's.
 - A type that implements `Args` by hand writes no fragment. One written by
   hand in the same directory stands for it.
 - A bare name that no `use` accounts for (a glob import) is refused when a
