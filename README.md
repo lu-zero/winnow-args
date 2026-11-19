@@ -18,27 +18,9 @@ crate docs; this page is about the repository.
 
 ## Features
 
-| | winnow-args | usage | clap |
-|---|:-:|:-:|:-:|
-| Flags, values, positionals, subcommands, global flags, `flatten` | ✓ | ✓ | ✓ |
-| Conflicts, requirements, groups | ✓ | ✓ | ✓ |
-| Help from doc comments | ✓ | ✓ | ✓ |
-| Completion scripts | ✓ | ✓ | ~ |
-| Parser generated at compile time, words borrowed | ✓ | ✓ | – |
-| Combinators, without a macro | ✓ | – | ~ |
-| `+x` options, as a shell builtin takes | ✓ | – | – |
-| Long options with one dash, `-z` keywords, as GNU `ld` takes | ✓ | – | – |
-| Flags kept in command-line order | ✓ | ~ | ~ |
-| Flag constraints checked at compile time | ✓ | – | – |
-| Help prose left out of the binary by a feature | ✓ | ~ | – |
-| External subcommands, multicall | ✓ | ✓ | ✓ |
-| A CLI built at runtime | – | ✓ | ✓ |
-| Conditional requirements (`required_if`) | ✓ | ✓ | ✓ |
-| Man pages, markdown | ~ | ✓ | ~ |
-| "Did you mean" suggestions | ✓ | ✓ | ✓ |
-
-`✓` built in · `~` with some work, or in a companion crate · `–` not offered.
-[`docs/COMPARISON.md`](./docs/COMPARISON.md) has every row, and bpaf.
+The [crate README](./winnow-args/README.md) lists what the derive and the
+combinators support. [`docs/COMPARISON.md`](./docs/COMPARISON.md) has every row
+of that matrix, including bpaf.
 
 ## Performance
 
@@ -60,15 +42,14 @@ profile, pinned to one core, rustc/cargo 1.100.0.
 | clap 4 | 134 882 | 15.0 µs | 4 886 044 | 755 µs |
 | bpaf 0.9 | 142 110 | 14.9 µs | 21 866 995 | 2.63 ms |
 
-usage and winnow-args generate their parser at compile time; clap and bpaf
-build theirs at each start, which grows with the number of commands. Parse
-time comes first here: a feature costs nothing to a program that does not use
-it, and each one was measured as it was added.
+Parse time comes first here: a feature costs nothing to a program that does
+not use it, and each one was measured as it was added.
 
-The method, the sizes and where bpaf is skipped on a line it cannot represent
-are in [`benchmarks/`](./benchmarks/README.md). [`docs/PERF.md`](./docs/PERF.md)
-is the history of each feature. `just bench-shell` and `just bench-ld` measure
-the brush and mold ports.
+The method, the sizes and why clap and bpaf build their parser at each start
+are in [`benchmarks/`](./benchmarks/README.md), which also says where bpaf is
+skipped on a line it cannot represent. [`docs/PERF.md`](./docs/PERF.md) is the
+history of each feature. `just bench-shell` and `just bench-ld` measure the
+brush and mold ports.
 
 ## Crates
 
