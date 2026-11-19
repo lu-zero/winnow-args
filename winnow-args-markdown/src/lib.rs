@@ -19,7 +19,7 @@ pub fn render_pages(
         .collect())
 }
 
-/// One page.
+/// One Markdown page, with the command's help rendered as headings.
 pub fn render(page: &Page<'_>) -> String {
     let command = page.command;
     let mut out = String::new();

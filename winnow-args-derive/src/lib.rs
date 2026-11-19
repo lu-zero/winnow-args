@@ -113,7 +113,10 @@ mod spec;
 /// | `Vec<T>` | one value each time the flag is given | every word left |
 /// | `Option<bool>`, `plus` equal to `short` | `-x` is `Some(true)`, `+x` is `Some(false)` | |
 /// | `Vec<bool>`, `plus` equal to `short` | `true` for each `-x` and `false` for each `+x`, in order | |
-/// | `Vec<(bool, T)>`, `plus` equal to `short` | `(true, v)` for each `-x v` and `(false, v)` for each `+x v`, in order; a `delimiter`'s pieces each have the occurrence's sign | |
+/// | `Vec<(bool, T)>`, `plus` equal to `short` | `(true, v)` for each `-x v` and `(false, v)` for each `+x v`, in order | |
+///
+/// With `Vec<(bool, T)>`, every piece a `delimiter` splits carries the sign
+/// of its occurrence.
 ///
 /// A flag whose value may be left out (`Option<Option<T>>`, `Vec<Option<T>>`)
 /// takes the next word unless it is flag-like, as clap does, even a
@@ -125,17 +128,19 @@ mod spec;
 /// is the variable's value, such as one a build script sets with
 /// `cargo:rustc-env`. The derive reads it itself: it is not rustc's `env!`,
 /// though `env!("VAR", "message")` says the same when it is missing, and no
-/// other macro is read. Help and the pages say the same; they leave out,
-/// with a warning, a `#[doc = …]` the derive cannot read, such as
-/// `include_str!`.
+/// other macro is read.
+///
+/// Help and the pages say the same; they leave out, with a warning, a
+/// `#[doc = …]` the derive cannot read, such as `include_str!`.
 ///
 /// Text only help and the pages show may also be any `&'static str` a
 /// constant can be, a `const fn` call included: `about`, `long_about`,
 /// `before_help`, `after_help` and their `long` forms, `usage`, `version`,
 /// `long_version`, a field's `help`, `long_help`, `warning`, `default_note`
-/// and `deprecated`, and a variant's `help` and `deprecated`. Help shows it;
-/// the pages, written without running the program, say what they would
-/// without the option.
+/// and `deprecated`, and a variant's `help` and `deprecated`.
+///
+/// Help shows it; the pages, written without running the program, say what
+/// they would without the option.
 ///
 /// # Struct options
 ///

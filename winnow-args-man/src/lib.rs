@@ -86,7 +86,7 @@ impl Manual {
         Ok(out)
     }
 
-    /// One page.
+    /// One roff page, with the command's help rendered as man sections.
     pub fn render(&self, page: &Page<'_>) -> String {
         let command = page.command;
         let mut doc = Roff::new();
