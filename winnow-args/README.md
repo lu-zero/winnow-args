@@ -99,12 +99,10 @@ Man and Markdown pages are made by
 
 ## Performance
 
-The parser is generated at compile time, so a parse costs the same however
-many commands the program declares. clap and bpaf build a parser at each start.
-
 ![Time per parse for two command lines, log scale: winnow-args against usage, clap and bpaf](https://raw.githubusercontent.com/lu-zero/winnow-args/HEAD/docs/performance.svg)
 
-The measurements and the method are in the repository's
+The measurements, the method and why the cost of a parse does not grow with
+the number of commands are in the repository's
 [benchmarks](https://github.com/lu-zero/winnow-args/tree/HEAD/benchmarks).
 
 ## Cargo features
