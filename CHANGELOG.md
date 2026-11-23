@@ -9,6 +9,9 @@ released together. Versions follow [semver](https://semver.org).
 - **Fixed**: `` `quoted` ``, `*emphasized*` and `**strong**` spans in
   `after_help`, `after_long_help`, `before_help` and `before_long_help` are
   painted in `--help`, as they are in the rest of the page.
+- **Fixed**: prose is painted before it is wrapped, so a span crossing a line
+  break still pairs. Whitespace at a painted word's end stays outside the
+  paint, so wrapping can trim it as before.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its

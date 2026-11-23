@@ -116,6 +116,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       painted, backticks kept and stars dropped; stars that wrap nothing
       (`*.rs`, `2*3*4`, a bullet) are text; in a heading, over the heading's
       own paint; in `before_help`, `after_help` and their long forms
+- [x] Prose painted before wrapping, so a span crossing a line break still
+      pairs; trailing whitespace stays outside the paint for wrapping to trim
 - [x] `help-text` feature: help keeps its structure without the prose
 - [x] Error kinds after usage's codes, with the offending word's offset;
       `report` maps them to output and exit status

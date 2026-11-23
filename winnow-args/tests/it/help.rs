@@ -566,6 +566,119 @@ fn before_help_marks_are_painted() {
     assert!(colored.starts_with(&expected), "{colored:?}");
 }
 
+/// Trailing whitespace stays outside a painted run so wrapping can trim it.
+#[derive(Args, Debug)]
+#[arg(
+    name = "padded",
+    long_about = "`aaaaaaaaaa\t bbbbbbbbbb`"
+)]
+struct PaddedMark {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn a_painted_word_does_not_keep_trailing_space() {
+    let render = |style| {
+        with_env(&[("COLUMNS", "20")], || {
+            parse::<PaddedMark>(&["--help"])
+                .unwrap_err()
+                .render_help_styled("padded", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    assert!(plain.contains("aaaaaaaaaa\n"), "{plain:?}");
+}
+
+/// Globs in ordinary prose are text, not markup.
+#[derive(Args, Debug)]
+#[arg(
+    name = "globs",
+    long_about = "grep --include=*.rs --exclude=*.toml src/**/*.rs '*.lock' pat"
+)]
+struct MarkedGlobs {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn patterns_in_prose_keep_their_stars() {
+    let render = |style| {
+        with_env(&[], || {
+            parse::<MarkedGlobs>(&["--help"])
+                .unwrap_err()
+                .render_help_styled("globs", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    for pattern in ["--include=*.rs", "--exclude=*.toml", "src/**/*.rs", "'*.lock'"] {
+        assert!(colored.contains(pattern), "{pattern}: {colored:?}");
+    }
+}
+
+/// A command example, indented as a code block, keeps its stars.
+#[derive(Args, Debug)]
+#[arg(
+    name = "patterns",
+    after_help = "Try --include=*.rs, src/**/*.rs, or '*.toml' with find . -name '*.rs'."
+)]
+struct MarkedPatterns {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn patterns_in_after_help_keep_their_stars() {
+    let render = |style| {
+        with_env(&[], || {
+            parse::<MarkedPatterns>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("patterns", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    for pattern in ["--include=*.rs", "src/**/*.rs", "'*.toml'"] {
+        assert!(colored.contains(pattern), "{pattern}: {colored:?}");
+    }
+}
+
+/// A quoted span that wraps must still pair its backticks.
+#[derive(Args, Debug)]
+#[arg(
+    name = "wrapped",
+    after_help = "`a long quoted span that wraps across the width` and then `another quoted span that is long`"
+)]
+struct MarkedWrap {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn marks_across_a_wrap_keep_their_pairs() {
+    let render = |style| {
+        with_env(&[("COLUMNS", "60")], || {
+            parse::<MarkedWrap>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("wrapped", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    assert!(colored.contains("\u{1b}[1m"), "{colored:?}");
+    assert!(!colored.contains(&sgr("1", "`and then`")), "{colored:?}");
+}
+
 #[test]
 fn color_defaults_to_greens_and_cyans() {
     // 16 colors: bold cyan headings, bold green flags and commands, cyan value
