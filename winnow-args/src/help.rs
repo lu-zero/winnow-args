@@ -880,7 +880,8 @@ fn page(
         command.before_help
     };
     if described && !before.is_empty() {
-        let _ = writeln!(out, "{}\n", wrap_text(before, width));
+        let wrapped = wrap_text(before, width);
+        let _ = writeln!(out, "{}\n", painted_marks(&wrapped, style));
     }
     let about = if long && !command.long_about.is_empty() {
         command.long_about
@@ -1034,7 +1035,11 @@ fn page(
         command.after_help
     };
     if !after.is_empty() {
-        let _ = writeln!(out, "{}", wrap_text(after, width));
+        // Wrap first: `painted_marks` works a line at a time, so escapes never
+        // cross a line break.
+        let wrapped = wrap_text(after, width);
+        let painted = painted_marks(&wrapped, style);
+        let _ = writeln!(out, "{}", painted);
     }
 }
 

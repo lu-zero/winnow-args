@@ -500,6 +500,72 @@ fn sgr(sgr: &str, text: &str) -> String {
     format!("\u{1b}[{sgr}m{text}\u{1b}[0m")
 }
 
+/// Shortcut keys, with winnow-args markup in the after-help prose.
+#[derive(Args, Debug)]
+#[arg(name = "keys", after_help = "`Ctrl+H`  *show help*")]
+struct MarkedAfterHelp {
+    /// A flag.
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn after_help_marks_are_painted() {
+    let render = |style| {
+        with_env(&[], || {
+            parse::<MarkedAfterHelp>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("keys", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    assert!(plain.ends_with("`Ctrl+H`  *show help*\n"), "{plain}");
+
+    let colored = render(Style::COLORED);
+    // Marked spans are painted a word at a time so wrapping cannot split a run.
+    let expected = format!(
+        "{}  {} {}\n",
+        sgr("1", "`Ctrl+H`"),
+        sgr("3", "show"),
+        sgr("3", "help")
+    );
+    assert!(colored.ends_with(&expected), "{colored:?}");
+    assert_eq!(strip(&colored).lines().last(), Some("`Ctrl+H`  show help"));
+}
+
+/// Markup in the prose before the page.
+#[derive(Args, Debug)]
+#[arg(name = "keys", before_help = "`Ctrl+H`  *show help*")]
+struct MarkedBeforeHelp {
+    /// A flag.
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn before_help_marks_are_painted() {
+    let render = |style| {
+        with_env(&[], || {
+            parse::<MarkedBeforeHelp>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("keys", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    assert!(plain.starts_with("`Ctrl+H`  *show help*\n\n"), "{plain}");
+
+    let colored = render(Style::COLORED);
+    let expected = format!(
+        "{}  {} {}\n\n",
+        sgr("1", "`Ctrl+H`"),
+        sgr("3", "show"),
+        sgr("3", "help")
+    );
+    assert!(colored.starts_with(&expected), "{colored:?}");
+}
+
 #[test]
 fn color_defaults_to_greens_and_cyans() {
     // 16 colors: bold cyan headings, bold green flags and commands, cyan value

@@ -115,7 +115,7 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `` `quoted` ``, `*emphasized*` and `**strong**` spans of a description
       painted, backticks kept and stars dropped; stars that wrap nothing
       (`*.rs`, `2*3*4`, a bullet) are text; in a heading, over the heading's
-      own paint
+      own paint; in `before_help`, `after_help` and their long forms
 - [x] `help-text` feature: help keeps its structure without the prose
 - [x] Error kinds after usage's codes, with the offending word's offset;
       `report` maps them to output and exit status
