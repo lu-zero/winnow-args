@@ -4,6 +4,12 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
+## Unreleased
+
+- **Fixed**: `` `quoted` ``, `*emphasized*` and `**strong**` spans in
+  `after_help`, `after_long_help`, `before_help` and `before_long_help` are
+  painted in `--help`, as they are in the rest of the page.
+
 ## 0.6.4 (2026-11-18)
 
 - **Added**: `surface = "…"` and `available_if("…", …)` on a struct or a field,
