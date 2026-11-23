@@ -10,12 +10,14 @@ released together. Versions follow [semver](https://semver.org).
   `after_help`, `after_long_help`, `before_help` and `before_long_help` are
   painted in `--help`, as they are in the rest of the page.
 - **Fixed**: prose is painted before it is wrapped, so a span crossing a line
-  break still pairs. Whitespace at a painted word's end stays outside the
-  paint, so wrapping can trim it as before.
+  break still pairs; stars in shell patterns (`--include=*.rs`,
+  `src/**/*.rs`, `'*.toml'`) stay literal in painted help. Whitespace at a
+  painted word's end stays outside the paint, so wrapping can trim it as before.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its
-  conditions add to them.
+  conditions add to them, without repeating one the type already has.
+  Repeated `available_if` on a struct, field or variant adds every condition.
 
 ## 0.6.4 (2026-11-18)
 

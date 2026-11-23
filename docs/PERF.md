@@ -1419,3 +1419,18 @@ With `panic = "abort"` both shrink alike (80 KB and 61 KB), so unwinding is
 not the gap. What is left: the lexer itself (1.4 KB a struct, step 32), the
 help tables (851 `help::Item`s of about 280 bytes, 238 KB with or without
 `help-text`), and the help prose (150 KB, `help-text`).
+
+## 61. Help prose and documentation metadata
+
+`surface` and `available_if` on a subcommand variant reach the spec catalog
+only, and painting the before/after help prose happens only when help is
+printed. Neither is on the parse path.
+
+`just perf -v --path /tmp/x`, release, `perf instructions:u` median of 31:
+winnow-args 1 642 instructions against 1 680 before. A controlled rebuild of
+the old source in the same environment gave the same `just bench-examples`
+counts as the new one (`pwd -P` 372, `read -rp …` 1 738, `ld`, 18 words,
+5 971), so the few-percent drift in the first comparison was the machine.
+
+This host has no working cachegrind, so the counts are `perf` medians; that
+counter moves by a few hundred between runs.
