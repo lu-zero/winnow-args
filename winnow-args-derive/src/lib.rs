@@ -770,6 +770,10 @@ fn env_text(mac: &syn::Macro) -> syn::Result<String> {
 /// - `long_help = "…"`: on a variant with named fields, that command's
 ///   `long_about`. The command list still shows one line. On a unit, or a
 ///   variant that holds a type, `long_help` is unused.
+/// - `surface = "…"` and `available_if("…", …)`: who the subcommand is for
+///   and the conditions it is available under, carried into the pages' data.
+///   On one that holds a type, its `surface` replaces the type's and its
+///   conditions add to them.
 /// - `external`, alone, on a variant holding a `Vec`, as `Other(Vec<String>)`:
 ///   an external subcommand. A word that names no variant and is not a
 ///   flag, where the parent has nothing else to take it, is its first
@@ -960,6 +964,8 @@ fn expand_subcommand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 about: info.about.clone(),
                 long_about: unit_long_about.unwrap_or_default(),
                 hide: info.hide,
+                surface: info.surface.clone(),
+                available_if: info.available_if.clone(),
                 ty,
                 deprecated: info.deprecation.as_ref().map(DeprecationDoc::spec),
             });
@@ -2726,6 +2732,10 @@ struct Variant {
     about: String,
     /// `help = EXPR`: what help shows instead, short and long.
     about_constant: Option<TokenStream2>,
+    /// Who this subcommand is for, as the program's own name for it.
+    surface: Option<String>,
+    /// Conditions under which this subcommand is available.
+    available_if: Vec<String>,
     /// A subcommand that is deprecated.
     deprecation: Option<DeprecationDoc>,
 }
@@ -2845,6 +2855,10 @@ fn variant_names<'a>(
     let (mut name, mut alias, mut hidden, mut hide) = (None, Vec::new(), Vec::new(), false);
     let mut help: Option<String> = None;
     let mut about_constant = None;
+    // A variant with named fields sends its options to the struct built from
+    // them; reading them here too would double the conditions on its command.
+    let mut surface = None;
+    let mut available_if = Vec::new();
     let mut deprecation = None;
     for attr in variant.attrs.iter().filter(|a| is_ours(a)) {
         attr.parse_nested_meta(|meta| {
@@ -2865,6 +2879,12 @@ fn variant_names<'a>(
             } else if meta.path.is_ident("long_help") {
                 // The listing shows one line; the subcommand's own help has the rest.
                 lit_text(meta.value()?)?;
+            } else if meta.path.is_ident("surface") && !matches!(variant.fields, Fields::Named(_)) {
+                surface = Some(lit_text(meta.value()?)?.value());
+            } else if meta.path.is_ident("available_if")
+                && !matches!(variant.fields, Fields::Named(_))
+            {
+                available_if.extend(aliases(&meta)?);
             } else if meta.path.is_ident("verbatim_doc_comment") && !holds_type {
             } else if skip_spec(&meta)? {
                 if !holds_type {
@@ -2883,8 +2903,9 @@ fn variant_names<'a>(
                 }
             } else {
                 return Err(meta.error(
-                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help`, `long_help` or `deprecated`; \
-                     a command's options, such as `validate`, go on a variant with fields or on the struct it holds",
+                    "expected `name`, `alias`, `alias_hidden`, `hide`, `help`, `long_help`, `surface`, \
+                     `available_if` or `deprecated`; a command's options, such as `validate`, go on a \
+                     variant with fields or on the struct it holds",
                 ));
             }
             Ok(())
@@ -2921,6 +2942,8 @@ fn variant_names<'a>(
         deprecation,
         about,
         about_constant,
+        surface,
+        available_if,
     })
 }
 

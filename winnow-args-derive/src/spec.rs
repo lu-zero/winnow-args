@@ -89,6 +89,8 @@ pub(crate) struct VariantDoc {
     /// The whole description of a variant with no type of its own.
     pub long_about: String,
     pub hide: bool,
+    pub surface: Option<String>,
+    pub available_if: Vec<String>,
     pub ty: Option<String>,
     /// `(message, warn_at, remove_at)`.
     pub deprecated: Option<(String, Option<String>, Option<String>)>,
@@ -173,6 +175,8 @@ pub(crate) fn write_subcommands(span: Span, ident: &str, doc: &SubsDoc<'_>) -> s
         field(&mut out, "about", &variant.about);
         field(&mut out, "long_about", &variant.long_about);
         flag(&mut out, "hide", variant.hide);
+        opt(&mut out, "surface", &variant.surface);
+        strings(&mut out, "available_if", &variant.available_if);
         deprecated(&mut out, &variant.deprecated);
         opt(&mut out, "ty", &variant.ty);
     }

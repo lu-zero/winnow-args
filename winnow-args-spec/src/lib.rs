@@ -462,6 +462,8 @@ struct VariantFrag {
     about: String,
     long_about: String,
     hide: bool,
+    surface: Option<String>,
+    available_if: Vec<String>,
     ty: Option<String>,
     deprecated: Option<Deprecated>,
 }
@@ -1387,6 +1389,8 @@ fn parse_variants(table: &Table) -> Result<Vec<VariantFrag>, Error> {
             about: opt_str(row, "about")?,
             long_about: opt_str(row, "long_about")?,
             hide: flag(row, "hide")?,
+            surface: opt_present(row, "surface")?,
+            available_if: strings(row, "available_if")?,
             ty: opt_present(row, "ty")?,
             deprecated: deprecated(row)?,
         });
@@ -1683,6 +1687,12 @@ impl Catalog {
             if command.name.is_empty() {
                 command.name = variant.name.clone();
             }
+            if variant.surface.is_some() {
+                command.surface = variant.surface.clone();
+            }
+            command
+                .available_if
+                .extend(variant.available_if.iter().cloned());
             let about = if variant.about.is_empty() {
                 command.about.clone()
             } else {
