@@ -15,6 +15,7 @@ that package.
 | [`example.rs`](example.rs) | `cargo run --example example -- -vp /tmp` |
 | [`help.rs`](help.rs) | `cargo run --example help -- --help` |
 | [`gallery.rs`](gallery.rs) | `cargo run --example gallery -- --help` |
+| [`metadata.rs`](metadata.rs) | `cargo run --example metadata -- target/metadata-spec` |
 | [`deprecated.rs`](deprecated.rs) | `cargo run --example deprecated -- compile src` |
 | [`rules.rs`](rules.rs) | `cargo run --example rules -- --target production --release v2` |
 | [`values.rs`](values.rs) | `NPROC=8 cargo run --example values -- lib` |
@@ -25,6 +26,12 @@ that package.
 | [`features.rs`](features.rs) | `cargo run --example features -- -F simd +F simd -F lto` |
 | [`brush_builtins.rs`](brush_builtins.rs) | `cargo run --example brush_builtins -- set -eu +x -o pipefail a b` |
 | [`ld.rs`](ld.rs) | `cargo run --example ld -- -shared -o out.so --as-needed -lc a.o -z now` |
+
+`metadata.rs` prints where `surface` and `available_if` end up. Write its
+fragments first with
+`WINNOW_ARGS_SPEC=$PWD/target/metadata-spec cargo check --example metadata`.
+A command line after the directory is parsed as usual, since neither option
+changes parsing.
 
 `brush_builtins.rs` and `ld.rs` are generated. Regenerate them with
 `just gen examples BRUSH_DIR MOLD_DIR`. Do not edit them by hand.
