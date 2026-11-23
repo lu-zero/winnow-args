@@ -24,8 +24,10 @@ use winnow_args::{Args, Subcommand, ValueEnum, report};
 #[arg(
     name = "gallery",
     version = "1.0.0",
-    after_help = "The text after the lists, on `-h`.",
-    after_long_help = "The text after the lists, on `--help`.",
+    before_help = "Before the description: `code` and *emphasis* on `-h`.",
+    before_long_help = "Before the description on `--help`: `code` and *emphasis*.",
+    after_help = "After the lists: `code` and *emphasis* on `-h`.",
+    after_long_help = "After the lists on `--help`: **strong** and `code`.",
     default_subcommand = "run",
     default_subcommand_help,
     plus_options,
