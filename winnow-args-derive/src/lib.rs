@@ -6351,7 +6351,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 return Ok(());
             }
             if meta.path.is_ident("available_if") {
-                options.available_if = aliases(&meta)?;
+                options.available_if.extend(aliases(&meta)?);
                 return Ok(());
             }
             if meta.path.is_ident("effect") {
@@ -7691,7 +7691,7 @@ fn field(f: &syn::Field) -> syn::Result<Field> {
             } else if meta.path.is_ident("surface") {
                 surface = Some(lit_text(meta.value()?)?.value());
             } else if meta.path.is_ident("available_if") {
-                available_if = aliases(&meta)?;
+                available_if.extend(aliases(&meta)?);
             } else if meta.path.is_ident("hide") {
                 hide = true;
             } else if meta.path.is_ident("hide_choices") {

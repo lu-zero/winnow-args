@@ -311,7 +311,8 @@ pub struct Item {
     /// A bare flag is a value (`--name` and `--name=value`).
     pub optional_value: bool,
     /// How many words one occurrence takes; absent means 1. A written `0` is
-    /// rejected when the fragment is read.
+    /// rejected when the fragment is read; a hand-written item with 0 still
+    /// renders as one value.
     pub values: usize,
     /// A placeholder for each of `values`, in place of the value name
     /// repeated. Empty when there are none.
@@ -1690,9 +1691,11 @@ impl Catalog {
             if variant.surface.is_some() {
                 command.surface = variant.surface.clone();
             }
-            command
-                .available_if
-                .extend(variant.available_if.iter().cloned());
+            for condition in &variant.available_if {
+                if !command.available_if.contains(condition) {
+                    command.available_if.push(condition.clone());
+                }
+            }
             let about = if variant.about.is_empty() {
                 command.about.clone()
             } else {

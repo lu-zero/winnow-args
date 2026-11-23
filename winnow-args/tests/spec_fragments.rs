@@ -21,14 +21,22 @@ use winnow_args_spec::Catalog;
     long_only,
     author = "Ann:Bo",
     surface = "advanced",
-    available_if("debug", "tests")
+    available_if("debug", "tests"),
+    available_if("released")
 )]
 struct SpecCli {
     /// say "hi"
     #[arg(positional)]
     names: Vec<String>,
     /// Verbose.
-    #[arg(short, long, global, surface = "public", available_if = "new")]
+    #[arg(
+        short,
+        long,
+        global,
+        surface = "public",
+        available_if = "new",
+        available_if("again")
+    )]
     verbose: bool,
     #[arg(flatten)]
     plain: SpecPlain,
@@ -48,7 +56,7 @@ struct SpecPlain {
 #[derive(Subcommand)]
 enum SpecCommand {
     /// Run it.
-    #[arg(surface = "operators", available_if("unix", "debug"))]
+    #[arg(surface = "operators", available_if("unix", "debug", "root"))]
     Run(SpecRun),
     /// Success.
     #[arg(surface = "tests")]
@@ -59,7 +67,7 @@ enum SpecCommand {
 #[derive(Subcommand)]
 enum SpecNamedVariant {
     /// Build it.
-    #[arg(surface = "builders", available_if("nightly"))]
+    #[arg(surface = "builders", available_if("nightly"), available_if("again"))]
     Build {
         /// How many.
         #[arg(long)]
@@ -214,14 +222,14 @@ fn availability_metadata_is_carried() {
         .stitch("SpecCli")
         .unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(command.surface.as_deref(), Some("advanced"));
-    assert_eq!(command.available_if, ["debug", "tests"]);
+    assert_eq!(command.available_if, ["debug", "tests", "released"]);
     let verbose = command
         .items
         .iter()
         .find(|item| item.long.as_deref() == Some("verbose"))
         .unwrap();
     assert_eq!(verbose.surface.as_deref(), Some("public"));
-    assert_eq!(verbose.available_if, ["new"]);
+    assert_eq!(verbose.available_if, ["new", "again"]);
     let run = command
         .subcommands
         .iter()
@@ -243,7 +251,10 @@ fn availability_metadata_is_carried() {
         named.subcommands[0].command.surface.as_deref(),
         Some("builders")
     );
-    assert_eq!(named.subcommands[0].command.available_if, ["nightly"]);
+    assert_eq!(
+        named.subcommands[0].command.available_if,
+        ["nightly", "again"]
+    );
 }
 
 /// What a page says beyond its lists.
