@@ -566,6 +566,63 @@ fn before_help_marks_are_painted() {
     assert!(colored.starts_with(&expected), "{colored:?}");
 }
 
+/// Shell patterns in prose must not be read as emphasis.
+#[derive(Args, Debug)]
+#[arg(
+    name = "patterns",
+    after_help = "Try --include=*.rs, src/**/*.rs, or '*.toml' with find . -name '*.rs'."
+)]
+struct MarkedPatterns {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn patterns_in_after_help_keep_their_stars() {
+    let render = |style| {
+        with_env(&[], || {
+            parse::<MarkedPatterns>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("patterns", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    for pattern in ["--include=*.rs", "src/**/*.rs", "'*.toml'"] {
+        assert!(colored.contains(pattern), "{pattern}: {colored:?}");
+    }
+}
+
+/// A quoted span that wraps must still pair its backticks.
+#[derive(Args, Debug)]
+#[arg(
+    name = "wrapped",
+    after_help = "`a long quoted span that wraps across the width` and then `another quoted span that is long`"
+)]
+struct MarkedWrap {
+    #[arg(long)]
+    flag: bool,
+}
+
+#[test]
+fn marks_across_a_wrap_keep_their_pairs() {
+    let render = |style| {
+        with_env(&[("COLUMNS", "60")], || {
+            parse::<MarkedWrap>(&["-h"])
+                .unwrap_err()
+                .render_help_styled("wrapped", style)
+                .unwrap()
+        })
+    };
+    let plain = render(Style::PLAIN);
+    let colored = render(Style::COLORED);
+    assert_eq!(strip(&colored), plain, "{colored:?}");
+    assert!(colored.contains("\u{1b}[1m"), "{colored:?}");
+    assert!(!colored.contains(&sgr("1", "`and then`")), "{colored:?}");
+}
+
 #[test]
 fn color_defaults_to_greens_and_cyans() {
     // 16 colors: bold cyan headings, bold green flags and commands, cyan value

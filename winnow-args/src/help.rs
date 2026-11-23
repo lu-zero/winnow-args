@@ -880,8 +880,7 @@ fn page(
         command.before_help
     };
     if described && !before.is_empty() {
-        let wrapped = wrap_text(before, width);
-        let _ = writeln!(out, "{}\n", painted_marks(&wrapped, style));
+        let _ = writeln!(out, "{}\n", wrap_text(&painted_marks(before, style), width));
     }
     let about = if long && !command.long_about.is_empty() {
         command.long_about
@@ -1035,11 +1034,7 @@ fn page(
         command.after_help
     };
     if !after.is_empty() {
-        // Wrap first: `painted_marks` works a line at a time, so escapes never
-        // cross a line break.
-        let wrapped = wrap_text(after, width);
-        let painted = painted_marks(&wrapped, style);
-        let _ = writeln!(out, "{}", painted);
+        let _ = writeln!(out, "{}", wrap_text(&painted_marks(after, style), width));
     }
 }
 
@@ -1648,10 +1643,10 @@ fn painted_marks(text: &str, style: Style) -> String {
 /// Stars whose ink paints nothing mark no span, so a quoted span between
 /// them is still painted.
 ///
-/// Stars mark a span only around it: the opening ones follow no letter or
-/// digit and touch the span's first character, the closing ones touch its
-/// last and precede no letter or digit. `2*3*4`, `*.rs or *.toml`, a
-/// bullet's `* ` and `\*` are not spans. Three stars or more are left alone.
+/// Stars mark a span only around it: the opening ones follow a boundary and
+/// touch the span's first character, the closing ones touch its last and
+/// precede a boundary. `2*3*4`, `--include=*.rs`, `src/**/*.rs`, `'*.toml'`,
+/// a bullet's `* ` and `\*` are not spans. Three or more stars are left alone.
 fn marked(
     line: &str,
     from: usize,
@@ -1674,7 +1669,7 @@ fn marked(
                 let ink = if stars == 2 { strong } else { emphasis };
                 if stars <= 2
                     && ink.paint != Paint::NONE
-                    && before.is_none_or(|c| !c.is_alphanumeric() && c != '\\')
+                    && can_open(before)
                     && after.is_some_and(|c| !c.is_whitespace())
                     && let Some(end) = closing(line, at + stars, stars)
                 {
@@ -1693,6 +1688,25 @@ fn run(bytes: &[u8], at: usize) -> usize {
     bytes[at..].iter().take_while(|b| **b == b'*').count()
 }
 
+/// A star opens a span only after a boundary: shell globs and quoted ones
+/// (`--include=*.rs`, `src/**/*.rs`, `'*.toml'`) are text, not markup.
+fn can_open(before: Option<char>) -> bool {
+    before.is_none_or(|c| c.is_whitespace() || matches!(c, '(' | '[' | '{' | '<'))
+}
+
+/// A star closes a span only after a word and before a boundary. A slash
+/// after it starts a path, so `*/` is text too.
+fn can_close(before: Option<char>, after: Option<char>) -> bool {
+    before.is_some_and(|c| !c.is_whitespace() && c != '\\')
+        && after.is_none_or(|c| {
+            c.is_whitespace()
+                || matches!(
+                    c,
+                    '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '>' | '"' | '\''
+                )
+        })
+}
+
 /// The end of the span that `stars` stars opened before `from`: past the
 /// next run of as many, if it closes one. If it does not, nothing was opened:
 /// in `*.rs is *never* read` the span is `*never*`. A quoted span on the way
@@ -1708,9 +1722,7 @@ fn closing(line: &str, from: usize, stars: usize) -> Option<usize> {
                 let before = line[..at].chars().next_back();
                 let after = line[at + found..].chars().next();
                 if found == stars {
-                    let closes = before.is_some_and(|c| !c.is_whitespace() && c != '\\')
-                        && after.is_none_or(|c| !c.is_alphanumeric());
-                    return closes.then_some(at + found);
+                    return can_close(before, after).then_some(at + found);
                 }
                 at += found;
             }
