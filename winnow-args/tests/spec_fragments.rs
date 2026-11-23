@@ -48,13 +48,28 @@ struct SpecPlain {
 #[derive(Subcommand)]
 enum SpecCommand {
     /// Run it.
+    #[arg(surface = "operators", available_if("unix", "debug"))]
     Run(SpecRun),
     /// Success.
+    #[arg(surface = "tests")]
     True,
+}
+
+/// A variant whose fields carry the metadata.
+#[derive(Subcommand)]
+enum SpecNamedVariant {
+    /// Build it.
+    #[arg(surface = "builders", available_if("nightly"))]
+    Build {
+        /// How many.
+        #[arg(long)]
+        jobs: usize,
+    },
 }
 
 /// One run.
 #[derive(Args)]
+#[arg(surface = "default", available_if = "root")]
 struct SpecRun {
     /// When.
     #[arg(long)]
@@ -168,6 +183,7 @@ fn types_of_one_name_are_told_apart() {
             "SpecDupB",
             "SpecEnv",
             "SpecLocal",
+            "SpecNamedVariant",
             "SpecPages",
             "SpecPlace",
             "SpecSaid",
@@ -206,6 +222,28 @@ fn availability_metadata_is_carried() {
         .unwrap();
     assert_eq!(verbose.surface.as_deref(), Some("public"));
     assert_eq!(verbose.available_if, ["new"]);
+    let run = command
+        .subcommands
+        .iter()
+        .find(|sub| sub.name == "run")
+        .unwrap();
+    assert_eq!(run.command.surface.as_deref(), Some("operators"));
+    assert_eq!(run.command.available_if, ["root", "unix", "debug"]);
+    let yes = command
+        .subcommands
+        .iter()
+        .find(|sub| sub.name == "true")
+        .unwrap();
+    assert_eq!(yes.command.surface.as_deref(), Some("tests"));
+    assert!(yes.command.available_if.is_empty());
+    let named = catalog
+        .stitch("SpecNamedVariant")
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        named.subcommands[0].command.surface.as_deref(),
+        Some("builders")
+    );
+    assert_eq!(named.subcommands[0].command.available_if, ["nightly"]);
 }
 
 /// What a page says beyond its lists.
