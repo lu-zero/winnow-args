@@ -19,6 +19,14 @@ released together. Versions follow [semver](https://semver.org).
   other prose goes in backticks. Man and Markdown pages use the same marks
   grammar as `--help`, so the same prose string is marked the same way. A
   heading title's marks are painted in the man page too.
+- **Added**: `conflicts("…")` and `requires("…")` on a struct can name a flag
+  of a `#[arg(flatten)]` struct by `--long` or `-s`, at any depth. Only the
+  parent declares the relation; a flattened flag from the environment counts
+  as supplied, and a default satisfies `requires`. A switch from the
+  environment counts only when it is true, and a computed default satisfies
+  `requires` too. The other rules stay local. A missing target is named in
+  the error. Generated code qualifies the runtime crate, so a local
+  `winnow_args` module cannot shadow it.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its

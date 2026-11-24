@@ -1434,3 +1434,15 @@ counts as the new one (`pwd -P` 372, `read -rp …` 1 738, `ld`, 18 words,
 
 This host has no working cachegrind, so the counts are `perf` medians; that
 counter moves by a few hundred between runs.
+
+## 62. Relations across a flatten
+
+`conflicts` and `requires` on a struct can name a flag of a struct it flattens.
+The query is a defaulted method on the private `Flatten` trait, generated for
+every flags-only struct, and called only by a parent that declares such a
+relation.
+
+`just perf -v --path /tmp/x` equivalents, release, `perf` median of 31 on core
+0: cold 1 573 instructions against 1 591 before, warm 1 256 against 1 256.
+`size` on `parse-n-wa` is unchanged at 382 667 bytes of text, data and bss:
+the method is not instantiated when no relation uses it.
