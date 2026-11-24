@@ -261,7 +261,7 @@ mod spec;
 ///   present. Without `multiple`, a second member conflicts with the first.
 ///   `message` is said in place of either error, `{0}` and `{1}` the two
 ///   members given, or the group's name and its members when none was.
-/// - `validate = path`: a function such as
+/// - `validate = expression`: a function or closure such as
 ///   `fn check(cli: &Cli) -> Result<(), winnow_args::Error>`, called with the
 ///   struct once it is built and its rules hold. It returns
 ///   `Error::invalid` for a fault of several fields, or `Error::invalid_value`
@@ -4326,7 +4326,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
     }
     // The program's own check of the built struct.
-    let validate = validate.map(|path| quote!(#path(&__built)?;));
+    let validate = validate.map(|check| quote!((#check)(&__built)?;));
 
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
@@ -6317,7 +6317,7 @@ struct StructOptions {
     /// A bare invocation asks for help.
     arg_required_else_help: bool,
     /// Called with the built struct, before it is returned.
-    validate: Option<syn::Path>,
+    validate: Option<syn::Expr>,
     /// The program name for the usage line; `argv[0]` when empty.
     name: String,
     /// `-V`/`--version` text: a constant, or `CARGO_PKG_VERSION`.
@@ -6467,7 +6467,7 @@ fn struct_options(input: &DeriveInput) -> syn::Result<StructOptions> {
                 if options.validate.is_some() {
                     return Err(meta.error("`validate` is given twice"));
                 }
-                options.validate = Some(meta.value()?.parse::<syn::Path>()?);
+                options.validate = Some(meta.value()?.parse::<syn::Expr>()?);
                 return Ok(());
             }
             if meta.path.is_ident("arg_required_else_help") {

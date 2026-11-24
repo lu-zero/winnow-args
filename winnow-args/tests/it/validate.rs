@@ -145,3 +145,26 @@ mod keywords {
         assert_eq!(error.to_string(), "`now` and `lazy` exclude each other");
     }
 }
+
+#[derive(Args, Debug)]
+#[arg(validate = |cli: &Inline| {
+    if cli.a == cli.b {
+        return Err(Error::invalid("a and b must differ"));
+    }
+    Ok(())
+})]
+struct Inline {
+    #[arg(long)]
+    a: u8,
+    #[arg(long)]
+    b: u8,
+}
+
+#[test]
+fn a_closure_can_validate() {
+    let ok = Inline::parse_from(["--a", "1", "--b", "2"]).unwrap();
+    assert_eq!((ok.a, ok.b), (1, 2));
+    let error = Inline::parse_from(["--a", "1", "--b", "1"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Invalid);
+    assert_eq!(error.to_string(), "a and b must differ");
+}

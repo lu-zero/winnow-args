@@ -228,7 +228,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 ### Defaults and rules
 
 - [x] `env_fallback`, `deprecated_env`
-- [ ] A group as an enum (usage's `ArgGroup`); `validate` expressions
+- [ ] A group as an enum (usage's `ArgGroup`)
+- [x] `validate` expressions: a function or closure, written inline
 - [ ] Selectors naming an ancestor's global flag: ours resolve at compile
       time, within the struct; usage resolves them at runtime
 - [x] Relations on positionals within one struct: a positional can name a
