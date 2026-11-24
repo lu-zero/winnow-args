@@ -7,6 +7,10 @@
 
 use std::fmt::Write as _;
 
+use winnow::combinator::{alt, delimited, dispatch, fail, peek, repeat};
+use winnow::prelude::*;
+use winnow::token::{any, none_of, take_until, take_while};
+
 use crate::color::Paint;
 pub use crate::color::{Depth, Palette, Theme};
 
@@ -1579,24 +1583,24 @@ fn deprecated_note(deprecation: &crate::warn::Deprecation, long: bool, style: St
 fn heading(out: &mut String, title: &str, style: Style) {
     let header = style.header();
     let inks = [style.code(), style.emphasis(), style.strong()];
-    let mut at = 0;
-    if style.depth != Depth::None {
-        while let Some((open, end, ink, stars)) = marked(title, at, inks) {
-            if at < open {
-                push_painted(out, header, &title[at..open]);
-            }
-            let both = Paint {
-                fg: header.paint.fg.or(ink.paint.fg),
-                bold: header.paint.bold || ink.paint.bold,
-                dim: header.paint.dim || ink.paint.dim,
-                italic: header.paint.italic || ink.paint.italic,
-                underline: header.paint.underline || ink.paint.underline,
-            };
-            push_painted(out, style.ink(both), &title[open + stars..end - stars]);
-            at = end;
-        }
+    if style.depth == Depth::None {
+        push_painted(out, header, title);
+        return;
     }
-    push_painted(out, header, &title[at..]);
+    each_mark(title, inks, |ink, piece| {
+        let Some(ink) = ink else {
+            push_painted(out, header, piece);
+            return;
+        };
+        let both = Paint {
+            fg: header.paint.fg.or(ink.paint.fg),
+            bold: header.paint.bold || ink.paint.bold,
+            dim: header.paint.dim || ink.paint.dim,
+            italic: header.paint.italic || ink.paint.italic,
+            underline: header.paint.underline || ink.paint.underline,
+        };
+        push_painted(out, style.ink(both), piece);
+    });
 }
 
 /// `text` with each `` `quoted` ``, `*emphasized*` and `**strong**` span
@@ -1618,10 +1622,17 @@ fn painted_marks(text: &str, style: Style) -> String {
         if n > 0 {
             out.push('\n');
         }
-        let mut at = 0;
-        while let Some((open, end, ink, stars)) = marked(line, at, inks) {
-            out.push_str(&line[at..open]);
-            for (i, word) in line[open + stars..end - stars].split(' ').enumerate() {
+        // Indented as a Markdown code block: an example, whose marks are text.
+        if line.starts_with("    ") || line.starts_with('\t') {
+            out.push_str(line);
+            continue;
+        }
+        each_mark(line, inks, |ink, piece| {
+            let Some(ink) = ink else {
+                out.push_str(piece);
+                return;
+            };
+            for (i, word) in piece.split(' ').enumerate() {
                 if i > 0 {
                     out.push(' ');
                 }
@@ -1631,109 +1642,130 @@ fn painted_marks(text: &str, style: Style) -> String {
                 }
                 out.push_str(&word[painted.len()..]);
             }
-            at = end;
-        }
-        out.push_str(&line[at..]);
+        });
     }
     out
 }
 
-/// The first marked span of `line` at or after `from`, marks included, its
-/// ink among those of a quoted, an emphasized and a strong one, and how many
-/// stars it has on each side: a quoted span keeps its backticks.
-///
-/// Stars whose ink paints nothing mark no span, so a quoted span between
-/// them is still painted.
-///
-/// Stars mark a span only around it: the opening ones follow a boundary and
-/// touch the span's first character, the closing ones touch its last and
-/// precede a boundary. `2*3*4`, `--include=*.rs`, `src/**/*.rs`, `'*.toml'`,
-/// a bullet's `* ` and `\*` are not spans. Three or more stars are left alone.
-fn marked(
-    line: &str,
-    from: usize,
-    [code, emphasis, strong]: [Ink; 3],
-) -> Option<(usize, usize, Ink, usize)> {
-    let bytes = line.as_bytes();
-    let mut at = from;
-    while at < bytes.len() {
-        match bytes[at] {
-            b'`' => {
-                if let Some(len) = line[at + 1..].find('`') {
-                    return Some((at, at + len + 2, code, 0));
+/// Call `each` with every run of plain text and every marked span of `line`.
+fn each_mark<'i>(mut line: &'i str, inks: [Ink; 3], mut each: impl FnMut(Option<Ink>, &'i str)) {
+    let mut plain = line;
+    let mut span = span(inks, plain);
+    while !line.is_empty() {
+        let at = line;
+        if line.starts_with(['*', '`']) {
+            if let Ok((ink, body)) = span.parse_next(&mut line) {
+                if at.len() < plain.len() {
+                    each(None, &plain[..plain.len() - at.len()]);
                 }
-                at += 1;
+                each(Some(ink), body);
+                plain = line;
+                continue;
             }
-            b'*' => {
-                let stars = run(bytes, at);
-                let before = line[..at].chars().next_back();
-                let after = line[at + stars..].chars().next();
-                let ink = if stars == 2 { strong } else { emphasis };
-                if stars <= 2
-                    && ink.paint != Paint::NONE
-                    && can_open(before)
-                    && after.is_some_and(|c| !c.is_whitespace())
-                    && let Some(end) = closing(line, at + stars, stars)
-                {
-                    return Some((at, end, ink, stars));
-                }
-                at += stars;
-            }
-            _ => at += 1,
+            line = at;
+        }
+        let _ = skip.parse_next(&mut line);
+    }
+    if !plain.is_empty() {
+        each(None, plain);
+    }
+}
+/// Text up to the next ASCII mark, found by byte.
+fn text<'i>(input: &mut &'i str) -> Result<&'i str, ()> {
+    let len = input.bytes().position(|b| matches!(b, b'*' | b'`'));
+    let (text, rest) = input.split_at(len.unwrap_or(input.len()));
+    *input = rest;
+    if text.is_empty() { Err(()) } else { Ok(text) }
+}
+/// One token that opens no span: text up to a mark, with the stars touching
+/// it if it ends in a letter, digit or `\\`, or marks that opened nothing.
+fn skip(input: &mut &str) -> Result<(), ()> {
+    let word = |c: char| c.is_alphanumeric() || c == '\\';
+    if let Ok(text) = text.parse_next(input) {
+        if text.ends_with(word) {
+            let _: Result<&str, ()> = take_while(0.., '*').parse_next(input);
+        }
+    } else {
+        let run: Result<&str, ()> = take_while(1.., '*').parse_next(input);
+        if run.is_err() {
+            let _: Result<char, ()> = any.parse_next(input);
         }
     }
-    None
+    Ok(())
 }
 
-/// How many stars are in a row at `at`.
-fn run(bytes: &[u8], at: usize) -> usize {
-    bytes[at..].iter().take_while(|b| **b == b'*').count()
+/// A quoted span, which keeps its backticks, or what `**` or `*` enclose.
+fn span(
+    [code, emphasis, strong]: [Ink; 3],
+    plain: &str,
+) -> impl Parser<&str, (Ink, &str), ()> + '_ {
+    dispatch! { peek(any);
+        '`' => quoted.map(move |text| (code, text)),
+        '*' => alt((starred("**", strong, plain), starred("*", emphasis, plain))),
+        _ => fail,
+    }
 }
 
 /// A star opens a span only after a boundary: shell globs and quoted ones
 /// (`--include=*.rs`, `src/**/*.rs`, `'*.toml'`) are text, not markup.
 fn can_open(before: Option<char>) -> bool {
-    before.is_none_or(|c| c.is_whitespace() || matches!(c, '(' | '[' | '{' | '<'))
+    before.is_none_or(|c| c.is_whitespace() || matches!(c, '(' | '[' | '{' | '<' | '"'))
 }
 
-/// A star closes a span only after a word and before a boundary. A slash
+/// A star closes a span only after a word and before a boundary; a slash
 /// after it starts a path, so `*/` is text too.
-fn can_close(before: Option<char>, after: Option<char>) -> bool {
-    before.is_some_and(|c| !c.is_whitespace() && c != '\\')
-        && after.is_none_or(|c| {
-            c.is_whitespace()
-                || matches!(
-                    c,
-                    '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '>' | '"' | '\''
-                )
-        })
+fn can_close(after: Option<char>) -> bool {
+    after.is_none_or(|c| {
+        c.is_whitespace()
+            || matches!(
+                c,
+                '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '>' | '"' | '\'' | '-'
+            )
+    })
 }
-
-/// The end of the span that `stars` stars opened before `from`: past the
-/// next run of as many, if it closes one. If it does not, nothing was opened:
-/// in `*.rs is *never* read` the span is `*never*`. A quoted span on the way
-/// is skipped, stars and all.
-fn closing(line: &str, from: usize, stars: usize) -> Option<usize> {
-    let bytes = line.as_bytes();
-    let mut at = from;
-    while at < bytes.len() {
-        match bytes[at] {
-            b'`' => at += line[at + 1..].find('`').map_or(1, |len| len + 2),
-            b'*' => {
-                let found = run(bytes, at);
-                let before = line[..at].chars().next_back();
-                let after = line[at + found..].chars().next();
-                if found == stars {
-                    return can_close(before, after).then_some(at + found);
-                }
-                at += found;
-            }
-            _ => at += 1,
+fn quoted<'i>(input: &mut &'i str) -> Result<&'i str, ()> {
+    ("`", take_until(0.., "`"), "`").take().parse_next(input)
+}
+/// Stars before a non-space, up to the next run of as many, which must follow
+/// a non-space and precede no word. Stars whose ink paints nothing mark no span.
+fn starred<'i>(
+    mark: &'static str,
+    ink: Ink,
+    plain: &'i str,
+) -> impl Parser<&'i str, (Ink, &'i str), ()> {
+    let opens = move |input: &mut &'i str| -> Result<(), ()> {
+        let before = plain[..plain.len() - input.len()].chars().next_back();
+        if can_open(before) { Ok(()) } else { Err(()) }
+    };
+    let closes = |input: &mut &'i str| -> Result<(), ()> {
+        if can_close(input.chars().next()) {
+            Ok(())
+        } else {
+            Err(())
         }
-    }
-    None
+    };
+    let inner = repeat::<_, _, (), _, _>(
+        1..,
+        dispatch! { peek(any);
+            '`' => alt((quoted.void(), any.void())),
+            '*' => take_while(1.., '*').verify(move |run: &str| run.len() != mark.len()).void(),
+            _ => text.void(),
+        },
+    )
+    .take()
+    .verify(|text: &str| !text.ends_with(|c: char| c.is_whitespace() || c == '\\'));
+    delimited(
+        (
+            opens,
+            mark,
+            peek(none_of(|c: char| c.is_whitespace() || c == '*')),
+        ),
+        inner,
+        (mark, closes),
+    )
+    .verify(move |_: &str| ink.paint != Paint::NONE)
+    .map(move |text| (ink, text))
 }
-
 /// A titled two-column list, after what `--help` says under the title.
 fn section(
     out: &mut String,

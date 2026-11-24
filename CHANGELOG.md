@@ -10,9 +10,13 @@ released together. Versions follow [semver](https://semver.org).
   `after_help`, `after_long_help`, `before_help` and `before_long_help` are
   painted in `--help`, as they are in the rest of the page.
 - **Fixed**: prose is painted before it is wrapped, so a span crossing a line
-  break still pairs; stars in shell patterns (`--include=*.rs`,
-  `src/**/*.rs`, `'*.toml'`) stay literal in painted help. Whitespace at a
-  painted word's end stays outside the paint, so wrapping can trim it as before.
+  break still pairs. Whitespace at a painted word's end stays outside the
+  paint, so wrapping can trim it as before.
+- **Fixed**: a glob in ordinary prose (`--include=*.rs`, `src/**/*.rs`) keeps
+  its stars: a span again opens only at a boundary and closes only before one.
+- **Changed**: the marks in a line indented four spaces or a tab stay as
+  written in painted help, so a command example keeps its stars. A glob in
+  other prose goes in backticks.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its

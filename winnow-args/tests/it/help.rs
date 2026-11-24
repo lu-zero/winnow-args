@@ -568,10 +568,7 @@ fn before_help_marks_are_painted() {
 
 /// Trailing whitespace stays outside a painted run so wrapping can trim it.
 #[derive(Args, Debug)]
-#[arg(
-    name = "padded",
-    long_about = "`aaaaaaaaaa\t bbbbbbbbbb`"
-)]
+#[arg(name = "padded", long_about = "`aaaaaaaaaa\t bbbbbbbbbb`")]
 struct PaddedMark {
     #[arg(long)]
     flag: bool,
@@ -617,7 +614,12 @@ fn patterns_in_prose_keep_their_stars() {
     let plain = render(Style::PLAIN);
     let colored = render(Style::COLORED);
     assert_eq!(strip(&colored), plain, "{colored:?}");
-    for pattern in ["--include=*.rs", "--exclude=*.toml", "src/**/*.rs", "'*.lock'"] {
+    for pattern in [
+        "--include=*.rs",
+        "--exclude=*.toml",
+        "src/**/*.rs",
+        "'*.lock'",
+    ] {
         assert!(colored.contains(pattern), "{pattern}: {colored:?}");
     }
 }
@@ -626,7 +628,7 @@ fn patterns_in_prose_keep_their_stars() {
 #[derive(Args, Debug)]
 #[arg(
     name = "patterns",
-    after_help = "Try --include=*.rs, src/**/*.rs, or '*.toml' with find . -name '*.rs'."
+    after_help = "Examples:\n    grep --include=*.rs --include=*.toml pat\n    ls *.rs src/**/*.rs\n\tfind . -name '*.rs' -o -name '*.toml'"
 )]
 struct MarkedPatterns {
     #[arg(long)]
@@ -634,7 +636,7 @@ struct MarkedPatterns {
 }
 
 #[test]
-fn patterns_in_after_help_keep_their_stars() {
+fn indented_examples_keep_their_stars() {
     let render = |style| {
         with_env(&[], || {
             parse::<MarkedPatterns>(&["-h"])
@@ -643,12 +645,7 @@ fn patterns_in_after_help_keep_their_stars() {
                 .unwrap()
         })
     };
-    let plain = render(Style::PLAIN);
-    let colored = render(Style::COLORED);
-    assert_eq!(strip(&colored), plain, "{colored:?}");
-    for pattern in ["--include=*.rs", "src/**/*.rs", "'*.toml'"] {
-        assert!(colored.contains(pattern), "{pattern}: {colored:?}");
-    }
+    assert_eq!(strip(&render(Style::COLORED)), render(Style::PLAIN));
 }
 
 /// A quoted span that wraps must still pair its backticks.
@@ -677,6 +674,65 @@ fn marks_across_a_wrap_keep_their_pairs() {
     assert_eq!(strip(&colored), plain, "{colored:?}");
     assert!(colored.contains("\u{1b}[1m"), "{colored:?}");
     assert!(!colored.contains(&sgr("1", "`and then`")), "{colored:?}");
+}
+
+#[test]
+fn marks_follow_the_grammar() {
+    macro_rules! colored {
+        ($text:literal) => {{
+            #[derive(Args, Debug)]
+            #[arg(name = "m", after_help = $text)]
+            struct Marked {
+                #[arg(long)]
+                flag: bool,
+            }
+            let render = |style| {
+                with_env(&[("COLUMNS", "200")], || {
+                    parse::<Marked>(&["-h"])
+                        .unwrap_err()
+                        .render_help_styled("m", style)
+                        .unwrap()
+                })
+            };
+            (render(Style::PLAIN), render(Style::COLORED))
+        }};
+    }
+    macro_rules! literal {
+        ($($text:literal),* $(,)?) => {$({
+            let (plain, colored) = colored!($text);
+            assert_eq!(strip(&colored), plain, "{}", $text);
+        })*};
+    }
+    macro_rules! painted {
+        ($($text:literal => $shown:literal),* $(,)?) => {$({
+            let (_, colored) = colored!($text);
+            assert!(strip(&colored).contains($shown), "{}: {colored:?}", $text);
+        })*};
+    }
+    literal![
+        "2*3*4",
+        "a*b*",
+        "\\*not*",
+        "*this*/that",
+        "***no***",
+        "* a*",
+        "*a *",
+        "*open",
+        "    *indented*",
+        "\t*tabbed*",
+        "`*.rs and *.toml`",
+    ];
+    painted![
+        "plain *emphasis* here" => "plain emphasis here",
+        "*two words* x" => "two words x",
+        "**strong**: x" => "strong: x",
+        "(*x*) y" => "(x) y",
+        "\"*quoted*\" x" => "\"quoted\" x",
+        "*word*-based" => "word-based",
+        "*note.* x" => "note. x",
+        "*a **b** c*" => "a **b** c",
+        "*.rs is *never* read" => "*.rs is never read",
+    ];
 }
 
 #[test]

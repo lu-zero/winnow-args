@@ -118,6 +118,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       own paint; in `before_help`, `after_help` and their long forms
 - [x] Prose painted before wrapping, so a span crossing a line break still
       pairs; trailing whitespace stays outside the paint for wrapping to trim
+- [x] Marks in a four-space or tab-indented line stay literal, so a command
+      example keeps its stars; a glob elsewhere is text unless backticked
 - [x] `help-text` feature: help keeps its structure without the prose
 - [x] Error kinds after usage's codes, with the offending word's offset;
       `report` maps them to output and exit status
