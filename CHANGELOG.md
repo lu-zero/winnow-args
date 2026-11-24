@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.5 (2026-11-24)
 
 - **Fixed**: `` `quoted` ``, `*emphasized*` and `**strong**` spans in
   `after_help`, `after_long_help`, `before_help` and `before_long_help` are

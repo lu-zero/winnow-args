@@ -21,16 +21,16 @@
 
 <g transform="translate(80,470)">
 <text y="0" class="s" font-size="30" fill="#5fafaf" font-weight="700">What's new</text>
-<text y="58" class="m f" font-size="26">surface / available_if</text>
-<text y="108" class="m f" font-size="26">help &lt;topic&gt;</text>
-<text y="158" class="m f" font-size="26">render_with_line</text>
-<text y="208" class="m f" font-size="26">response::split</text>
+<text y="58" class="m f" font-size="26">flattened relations</text>
+<text y="108" class="m f" font-size="26">painted prose</text>
+<text y="158" class="m f" font-size="26">validate closures</text>
+<text y="208" class="m f" font-size="26">variant metadata</text>
 </g>
 <g class="s" font-size="26" fill="#8a8a8a">
-<text x="600" y="528">metadata in the spec</text>
-<text x="600" y="578">one topic, one paragraph</text>
-<text x="600" y="628">caret under the byte</text>
-<text x="600" y="678">split env/config values</text>
+<text x="600" y="528">conflicts, requires across structs</text>
+<text x="600" y="578">marks in all help prose</text>
+<text x="600" y="628">inline checks on a struct</text>
+<text x="600" y="678">surface, available_if</text>
 </g>
 
 <!-- terminal -->
