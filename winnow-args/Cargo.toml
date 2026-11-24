@@ -99,6 +99,11 @@ name = "metadata"
 path = "../examples/metadata.rs"
 required-features = ["derive"]
 
+[[example]]
+name = "flatten_rules"
+path = "../examples/flatten_rules.rs"
+required-features = ["derive"]
+
 [dev-dependencies]
 trybuild = "1"
 winnow-args-spec.workspace = true
