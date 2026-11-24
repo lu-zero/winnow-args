@@ -16,6 +16,7 @@ that package.
 | [`help.rs`](help.rs) | `cargo run --example help -- --help` |
 | [`gallery.rs`](gallery.rs) | `cargo run --example gallery -- --help` |
 | [`metadata.rs`](metadata.rs) | `cargo run --example metadata -- target/metadata-spec` |
+| [`flatten_rules.rs`](flatten_rules.rs) | `cargo run --example flatten_rules -- --quiet --verbose` |
 | [`deprecated.rs`](deprecated.rs) | `cargo run --example deprecated -- compile src` |
 | [`rules.rs`](rules.rs) | `cargo run --example rules -- --target production --release v2` |
 | [`values.rs`](values.rs) | `NPROC=8 cargo run --example values -- lib` |
