@@ -592,6 +592,7 @@ pub fn resolve_topic<'w>(
             .headings
             .iter()
             .find(|h| h.title.as_bytes() == *word)
+            && command.heading_help(heading.title).is_some()
         {
             return (command, path, Some(heading.title));
         }

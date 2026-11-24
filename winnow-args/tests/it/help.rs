@@ -190,6 +190,34 @@ fn the_help_word_finds_a_topic() {
     );
 }
 
+#[derive(Args, Debug)]
+#[arg(name = "empty-topics", heading("Empty"), heading("Blank", help = ""))]
+struct EmptyTopicCli {
+    #[arg(subcommand)]
+    command: Option<EmptyTopicCommand>,
+}
+
+#[derive(Subcommand, Debug)]
+enum EmptyTopicCommand {
+    /// Run it.
+    Run,
+}
+
+#[test]
+fn a_topic_with_no_paragraph_shows_the_whole_page() {
+    for topic in ["Empty", "Blank"] {
+        let error = EmptyTopicCli::parse_words(&crate::words(&["help", topic])).unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::HelpRequested);
+        assert!(
+            error
+                .render_help("empty-topics")
+                .unwrap()
+                .contains("Usage: empty-topics"),
+            "{topic}"
+        );
+    }
+}
+
 #[test]
 fn a_visible_long_alias_is_listed_and_a_hidden_one_is_not() {
     #[derive(Args, Debug)]

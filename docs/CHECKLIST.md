@@ -272,7 +272,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
 - [x] `note = "…"` on a flag or positional (usage's `note`), beside `warning`,
       in the order written
 - [x] `help <topic>`: a last word naming a heading shows just its paragraph,
-      after following any subcommand names
+      after following any subcommand names; a heading with no paragraph shows
+      the command's page
 - [ ] A logo in help
 - [x] A doc comment from `include_str!` or `concat!`, left out with a warning
 - [x] A `ValueEnum` variant's help from the value, beside `name()`

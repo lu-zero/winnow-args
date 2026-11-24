@@ -16,6 +16,8 @@ released together. Versions follow [semver](https://semver.org).
   paint, so wrapping can trim it as before.
 - **Fixed**: a glob in ordinary prose (`--include=*.rs`, `src/**/*.rs`) keeps
   its stars: a span again opens only at a boundary and closes only before one.
+- **Fixed**: `help <topic>` for a heading with no paragraph shows the command's
+  page, as a word naming no heading does, instead of failing to render.
 - **Changed**: the marks in a line indented four spaces or a tab stay as
   written in painted help, so a command example keeps its stars. A glob in
   other prose goes in backticks. Man and Markdown pages use the same marks
