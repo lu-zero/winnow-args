@@ -1,12 +1,10 @@
 //! The marks of prose: `` `code` ``, `*emphasis*` and `**strong**`, read as
 //! `winnow_args::help` reads them, for the pages to render.
 //!
-//! A span does not cross a line. Stars mark a span only around it: the opening
-//! ones follow no letter, digit or `\` and touch the span's first character,
-//! the closing ones touch its last and precede no letter or digit, and only
-//! the first run of as many stars is considered. `2*3*4`, `*.rs or *.toml`, a
-//! bullet's `* ` and `\*` are not spans. Three stars or more are left alone. A
-//! quoted span is skipped, stars and all.
+//! A span does not cross a line. Stars open after a boundary and before a
+//! non-space; the first later run of as many, after a word and before no word,
+//! closes it. Quoted spans and runs of other lengths are skipped on the way.
+//! A line indented four spaces or a tab stays as written.
 
 /// What a span is marked as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,19 +34,22 @@ pub fn pieces(text: &str) -> Vec<Piece<'_>> {
     let mut start = 0;
     for line in text.split_inclusive('\n') {
         let mut at = 0;
-        while let Some((open, end, mark, len)) = span(line, at) {
-            if start + open > plain {
+        // An indented line is a code block, not prose with markup.
+        if !line.starts_with("    ") && !line.starts_with('\t') {
+            while let Some((open, end, mark, len)) = span(line, at) {
+                if start + open > plain {
+                    out.push(Piece {
+                        mark: None,
+                        text: &text[plain..start + open],
+                    });
+                }
                 out.push(Piece {
-                    mark: None,
-                    text: &text[plain..start + open],
+                    mark: Some(mark),
+                    text: &line[open + len..end - len],
                 });
+                at = end;
+                plain = start + end;
             }
-            out.push(Piece {
-                mark: Some(mark),
-                text: &line[open + len..end - len],
-            });
-            at = end;
-            plain = start + end;
         }
         start += line.len();
     }
@@ -80,7 +81,7 @@ fn span(line: &str, from: usize) -> Option<(usize, usize, Mark, usize)> {
                 let after = line[at + stars..].chars().next();
                 if stars <= 2
                     && before.is_none_or(|c| !c.is_alphanumeric() && c != '\\')
-                    && after.is_some_and(|c| !c.is_whitespace())
+                    && after.is_some_and(|c| !c.is_whitespace() && c != '*')
                     && let Some(end) = closing(line, at + stars, stars)
                 {
                     let mark = if stars == 2 {
@@ -173,6 +174,40 @@ mod tests {
             ]
         );
         assert_eq!(marks("*a `b*` c*"), [(Some(Mark::Emphasis), "a `b*` c")]);
+    }
+
+    #[test]
+    fn agrees_with_the_terminal_help() {
+        let shown =
+            |text: &str| -> String { pieces(text).iter().map(|p: &Piece| p.text).collect() };
+        for (text, expected) in [
+            ("plain *emphasis* here", "plain emphasis here"),
+            ("*two words* x", "two words x"),
+            ("**strong**: x", "strong: x"),
+            ("(*x*) y", "(x) y"),
+            ("\"*quoted*\" x", "\"quoted\" x"),
+            ("*word*-based", "word-based"),
+            ("*this*/that", "this/that"),
+            ("*note.* x", "note. x"),
+            ("*a **b** c*", "a **b** c"),
+            ("*.rs is *never* read", "*.rs is never read"),
+            ("`*.rs and *.toml`", "*.rs and *.toml"),
+        ] {
+            assert_eq!(shown(text), expected, "{text:?}");
+        }
+        for text in [
+            "2*3*4",
+            "a*b*",
+            "\\*not*",
+            "***no***",
+            "* a*",
+            "*a *",
+            "*open",
+            "    *indented*",
+            "\t*tabbed*",
+        ] {
+            assert_eq!(marks(text), [(None, text)], "{text:?}");
+        }
     }
 
     #[test]

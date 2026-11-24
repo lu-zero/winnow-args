@@ -13,7 +13,8 @@ released together. Versions follow [semver](https://semver.org).
   break still pairs.
 - **Changed**: a line indented four spaces or a tab stays as written in painted
   help, so a command example keeps its stars. A glob in other prose goes in
-  backticks.
+  backticks. Man and Markdown pages read the same marks as `--help`, so a span
+  is marked in one rendering exactly when it is marked in the others.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its
