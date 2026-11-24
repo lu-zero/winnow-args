@@ -63,7 +63,8 @@ mod spec;
 /// claims `arg`. With no `short`, `long` or `plus`, a field is `--field-name`.
 /// The doc comment is the help. A `` `quoted` ``, `*emphasized*` or
 /// `**strong**` span in it is painted. Backticks are kept, and stars are
-/// dropped where the span is painted.
+/// dropped where the span is painted. A line indented four spaces or a tab
+/// stays as written; a glob in other prose goes in backticks.
 ///
 /// ```ignore
 /// use winnow_args::Args;
