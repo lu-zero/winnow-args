@@ -807,7 +807,7 @@ macro_rules! __text {
 pub mod __private {
     pub use crate::env;
     pub use crate::error::Error;
-    pub use crate::help::{concat_headings, concat_items};
+    pub use crate::help::{concat_headings, concat_items, has_flag};
     pub use crate::stream::Argv;
     pub use crate::token::{Arg, ValueOptions, Word, arg, arg_plus, long_only, number, split};
     pub use crate::value::{ChoiceError, FromArg, documented_choices, filed_as, stated_choices};
@@ -857,6 +857,17 @@ pub mod __private {
         false
     }
 
+    /// What a flattened flag holds, for a relation declared by its parent.
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct Supplied {
+        /// Given on the command line or by the environment.
+        pub given: bool,
+        /// Given, or filled by an unconditional default.
+        pub satisfied: bool,
+        /// Its canonical spelling, for an error message.
+        pub name: &'static str,
+    }
+
     /// The flags of a struct that another flattens (`#[arg(flatten)]`), derived
     /// for every `Args` struct that has flags only.
     ///
@@ -871,6 +882,13 @@ pub mod __private {
     pub trait Flatten: Sized {
         /// What has been parsed so far.
         type Slots: Default;
+
+        /// Whether a flag of this struct has been given, and whether it holds
+        /// a value once defaults are in. The default finds nothing.
+        #[inline]
+        fn supplied(_slots: &Self::Slots, _long: Option<&str>, _short: Option<char>) -> Supplied {
+            Supplied::default()
+        }
 
         /// Bind `arg` if it is one of these flags; `Ok(false)` if not.
         fn bind<'i>(

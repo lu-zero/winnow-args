@@ -531,3 +531,73 @@ mod worded {
         assert_eq!(e.to_string(), "--fast and --safe are both modes");
     }
 }
+
+#[test]
+fn relations_can_name_a_flattened_flag() {
+    #[derive(Args, Debug)]
+    struct Shared {
+        /// Verbose.
+        #[arg(long)]
+        verbose: bool,
+        /// A mode with a default.
+        #[arg(long, default = "plain")]
+        mode: String,
+    }
+
+    #[derive(Args, Debug)]
+    struct FlatRules {
+        #[arg(long, conflicts("--verbose"))]
+        quiet: bool,
+        #[arg(long, requires("--mode"))]
+        check: bool,
+        #[arg(flatten)]
+        shared: Shared,
+    }
+
+    let e = err::<FlatRules>(&["--quiet", "--verbose"], &[]);
+    assert_eq!(
+        (e.kind(), e.token(), e.value()),
+        (ErrorKind::Conflict, Some("--quiet"), Some("--verbose"))
+    );
+    // A flattened default satisfies `requires`.
+    let ok = parse::<FlatRules>(&["--check"], &[]).unwrap();
+    assert_eq!(ok.shared.mode, "plain");
+    // Neither rule fires without the declaring flag.
+    let _ = parse::<FlatRules>(&["--quiet"], &[]).unwrap();
+    let _ = parse::<FlatRules>(&["--verbose", "--mode", "fast"], &[]).unwrap();
+}
+
+#[test]
+fn flattened_relations_walk_nested_structs_and_spellings() {
+    #[derive(Args, Debug)]
+    struct Inner {
+        /// Verbose, with an alias and an env.
+        #[arg(short, long, alias = "verbose", env = "WA_NESTED_LOUD")]
+        loud: bool,
+    }
+    #[derive(Args, Debug)]
+    struct Middle {
+        #[arg(flatten)]
+        inner: Inner,
+    }
+    #[derive(Args, Debug)]
+    struct Nested {
+        #[arg(long, conflicts("-l"))]
+        quiet: bool,
+        #[arg(long, conflicts("--loud"))]
+        hush: bool,
+        #[arg(long, conflicts("--loud"))]
+        env_hush: bool,
+        #[arg(flatten)]
+        middle: Middle,
+    }
+    let e = err::<Nested>(&["--quiet", "-l"], &[]);
+    assert_eq!(e.kind(), ErrorKind::Conflict);
+    // A short selector still reports the flag's canonical long name.
+    assert_eq!((e.token(), e.value()), (Some("--quiet"), Some("--loud")));
+    let e = err::<Nested>(&["--hush", "--loud"], &[]);
+    assert_eq!(e.kind(), ErrorKind::Conflict);
+    let e = err::<Nested>(&["--env-hush"], &[("WA_NESTED_LOUD", "1")]);
+    assert_eq!(e.kind(), ErrorKind::Conflict);
+    let _ = parse::<Nested>(&["--quiet"], &[]).unwrap();
+}

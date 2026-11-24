@@ -233,8 +233,9 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       time, within the struct; usage resolves them at runtime
 - [x] Relations on positionals within one struct: a positional can name a
       conflict or a requirement
-- [ ] Relations across `flatten`: selectors cannot reach a flattened struct's
-      fields yet
+- [x] Relations across `flatten`: `conflicts` and `requires` on the parent
+      name a flattened flag by spelling, at any depth; the other rules stay
+      local
 
 ### Commands
 

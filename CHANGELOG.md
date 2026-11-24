@@ -15,6 +15,10 @@ released together. Versions follow [semver](https://semver.org).
   help, so a command example keeps its stars. A glob in other prose goes in
   backticks. Man and Markdown pages read the same marks as `--help`, so a span
   is marked in one rendering exactly when it is marked in the others.
+- **Added**: `conflicts("…")` and `requires("…")` on a struct can name a flag
+  of a `#[arg(flatten)]` struct by `--long` or `-s`, at any depth. Only the
+  parent declares the relation; a flattened flag from the environment counts
+  as supplied, and a default satisfies `requires`. The other rules stay local.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its

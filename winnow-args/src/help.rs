@@ -409,6 +409,69 @@ pub const fn items_clash(parts: &[&[Item]]) -> bool {
     false
 }
 
+/// Whether any item answers to a long name or letter, without treating a
+/// negation as a match. The derive checks a relation's target with this.
+#[doc(hidden)]
+pub const fn has_flag(items: &[Item], long: Option<&str>, short: Option<char>) -> bool {
+    const fn same(a: Option<&str>, b: Option<&str>) -> bool {
+        let (Some(a), Some(b)) = (a, b) else {
+            return false;
+        };
+        let (a, b) = (a.as_bytes(), b.as_bytes());
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < a.len() {
+            if a[i] != b[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
+    const fn any_same(names: &[&str], name: Option<&str>) -> bool {
+        let mut i = 0;
+        while i < names.len() {
+            if same(Some(names[i]), name) {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+    const fn has_short(item: &Item, letter: char) -> bool {
+        if matches!(item.short, Some(c) if c == letter) {
+            return true;
+        }
+        let mut i = 0;
+        while i < item.more_shorts.len() {
+            if item.more_shorts[i] == letter {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+    let mut i = 0;
+    while i < items.len() {
+        let item = &items[i];
+        if long.is_some()
+            && (same(item.long, long)
+                || any_same(item.aliases, long)
+                || any_same(item.visible_aliases, long))
+        {
+            return true;
+        }
+        match short {
+            Some(c) if has_short(item, c) => return true,
+            _ => {}
+        }
+        i += 1;
+    }
+    false
+}
+
 /// `parts`, one after another, as one array: a struct's own items and those
 /// of the structs it flattens, joined at compile time. `N` is their total
 /// length.

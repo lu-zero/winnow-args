@@ -435,6 +435,10 @@ mod spec;
 ///   as `required_if`, repeated, and required only when all of them hold.
 /// - `requires_if("x", "--other")`: when this field's value equals `x`,
 ///   `--other` must have one too.
+/// - `conflicts("…")` and `requires("…")` may name a flag of a flattened
+///   struct by `--long` or `-s`, at any depth. Only the parent declares the
+///   relation; aliases resolve to the flag's canonical name. The other rules,
+///   including `overrides` and the value-comparing ones, stay local.
 /// - `exclusive`: given on the command line or by `env`, no other field of
 ///   this struct may be given with it. Defaults do not count, and neither do
 ///   the flags of a flattened struct, of a `sequence` or of an `unknown` field.
@@ -3698,6 +3702,24 @@ impl Field {
         }
     }
 
+    /// Whether the field holds a value, read through a borrowed slot.
+    fn has_ref(&self) -> TokenStream2 {
+        let slot = slot(&self.ident);
+        if self.keywords {
+            return quote!((!#slot.is_empty()));
+        }
+        match &self.kind {
+            Kind::Switch if self.negate.is_some() => {
+                quote!((*#slot == ::core::option::Option::Some(true)))
+            }
+            Kind::Switch => quote!(*#slot),
+            Kind::Count(_) => quote!((*#slot != 0)),
+            Kind::Optional(_) | Kind::Required(_) => quote!(#slot.is_some()),
+            Kind::Many(_) if self.shape == Shape::OptionalVec => quote!(#slot.is_some()),
+            Kind::Many(_) => quote!((!#slot.is_empty())),
+        }
+    }
+
     /// Store `value` (a `&BStr`), converted, in the slot of a field that takes
     /// values; `source` names where it came from in an error.
     fn assign(&self, value: TokenStream2, source: &str) -> TokenStream2 {
@@ -4278,7 +4300,31 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // Usage is shown without the `help-text` feature too.
     let usage_text = usage.page("");
     let usage = usage.constant.unwrap_or_else(|| quote!(#usage_text));
-    let rules = Rules::new(&fields, &groups)?;
+    let rules = Rules::new(&fields, &groups, &flattens)?;
+    // A selector no local field answers must name a flag of a flatten.
+    let mut cross_checks = Vec::new();
+    let mut check_cross = |selector: &Cross| {
+        let (long, short) = cross_tokens(selector);
+        let targets = flattens.iter().map(|(_, ty)| {
+            quote!(::winnow_args::__private::has_flag(
+                <#ty as ::winnow_args::Args>::HELP.items, #long, #short
+            ))
+        });
+        cross_checks.push(quote! {
+            const _: () = assert!(
+                (#(#targets)||*),
+                "a relation names no flag of this struct or one it flattens"
+            );
+        });
+    };
+    for (_, selector, _) in &rules.cross_conflicts {
+        check_cross(selector);
+    }
+    for (_, need, _) in &rules.requires {
+        if let Need::Flattened(selector) = need {
+            check_cross(selector);
+        }
+    }
     // The program's own check of the built struct.
     let validate = validate.map(|path| quote!(#path(&__built)?;));
 
@@ -5602,7 +5648,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .iter()
         .map(|f| f.fallback(false, rules.is_displaced(&fields, f)))
         .collect();
-    let exclusive = rules.exclusive(&fields, &groups);
+    let exclusive = rules.exclusive(&fields, &groups, &flattens);
     let supplied = rules.supplied(&fields);
     let default_ifs = rules.default_ifs(&fields);
     let default_froms = default_froms(&fields, &rules, !input.generics.params.is_empty())?;
@@ -5610,7 +5656,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .then(|| subcommand.map(|f| slot(&f.ident)))
         .flatten()
         .map(|ident| quote!(#ident.is_none()));
-    let required = rules.required(&fields, &groups, negated.as_ref());
+    let required = rules.required(&fields, &groups, &flattens, negated.as_ref());
     let build = fields.iter().map(|f| {
         let ident = &f.ident;
         let slot = slot(ident);
@@ -5744,6 +5790,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let nested_prefixes = nested
             .iter()
             .map(|(_, ty)| quote!(|| <#ty as __wa::Flatten>::is_prefix(__c)));
+        let supplied_method = flatten_supplied(&fields, &flattens, &slots_name);
         quote! {
             #[doc(hidden)]
             #[allow(non_camel_case_types)]
@@ -5777,6 +5824,8 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             #[automatically_derived]
             impl ::winnow_args::__private::Flatten for #name {
                 type Slots = #slots_name;
+
+                #supplied_method
 
                 fn bind<'__i>(
                     __slots: &mut #slots_name,
@@ -6085,6 +6134,7 @@ fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         #(#spec_checks)*
+        #(#cross_checks)*
         #[automatically_derived]
         impl #impl_generics ::winnow_args::Args for #name #ty_generics #where_clause {
             const SPEC: &'static str = #identity;
@@ -6622,10 +6672,153 @@ fn titled<const N: usize>(
 }
 
 /// What a supplied field requires: one field, or one member of a group.
-#[derive(Clone, Copy)]
+/// A selector that names a flag of a flattened struct.
+#[derive(Clone)]
+enum Cross {
+    Long(String),
+    Short(char),
+}
+
+fn cross(selector: &str) -> Option<Cross> {
+    if let Some(long) = selector.strip_prefix("--") {
+        (!long.is_empty()).then(|| Cross::Long(long.to_owned()))
+    } else {
+        let mut short = selector.strip_prefix('-')?.chars();
+        match (short.next(), short.next()) {
+            (Some(c), None) => Some(Cross::Short(c)),
+            _ => None,
+        }
+    }
+}
+
+fn cross_tokens(cross: &Cross) -> (TokenStream2, TokenStream2) {
+    match cross {
+        Cross::Long(long) => (quote!(::core::option::Option::Some(#long)), quote!(None)),
+        Cross::Short(short) => (quote!(None), quote!(::core::option::Option::Some(#short))),
+    }
+}
+
+/// Bind `__cross` to what every flattened struct answers for one spelling.
+fn cross_query(flattens: &[(Ident, Type)]) -> TokenStream2 {
+    let children = flattens.iter().map(|(ident, ty)| {
+        let slot = format_ident!("__flat_{}", ident);
+        quote! {
+            let __child = <#ty as __wa::Flatten>::supplied(&#slot, __long, __short);
+            if __child.given && !__cross.given {
+                __cross = __child;
+            }
+            __cross.satisfied |= __child.satisfied;
+        }
+    });
+    quote! {
+        let mut __cross: __wa::Supplied = ::core::default::Default::default();
+        #(#children)*
+    }
+}
+
+/// The `Flatten::supplied` method of a derived struct: find a flag by its
+/// spelling and report what its slot holds, then ask each flatten in turn.
+fn flatten_supplied(
+    fields: &[Field],
+    flattens: &[(Ident, Type)],
+    slots_name: &Ident,
+) -> TokenStream2 {
+    let names = fields.iter().map(|f| slot(&f.ident));
+    let flat_names = flattens
+        .iter()
+        .map(|(ident, _)| format_ident!("__flat_{}", ident));
+    let checks = fields
+        .iter()
+        .filter(|f| matches!(f.role, Role::Flag { .. }))
+        .filter_map(|f| {
+            let longs: Vec<_> = f
+                .every_long()
+                .into_iter()
+                .map(|l| LitStr::new(l, Span::call_site()))
+                .collect();
+            let shorts: Vec<_> = f
+                .shorts()
+                .into_iter()
+                .map(|c| LitChar::new(c, Span::call_site()))
+                .collect();
+            let by_long = (!longs.is_empty())
+                .then(|| quote!(__long.is_some_and(|l: &str| matches!(l, #(#longs)|*))));
+            let by_short = (!shorts.is_empty())
+                .then(|| quote!(__short.is_some_and(|c: char| matches!(c, #(#shorts)|*))));
+            let matches = match (by_long, by_short) {
+                (Some(a), Some(b)) => quote!(#a || #b),
+                (Some(a), None) => a,
+                (None, Some(b)) => b,
+                (None, None) => return None,
+            };
+            let has = f.has_ref();
+            let envs: Vec<_> = f
+                .env
+                .iter()
+                .chain(&f.env_fallback)
+                .chain(&f.deprecated_env)
+                .map(|name| LitStr::new(name, Span::call_site()))
+                .collect();
+            let from_env = envs
+                .iter()
+                .map(|name| quote!(__wa::env::var(#name).is_some()))
+                .fold(None, |acc, check| {
+                    Some(match acc {
+                        Some(prev) => quote!(#prev || #check),
+                        None => check,
+                    })
+                });
+            let given = match from_env {
+                Some(env) => quote!((#has) || #env),
+                None => quote!(#has),
+            };
+            let default =
+                if f.defaults.is_empty() || f.default_fn.is_some() || !f.default_ifs.is_empty() {
+                    quote!(false)
+                } else {
+                    quote!(true)
+                };
+            let name = f.display();
+            Some(quote! {
+                if #matches {
+                    let __given = #given;
+                    return __wa::Supplied {
+                        given: __given,
+                        satisfied: __given || #default,
+                        name: #name,
+                    };
+                }
+            })
+        });
+    let nested = flattens.iter().map(|(ident, ty)| {
+        let slot = format_ident!("__flat_{}", ident);
+        quote! {
+            let child = <#ty as __wa::Flatten>::supplied(&#slot, __long, __short);
+            if child.given || child.satisfied {
+                return child;
+            }
+        }
+    });
+    quote! {
+        fn supplied(
+            __slots: &Self::Slots,
+            __long: Option<&str>,
+            __short: Option<char>,
+        ) -> ::winnow_args::__private::Supplied {
+            use winnow_args::__private as __wa;
+            let #slots_name { #(#names,)* #(#flat_names,)* .. } = __slots;
+            #(#checks)*
+            #(#nested)*
+            __wa::Supplied::default()
+        }
+    }
+}
+
+#[derive(Clone)]
 enum Need {
     Field(usize),
     Group(usize),
+    Flattened(Cross),
 }
 
 /// A field given, or given this value.
@@ -6640,6 +6833,8 @@ struct Rules {
     beats: Vec<Vec<usize>>,
     /// `(field, what it needs, message)`: `field` supplied needs that to have a value.
     requires: Vec<(usize, Need, Option<String>)>,
+    /// `(field, flattened flag, message)`: `field` conflicts with that flag.
+    cross_conflicts: Vec<(usize, Cross, Option<String>)>,
     /// `(field, others)`: `field` needs a value unless one of `others` has one.
     required_unless: Vec<(usize, Vec<usize>)>,
     /// `(field, others)`: `field` needs a value unless every one of `others` has one.
@@ -6659,7 +6854,7 @@ struct Rules {
 }
 
 impl Rules {
-    fn new(fields: &[Field], groups: &[Group]) -> syn::Result<Self> {
+    fn new(fields: &[Field], groups: &[Group], flattens: &[(Ident, Type)]) -> syn::Result<Self> {
         let resolve = |from: &Field, selector: &str| -> syn::Result<usize> {
             fields
                 .iter()
@@ -6693,10 +6888,25 @@ impl Rules {
                     syn::Error::new(from.ident.span(), message)
                 })
         };
+        // A selector no local field answers may name a flag of a flatten.
+        // Negations and groups keep their local diagnostics.
+        let flattened = |selector: &str| -> Option<Cross> {
+            if flattens.is_empty() {
+                return None;
+            }
+            if selector
+                .strip_prefix("--")
+                .is_some_and(|long| fields.iter().any(|f| f.negate.as_deref() == Some(long)))
+            {
+                return None;
+            }
+            cross(selector)
+        };
         let mut rules = Rules {
             conflicts: Vec::new(),
             beats: vec![Vec::new(); fields.len()],
             requires: Vec::new(),
+            cross_conflicts: Vec::new(),
             required_unless: Vec::new(),
             required_unless_all: Vec::new(),
             required_ifs: Vec::new(),
@@ -6708,16 +6918,27 @@ impl Rules {
         };
         for (i, f) in fields.iter().enumerate() {
             for (selector, message) in &f.conflicts {
-                let j = resolve(f, selector)?;
-                let same = |&(a, b, _): &(usize, usize, _)| (a, b) == (i, j) || (a, b) == (j, i);
-                match rules.conflicts.iter_mut().find(|pair| same(pair)) {
-                    // Declared from both sides: a message says which comes first.
-                    Some(pair) if message.is_some() && pair.2.is_none() => {
-                        *pair = (i, j, message.clone());
+                match resolve(f, selector) {
+                    Ok(j) => {
+                        let same =
+                            |&(a, b, _): &(usize, usize, _)| (a, b) == (i, j) || (a, b) == (j, i);
+                        match rules.conflicts.iter_mut().find(|pair| same(pair)) {
+                            Some(pair) if message.is_some() && pair.2.is_none() => {
+                                *pair = (i, j, message.clone());
+                            }
+                            Some(_) => {}
+                            None if message.is_some() => {
+                                rules.conflicts.push((i, j, message.clone()))
+                            }
+                            None => rules.conflicts.push((i.min(j), i.max(j), None)),
+                        }
                     }
-                    Some(_) => {}
-                    None if message.is_some() => rules.conflicts.push((i, j, message.clone())),
-                    None => rules.conflicts.push((i.min(j), i.max(j), None)),
+                    Err(error) => match flattened(selector) {
+                        Some(cross) => {
+                            rules.cross_conflicts.push((i, cross, message.clone()));
+                        }
+                        None => return Err(error),
+                    },
                 }
             }
             for selector in &f.overrides {
@@ -6742,7 +6963,10 @@ impl Rules {
                                 ),
                             ));
                         }
-                        None => return Err(error),
+                        None => match flattened(selector) {
+                            Some(cross) => Need::Flattened(cross),
+                            None => return Err(error),
+                        },
                     },
                 };
                 rules.requires.push((i, need, message.clone()));
@@ -6848,9 +7072,10 @@ impl Rules {
             }
         }
         for (i, need, _) in &rules.requires {
-            let Need::Group(g) = *need else {
+            let Need::Group(g) = need else {
                 continue;
             };
+            let g = *g;
             if rules.members[g].is_empty() {
                 return Err(syn::Error::new(
                     fields[*i].ident.span(),
@@ -6918,7 +7143,12 @@ impl Rules {
     }
 
     /// Conflicts and at-most-one groups, judged on what was supplied.
-    fn exclusive(&self, fields: &[Field], groups: &[Group]) -> TokenStream2 {
+    fn exclusive(
+        &self,
+        fields: &[Field],
+        groups: &[Group],
+        flattens: &[(Ident, Type)],
+    ) -> TokenStream2 {
         let pairs = self.conflicts.iter().map(|(a, b, message)| {
             let (fa, fb) = (&fields[*a], &fields[*b]);
             let (has_a, has_b) = (fa.has(), fb.has());
@@ -6955,7 +7185,25 @@ impl Rules {
                 #(#checks)*
             }}
         });
-        quote!(#(#pairs)* #(#at_most_one)*)
+        let cross = self.cross_conflicts.iter().map(|(i, selector, message)| {
+            let f = &fields[*i];
+            let has = f.has();
+            let name = f.display();
+            let (long, short) = cross_tokens(selector);
+            let query = cross_query(flattens);
+            let error = worded(
+                quote!(__wa::Error::conflict(__input.offset(), #name, __cross.name)),
+                message.as_deref(),
+            );
+            quote! {{
+                let (__long, __short) = (#long, #short);
+                #query
+                if #has && __cross.given {
+                    return ::core::result::Result::Err(#error);
+                }
+            }}
+        });
+        quote!(#(#pairs)* #(#cross)* #(#at_most_one)*)
     }
 
     /// `default_if`: each condition judged on what was supplied, then the first
@@ -7049,6 +7297,7 @@ impl Rules {
         &self,
         fields: &[Field],
         groups: &[Group],
+        flattens: &[(Ident, Type)],
         negated: Option<&TokenStream2>,
     ) -> TokenStream2 {
         let unless_negated = |checks: TokenStream2| match negated {
@@ -7123,14 +7372,19 @@ impl Rules {
         let requires = self.requires.iter().map(|(i, need, message)| {
             let supplied = format_ident!("__supplied_{}", fields[*i].ident);
             let by = fields[*i].display();
-            let (satisfied, error) = match need {
+            match need {
                 Need::Field(j) => {
                     let target = fields[*j].display();
                     let error = worded(
                         quote!(__wa::Error::required_by(__input.offset(), #target, #by)),
                         message.as_deref(),
                     );
-                    (fields[*j].has(), error)
+                    let satisfied = fields[*j].has();
+                    quote! {
+                        if #supplied && !(#satisfied) {
+                            return ::core::result::Result::Err(#error);
+                        }
+                    }
                 }
                 Need::Group(g) => {
                     let members = &self.members[*g];
@@ -7146,12 +7400,26 @@ impl Rules {
                         )),
                         message.as_deref(),
                     );
-                    (quote!((#(#has)||*)), error)
+                    quote! {
+                        if #supplied && !(#(#has)||*) {
+                            return ::core::result::Result::Err(#error);
+                        }
+                    }
                 }
-            };
-            quote! {
-                if #supplied && !(#satisfied) {
-                    return ::core::result::Result::Err(#error);
+                Need::Flattened(selector) => {
+                    let (long, short) = cross_tokens(selector);
+                    let query = cross_query(flattens);
+                    let error = worded(
+                        quote!(__wa::Error::required_by(__input.offset(), __cross.name, #by)),
+                        message.as_deref(),
+                    );
+                    quote! {{
+                        let (__long, __short) = (#long, #short);
+                        #query
+                        if #supplied && !__cross.satisfied {
+                            return ::core::result::Result::Err(#error);
+                        }
+                    }}
                 }
             }
         });
