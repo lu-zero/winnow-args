@@ -21,16 +21,16 @@
 
 <g transform="translate(80,470)">
 <text y="0" class="s" font-size="30" fill="#5fafaf" font-weight="700">What's new</text>
-<text y="58" class="m f" font-size="26">surface / available_if</text>
-<text y="108" class="m f" font-size="26">help &lt;topic&gt;</text>
-<text y="158" class="m f" font-size="26">render_with_line</text>
-<text y="208" class="m f" font-size="26">response::split</text>
+<text y="58" class="m f" font-size="26">flattened relations</text>
+<text y="108" class="m f" font-size="26">painted prose</text>
+<text y="158" class="m f" font-size="26">validate closures</text>
+<text y="208" class="m f" font-size="26">variant metadata</text>
 </g>
 <g class="s" font-size="26" fill="#8a8a8a">
-<text x="600" y="528">metadata in the spec</text>
-<text x="600" y="578">one topic, one paragraph</text>
-<text x="600" y="628">caret under the byte</text>
-<text x="600" y="678">split env/config values</text>
+<text x="600" y="528">across flattened structs</text>
+<text x="600" y="578">marks in all help prose</text>
+<text x="600" y="628">inline checks on a struct</text>
+<text x="600" y="678">surface, available_if</text>
 </g>
 
 <!-- terminal -->
@@ -39,15 +39,14 @@
 <rect width="640" height="660" rx="16" fill="#0f1011" stroke="#2a2c2f" stroke-width="2"/>
 <circle cx="32" cy="32" r="8" fill="#d75f5f"/><circle cx="60" cy="32" r="8" fill="#d7af5f"/><circle cx="88" cy="32" r="8" fill="#5faf5f"/>
 <g transform="translate(32,110)">
-<text class="m t" font-size="22.5"><tspan class="g">$</tspan> prog help Speed</text>
-<text y="60" class="m h" font-size="22.5">Speed:</text>
-<text y="108" class="m t" font-size="22.5">  How fast to go.</text>
-<text y="156" class="m t" font-size="22.5">  Tuning for parallel work.</text>
-<text y="240" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --jbs 4</text>
-<text y="300" class="m" font-size="22.5"><tspan class="r">error:</tspan><tspan class="t"> unknown flag </tspan><tspan fill="#d78787">`--jbs`</tspan></text>
-<text y="372" class="m t" font-size="22.5">prog --jbs 4</text>
-<text y="408" class="m" font-size="22.5"><tspan class="r">     ^</tspan></text>
-<text y="476" class="m g" font-size="22.5">For more information, try '--help'.</text>
+<text class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --help</text>
+<text y="60" class="m" font-size="22.5"><tspan class="t">  Use </tspan><tspan class="f">`--fast`</tspan><tspan class="t"> to </tspan><tspan class="h">really</tspan><tspan class="t"> go.</tspan></text>
+<text y="156" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog -q -v</text>
+<text y="204" class="m" font-size="22.5"><tspan class="r">error:</tspan><tspan class="t"> `-q` conflicts with `</tspan><tspan fill="#d78787">-v`</tspan></text>
+<text y="288" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --a 1 --b 1</text>
+<text y="336" class="m" font-size="22.5"><tspan class="r">error:</tspan><tspan class="t"> a and b must differ</tspan></text>
+<text y="420" class="m t" font-size="22.5"><tspan class="g">$</tspan> prog --a 1 --b 2</text>
+<text y="468" class="m g" font-size="22.5">ok: a and b differ</text>
 </g>
 </g>
 

@@ -4,7 +4,7 @@ What changed in each release of `winnow-args`, `winnow-args-derive`,
 `winnow-args-spec`, `winnow-args-man` and `winnow-args-markdown`, which are
 released together. Versions follow [semver](https://semver.org).
 
-## Unreleased
+## 0.6.5 (2026-11-24)
 
 - **Fixed**: a closure written as `validate` on a subcommand variant with
   fields is called, instead of being read as a call of its own result.

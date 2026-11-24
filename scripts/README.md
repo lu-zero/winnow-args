@@ -25,5 +25,5 @@ colors of `Palette::DEFAULT_256`. Replace `{{VERSION}}`, rewrite the four
 feature rows and the mock `--help` to match the changelog, then render it:
 
 ```sh
-sed 's/{{VERSION}}/0.6.4/' docs/release-template.svg | rsvg-convert -w 1600 -o release.png
+sed 's/{{VERSION}}/0.6.5/' docs/release-template.svg | rsvg-convert -w 1600 -o release.png
 ```
