@@ -16,7 +16,9 @@ released together. Versions follow [semver](https://semver.org).
   its stars: a span again opens only at a boundary and closes only before one.
 - **Changed**: the marks in a line indented four spaces or a tab stay as
   written in painted help, so a command example keeps its stars. A glob in
-  other prose goes in backticks.
+  other prose goes in backticks. Man and Markdown pages use the same marks
+  grammar as `--help`, so the same prose string is marked the same way. A
+  heading title's marks are painted in the man page too.
 - **Added**: `surface = "…"` and `available_if("…", …)` on a subcommand
   variant, carried into that subcommand's `Command` in the documentation data.
   On a variant that holds a type, its `surface` replaces the type's and its

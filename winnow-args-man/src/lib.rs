@@ -182,7 +182,7 @@ impl Manual {
             }
         }
         for (title, items) in grouped.headings {
-            doc.control("SH", [arg(&title.to_uppercase()).as_str()]);
+            doc.control("SH", [heading_arg(title).as_str()]);
             if let Some(help) = command.heading_help(title) {
                 doc.text(prose(help));
             }
@@ -270,6 +270,19 @@ fn arg(text: &str) -> String {
             .replace('\\', "\\e")
             .replace('"', "\\(dq")
     }
+}
+
+/// A section title, with its marks painted and its text escaped as an argument.
+fn heading_arg(title: &str) -> String {
+    prose(&title.to_uppercase())
+        .into_iter()
+        .map(|inline| match inline {
+            Inline::Roman(text) => arg(&text),
+            Inline::Bold(text) => format!("\\fB{}\\fR", arg(&text)),
+            Inline::Italic(text) => format!("\\fI{}\\fR", arg(&text)),
+            Inline::LineBreak => " ".to_owned(),
+        })
+        .collect()
 }
 
 /// Text without the control characters a formatter refuses or a terminal
@@ -596,6 +609,28 @@ mod tests {
             page.contains(".TP\n\\fB\\-\\-file\\fR\nA path.\n.PP\nSee also.\n"),
             "{page}"
         );
+    }
+
+    #[test]
+    fn a_heading_title_with_marks_is_painted() {
+        let flag = Item {
+            long: Some("fast".to_owned()),
+            help: "Go fast.".to_owned(),
+            heading: Some("*Speed*".to_owned()),
+            ..Item::default()
+        };
+        let command = Command {
+            name: "tool".to_owned(),
+            about: "A tool.".to_owned(),
+            items: vec![flag],
+            headings: vec![winnow_args_spec::Heading {
+                title: "*Speed*".to_owned(),
+                help: String::new(),
+            }],
+            ..Command::default()
+        };
+        let page = Manual::default().render(&pages(&command, "tool").unwrap()[0]);
+        assert!(page.contains(".SH \\fISPEED\\fR\n"), "{page}");
     }
 
     #[test]

@@ -154,7 +154,8 @@ Legend: `[x]` done, covered by a test · `[~]` partly · `[ ]` not yet.
       (`cfg_if! { … }`) is not the module's
 - [x] In a man page: a description's code and strong spans are bold, its
       emphasized ones italic, without their stars; in Markdown, they are
-      Markdown's own spans
+      Markdown's own spans; both read the same marks grammar as `--help`, so
+      the same prose string is marked the same way
 - [x] A `multicall` program's commands paged under their own names, with
       the usage under both; a man page for each shown alias, by `.so`
 - [x] The derive's compile errors pinned by compile-fail cases (`tests/ui/`)
