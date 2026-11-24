@@ -145,3 +145,50 @@ mod keywords {
         assert_eq!(error.to_string(), "`now` and `lazy` exclude each other");
     }
 }
+
+#[derive(Args, Debug)]
+#[arg(validate = |cli: &Inline| {
+    if cli.a == cli.b {
+        return Err(Error::invalid("a and b must differ"));
+    }
+    Ok(())
+})]
+struct Inline {
+    #[arg(long)]
+    a: u8,
+    #[arg(long)]
+    b: u8,
+}
+
+#[test]
+fn a_closure_can_validate() {
+    let ok = Inline::parse_from(["--a", "1", "--b", "2"]).unwrap();
+    assert_eq!((ok.a, ok.b), (1, 2));
+    let error = Inline::parse_from(["--a", "1", "--b", "1"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Invalid);
+    assert_eq!(error.to_string(), "a and b must differ");
+}
+
+#[derive(Subcommand, Debug)]
+enum WithVariant {
+    #[arg(validate = |cli: &WithVariant| {
+        let WithVariant::Run { value } = cli;
+        if *value == 0 {
+            return Err(Error::invalid("no zero"));
+        }
+        Ok(())
+    })]
+    Run {
+        #[arg(long)]
+        value: u8,
+    },
+}
+
+#[test]
+fn a_variant_can_validate_with_a_closure() {
+    let ok = WithVariant::parse_from(["run", "--value", "1"]).unwrap();
+    assert!(matches!(ok, WithVariant::Run { value: 1 }));
+    let error = WithVariant::parse_from(["run", "--value", "0"]).unwrap_err();
+    assert_eq!(error.kind(), ErrorKind::Invalid);
+    assert_eq!(error.to_string(), "no zero");
+}

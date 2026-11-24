@@ -1446,3 +1446,10 @@ relation.
 0: cold 1 573 instructions against 1 591 before, warm 1 256 against 1 256.
 `size` on `parse-n-wa` is unchanged at 382 667 bytes of text, data and bss:
 the method is not instantiated when no relation uses it.
+
+## 63. `validate` expressions
+
+Struct-level `validate` now takes any expression, including an inline closure;
+a function path still works, and a variant with fields already took one. The
+derive wraps the expression in parentheses and calls it once after the built
+struct's rules hold. Nothing on the parse path changes.

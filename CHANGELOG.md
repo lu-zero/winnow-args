@@ -6,6 +6,8 @@ released together. Versions follow [semver](https://semver.org).
 
 ## Unreleased
 
+- **Fixed**: a closure written as `validate` on a subcommand variant with
+  fields is called, instead of being read as a call of its own result.
 - **Fixed**: `` `quoted` ``, `*emphasized*` and `**strong**` spans in
   `after_help`, `after_long_help`, `before_help` and `before_long_help` are
   painted in `--help`, as they are in the rest of the page.
@@ -19,6 +21,9 @@ released together. Versions follow [semver](https://semver.org).
   other prose goes in backticks. Man and Markdown pages use the same marks
   grammar as `--help`, so the same prose string is marked the same way. A
   heading title's marks are painted in the man page too.
+- **Changed**: `validate` now takes an expression, so a closure can be written
+  inline; a function path still works. It was already an expression on a
+  subcommand variant with fields.
 - **Added**: `conflicts("…")` and `requires("…")` on a struct can name a flag
   of a `#[arg(flatten)]` struct by `--long` or `-s`, at any depth. Only the
   parent declares the relation; a flattened flag from the environment counts
