@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """Write the architecture diagram: architecture.py docs/architecture.svg"""
 import sys
+from svg_theme import STYLE
 FONT = "ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif"
-TEAL, GREEN, GREY = "#5fafaf", "#5faf5f", "#8a8a8a"
+TEAL, GREEN, GREY = "accent", "green", "muted"
 W, H = 720, 770
 out = []
 
-def text(x, y, s, size=12.5, fill=GREY, weight=None, anchor="middle", style=None):
+def text(x, y, s, size=12.5, colour=GREY, weight=None, anchor="middle", style=None):
     extra = (f' font-weight="{weight}"' if weight else "") + (f' font-style="{style}"' if style else "")
     s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    out.append(f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" fill="{fill}" text-anchor="{anchor}"{extra}>{s}</text>')
+    out.append(f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" class="wa-{colour}" text-anchor="{anchor}"{extra}>{s}</text>')
 
 def box(x, y, w, h, title, sub="", colour=TEAL, dashed=False):
     dash = ' stroke-dasharray="5 3"' if dashed else ""
-    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="{colour}" fill-opacity="0.08" stroke="{colour}" stroke-width="1.5"{dash}/>')
+    out.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" class="wa-box-{colour}" stroke-width="1.5"{dash}/>')
     cy = y + h / 2
     if sub:
         text(x + w / 2, cy - 4, title, 14, colour, 600)
@@ -25,11 +26,11 @@ def path(points, colour=GREY, dashed=False, arrow=True):
     d = "M" + " L".join(f"{x} {y}" for x, y in points)
     dash = ' stroke-dasharray="5 3"' if dashed else ""
     marker = f' marker-end="url(#arrow-{ "g" if colour == GREEN else "n" })"' if arrow else ""
-    out.append(f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="1.5"{dash}{marker}/>')
+    out.append(f'<path d="{d}" class="wa-line-{colour}" stroke-width="1.5"{dash}{marker}/>')
 
 def lane(y, label):
     text(20, y, label.upper(), 13, TEAL, 600, "start")
-    out.append(f'<line x1="20" y1="{y + 6}" x2="{W - 20}" y2="{y + 6}" stroke="{GREY}" stroke-opacity="0.35" stroke-width="1"/>')
+    out.append(f'<line x1="20" y1="{y + 6}" x2="{W - 20}" y2="{y + 6}" class="wa-grid" stroke-width="1"/>')
 
 # --- build time
 lane(22, "Build time")
@@ -87,10 +88,11 @@ path([(481, 642), (481, 664), (210, 664), (210, 684)])
 path([(400, 716), (438, 716)])
 
 defs = f'''<defs>
-<marker id="arrow-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="{GREY}"/></marker>
-<marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="{GREEN}"/></marker>
+<marker id="arrow-n" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="wa-arrow-muted"/></marker>
+<marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="wa-arrow-green"/></marker>
 </defs>'''
-svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="{round(H * 1024 / W)}" viewBox="0 0 {W} {H}" role="img" '
+svg = (f'<svg xmlns="http://www.w3.org/2000/svg" class="wa-figure" width="1024" height="{round(H * 1024 / W)}" viewBox="0 0 {W} {H}" role="img" '
        f'aria-label="winnow-args: build time, run time, and man and documentation generation.">\n'
+       f'{STYLE}\n'
        f'<rect width="1024" height="{round(H * 1024 / W)}" fill="none"/>\n{defs}\n' + "\n".join(out) + "\n</svg>\n")
 open(sys.argv[1], "w").write(svg)
