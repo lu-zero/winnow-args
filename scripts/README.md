@@ -16,6 +16,9 @@ scripts/performance.py docs/performance.svg
   [`benchmarks/README.md`](../benchmarks/README.md); update `PANELS` after a
   new measurement.
 
+The colors for both themes live in `svg_theme.py`, scoped to the figure's root
+so the same SVG works as an image and inlined in the site.
+
 All need only Python 3.
 
 ## Release image

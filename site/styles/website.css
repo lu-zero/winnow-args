@@ -1,0 +1,35 @@
+/* The figures ship a light palette; follow the reader's theme when guidebook inlines them. */
+.book .wa-figure {
+    --ink: #17181a;
+    --muted: #8a8a8a;
+    --accent: #5fafaf;
+    --green: #5faf5f;
+    --partial: #87afaf;
+    --bad: #d75f5f;
+    --warn: #d78787;
+}
+
+.book.theme-night .wa-figure {
+    --ink: #e6e6e6;
+    --muted: #a8a8a8;
+    --accent: #7fd1d1;
+    --green: #7fd17f;
+    --partial: #afd0d0;
+    --bad: #ef7f7f;
+    --warn: #e7a0a0;
+}
+
+.book.theme-sepia .wa-figure {
+    --ink: #3b3024;
+    --muted: #7a6a55;
+    --accent: #3f7f7f;
+    --green: #4f7f4f;
+    --partial: #6f8f8f;
+    --bad: #a34f4f;
+    --warn: #a36f4f;
+}
+
+.markdown-section svg.wa-figure {
+    max-width: 100%;
+    height: auto;
+}

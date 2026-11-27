@@ -1,31 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="364" viewBox="0 0 760 270" role="img" aria-label="Feature coverage: winnow-args 50, 43 built in, 6 missing.">
+<svg xmlns="http://www.w3.org/2000/svg" class="wa-figure" width="1024" height="364" viewBox="0 0 760 270" role="img" aria-label="Feature coverage: winnow-args 50, 43 built in, 6 missing.">
+<style>
+.wa-figure {
+    --ink: #17181a;
+    --muted: #8a8a8a;
+    --accent: #5fafaf;
+    --green: #5faf5f;
+    --partial: #87afaf;
+    --bad: #d75f5f;
+    --warn: #d78787;
+}
+@media (prefers-color-scheme: dark) {
+    .wa-figure {
+        --ink: #e6e6e6;
+        --muted: #a8a8a8;
+        --accent: #7fd1d1;
+        --green: #7fd17f;
+        --partial: #afd0d0;
+        --bad: #ef7f7f;
+        --warn: #e7a0a0;
+    }
+}
+.wa-ink { fill: var(--ink); }
+.wa-muted { fill: var(--muted); }
+.wa-accent { fill: var(--accent); }
+.wa-green { fill: var(--green); }
+.wa-partial { fill: var(--partial); }
+.wa-bad { fill: var(--bad); }
+.wa-warn { fill: var(--warn); }
+.wa-box-accent { fill: var(--accent); fill-opacity: 0.08; stroke: var(--accent); }
+.wa-box-green { fill: var(--green); fill-opacity: 0.08; stroke: var(--green); }
+.wa-line-muted { fill: none; stroke: var(--muted); }
+.wa-line-green { fill: none; stroke: var(--green); }
+.wa-grid { stroke: var(--muted); stroke-opacity: 0.35; }
+.wa-arrow-muted { fill: var(--muted); }
+.wa-arrow-green { fill: var(--green); }
+</style>
 <rect width="760" height="270" fill="none"/>
-<text x="10.0" y="22" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">Features matched</text>
-<text x="10.0" y="40" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">50 features from the full comparison</text>
-<text x="110.0" y="81" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#17181a" text-anchor="end" font-weight="600">winnow-args</text>
-<rect x="120.0" y="62" width="447.2" height="18" fill="#5faf5f"/>
-<rect x="567.2" y="62" width="10.4" height="18" fill="#87afaf"/>
-<rect x="577.6" y="62" width="62.4" height="18" fill="#d75f5f"/>
-<text x="652.0" y="77" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#17181a" text-anchor="start">43 · 1 · 6</text>
-<text x="110.0" y="125" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage</text>
-<rect x="120.0" y="106" width="436.8" height="18" fill="#5faf5f"/>
-<rect x="556.8" y="106" width="31.2" height="18" fill="#87afaf"/>
-<rect x="588.0" y="106" width="52.0" height="18" fill="#d75f5f"/>
-<text x="652.0" y="121" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#17181a" text-anchor="start">42 · 3 · 5</text>
-<text x="110.0" y="169" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf</text>
-<rect x="120.0" y="150" width="176.8" height="18" fill="#5faf5f"/>
-<rect x="296.8" y="150" width="218.4" height="18" fill="#87afaf"/>
-<rect x="515.2" y="150" width="124.8" height="18" fill="#d75f5f"/>
-<text x="652.0" y="165" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#17181a" text-anchor="start">17 · 21 · 12</text>
-<text x="110.0" y="213" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap</text>
-<rect x="120.0" y="194" width="260.0" height="18" fill="#5faf5f"/>
-<rect x="380.0" y="194" width="124.8" height="18" fill="#87afaf"/>
-<rect x="504.8" y="194" width="135.2" height="18" fill="#d75f5f"/>
-<text x="652.0" y="209" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#17181a" text-anchor="start">25 · 12 · 13</text>
-<rect x="10" y="242" width="11" height="11" fill="#5faf5f"/>
-<text x="28.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">built in</text>
-<rect x="215" y="242" width="11" height="11" fill="#87afaf"/>
-<text x="233.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">with some work</text>
-<rect x="420" y="242" width="11" height="11" fill="#d75f5f"/>
-<text x="438.0" y="252" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">not offered</text>
+<text x="10.0" y="22.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-accent" text-anchor="start" font-weight="600">Features matched</text>
+<text x="10.0" y="40.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start">50 features from the full comparison</text>
+<text x="110.0" y="71.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-ink" text-anchor="end" dominant-baseline="central" font-weight="600">winnow-args</text>
+<rect x="120.0" y="62" width="447.2" height="18" class="wa-green"/>
+<rect x="567.2" y="62" width="10.4" height="18" class="wa-partial"/>
+<rect x="577.6" y="62" width="62.4" height="18" class="wa-bad"/>
+<text x="652.0" y="71.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-ink" text-anchor="start" dominant-baseline="central">43 · 1 · 6</text>
+<text x="110.0" y="115.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">usage</text>
+<rect x="120.0" y="106" width="436.8" height="18" class="wa-green"/>
+<rect x="556.8" y="106" width="31.2" height="18" class="wa-partial"/>
+<rect x="588.0" y="106" width="52.0" height="18" class="wa-bad"/>
+<text x="652.0" y="115.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-ink" text-anchor="start" dominant-baseline="central">42 · 3 · 5</text>
+<text x="110.0" y="159.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">bpaf</text>
+<rect x="120.0" y="150" width="176.8" height="18" class="wa-green"/>
+<rect x="296.8" y="150" width="218.4" height="18" class="wa-partial"/>
+<rect x="515.2" y="150" width="124.8" height="18" class="wa-bad"/>
+<text x="652.0" y="159.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-ink" text-anchor="start" dominant-baseline="central">17 · 21 · 12</text>
+<text x="110.0" y="203.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">clap</text>
+<rect x="120.0" y="194" width="260.0" height="18" class="wa-green"/>
+<rect x="380.0" y="194" width="124.8" height="18" class="wa-partial"/>
+<rect x="504.8" y="194" width="135.2" height="18" class="wa-bad"/>
+<text x="652.0" y="203.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-ink" text-anchor="start" dominant-baseline="central">25 · 12 · 13</text>
+<rect x="10" y="242" width="11" height="11" class="wa-green"/>
+<text x="28.0" y="247.5" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">built in</text>
+<rect x="215" y="242" width="11" height="11" class="wa-partial"/>
+<text x="233.0" y="247.5" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">with some work</text>
+<rect x="420" y="242" width="11" height="11" class="wa-bad"/>
+<text x="438.0" y="247.5" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">not offered</text>
 </svg>

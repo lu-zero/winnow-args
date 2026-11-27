@@ -398,10 +398,10 @@ bench-ld +linkers:
 [doc("Build the site into target/site")]
 site:
     python3 site/stage.py
-    mdbook build site
+    guidebook build target/site-src -o target/site
 
 # Serves the staged copy, so edits under docs/ need a re-run.
-[doc("Preview the site on port 3000; HOST is localhost, or 0.0.0.0 for remote work")]
-site-serve host="localhost":
+[doc("Preview the site on port 3000; guidebook binds 0.0.0.0")]
+site-serve:
     python3 site/stage.py
-    mdbook serve site --hostname {{host}}
+    guidebook serve target/site-src -p 3000

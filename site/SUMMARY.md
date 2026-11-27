@@ -1,16 +1,16 @@
 # Summary
 
-[winnow-args](README.md)
+* [winnow-args](README.md)
 
-# Guide
+## Guide
 
-- [Design notes](docs/DESIGN.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Compared with usage, bpaf and clap](docs/COMPARISON.md)
-- [Checklist](docs/CHECKLIST.md)
-- [Performance log](docs/PERF.md)
+* [Design notes](docs/DESIGN.md)
+* [Architecture](docs/ARCHITECTURE.md)
+* [Compared with usage, bpaf and clap](docs/COMPARISON.md)
+* [Checklist](docs/CHECKLIST.md)
+* [Performance log](docs/PERF.md)
 
-# Project
+## Project
 
-- [Changelog](CHANGELOG.md)
-- [Contributing](CONTRIBUTING.md)
+* [Changelog](CHANGELOG.md)
+* [Contributing](CONTRIBUTING.md)

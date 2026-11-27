@@ -1,54 +1,90 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="498" viewBox="0 0 720 350" role="img" aria-label="Time per parse: winnow-args against usage, clap and bpaf.">
+<svg xmlns="http://www.w3.org/2000/svg" class="wa-figure" width="1024" height="498" viewBox="0 0 720 350" role="img" aria-label="Time per parse: winnow-args against usage, clap and bpaf.">
+<style>
+.wa-figure {
+    --ink: #17181a;
+    --muted: #8a8a8a;
+    --accent: #5fafaf;
+    --green: #5faf5f;
+    --partial: #87afaf;
+    --bad: #d75f5f;
+    --warn: #d78787;
+}
+@media (prefers-color-scheme: dark) {
+    .wa-figure {
+        --ink: #e6e6e6;
+        --muted: #a8a8a8;
+        --accent: #7fd1d1;
+        --green: #7fd17f;
+        --partial: #afd0d0;
+        --bad: #ef7f7f;
+        --warn: #e7a0a0;
+    }
+}
+.wa-ink { fill: var(--ink); }
+.wa-muted { fill: var(--muted); }
+.wa-accent { fill: var(--accent); }
+.wa-green { fill: var(--green); }
+.wa-partial { fill: var(--partial); }
+.wa-bad { fill: var(--bad); }
+.wa-warn { fill: var(--warn); }
+.wa-box-accent { fill: var(--accent); fill-opacity: 0.08; stroke: var(--accent); }
+.wa-box-green { fill: var(--green); fill-opacity: 0.08; stroke: var(--green); }
+.wa-line-muted { fill: none; stroke: var(--muted); }
+.wa-line-green { fill: none; stroke: var(--green); }
+.wa-grid { stroke: var(--muted); stroke-opacity: 0.35; }
+.wa-arrow-muted { fill: var(--muted); }
+.wa-arrow-green { fill: var(--green); }
+</style>
 <rect width="720" height="350" fill="none"/>
-<text x="10.0" y="18" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">example -v --path /tmp/x a b c</text>
-<line x1="104" y1="30" x2="104" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="104.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">100 ns</text>
-<line x1="216" y1="30" x2="216" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="216.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">1 µs</text>
-<line x1="328" y1="30" x2="328" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="328.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 µs</text>
-<line x1="440" y1="30" x2="440" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="440.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">100 µs</text>
-<line x1="552" y1="30" x2="552" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="552.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">1 ms</text>
-<line x1="664" y1="30" x2="664" y2="134" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="664.0" y="151" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 ms</text>
-<text x="96.0" y="48" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">winnow-args</text>
-<rect x="104" y="35" width="35.4" height="16" rx="2" fill="#5faf5f"/>
-<text x="145.4" y="48" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">207 ns</text>
-<text x="96.0" y="74" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage 7</text>
-<rect x="104" y="61" width="77.7" height="16" rx="2" fill="#87afaf"/>
-<text x="187.7" y="74" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">494 ns</text>
-<text x="96.0" y="100" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap 4</text>
-<rect x="104" y="87" width="243.7" height="16" rx="2" fill="#d78787"/>
-<text x="353.7" y="100" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">15.0 µs</text>
-<text x="96.0" y="126" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>
-<rect x="104" y="113" width="243.4" height="16" rx="2" fill="#d75f5f"/>
-<text x="353.4" y="126" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">14.9 µs</text>
-<text x="10.0" y="186" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#5fafaf" text-anchor="start" font-weight="600">mise use -g node@20, 211 commands</text>
-<line x1="104" y1="198" x2="104" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="104.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">100 ns</text>
-<line x1="216" y1="198" x2="216" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="216.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">1 µs</text>
-<line x1="328" y1="198" x2="328" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="328.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 µs</text>
-<line x1="440" y1="198" x2="440" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="440.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">100 µs</text>
-<line x1="552" y1="198" x2="552" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="552.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">1 ms</text>
-<line x1="664" y1="198" x2="664" y2="302" stroke="#8a8a8a" stroke-opacity="0.35" stroke-width="1"/>
-<text x="664.0" y="319" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">10 ms</text>
-<text x="96.0" y="216" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">winnow-args</text>
-<rect x="104" y="203" width="63.0" height="16" rx="2" fill="#5faf5f"/>
-<text x="173.0" y="216" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">365 ns</text>
-<text x="96.0" y="242" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">usage 7</text>
-<rect x="104" y="229" width="100.0" height="16" rx="2" fill="#87afaf"/>
-<text x="210.0" y="242" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">782 ns</text>
-<text x="96.0" y="268" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">clap 4</text>
-<rect x="104" y="255" width="434.3" height="16" rx="2" fill="#d78787"/>
-<text x="544.3" y="268" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">755 µs</text>
-<text x="96.0" y="294" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="end">bpaf 0.9</text>
-<rect x="104" y="281" width="495.0" height="16" rx="2" fill="#d75f5f"/>
-<text x="605.0" y="294" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="start">2.63 ms</text>
-<text x="384.0" y="340" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" fill="#8a8a8a" text-anchor="middle">time per parse, log scale</text>
+<text x="10.0" y="18.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-accent" text-anchor="start" font-weight="600">example -v --path /tmp/x a b c</text>
+<line x1="104" y1="30" x2="104" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="104.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">100 ns</text>
+<line x1="216" y1="30" x2="216" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="216.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">1 µs</text>
+<line x1="328" y1="30" x2="328" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="328.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">10 µs</text>
+<line x1="440" y1="30" x2="440" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="440.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">100 µs</text>
+<line x1="552" y1="30" x2="552" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="552.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">1 ms</text>
+<line x1="664" y1="30" x2="664" y2="134" class="wa-grid" stroke-width="1"/>
+<text x="664.0" y="151.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">10 ms</text>
+<text x="96.0" y="43.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">winnow-args</text>
+<rect x="104" y="35" width="35.4" height="16" rx="2" class="wa-green"/>
+<text x="145.4" y="43.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">207 ns</text>
+<text x="96.0" y="69.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">usage 7</text>
+<rect x="104" y="61" width="77.7" height="16" rx="2" class="wa-partial"/>
+<text x="187.7" y="69.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">494 ns</text>
+<text x="96.0" y="95.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">clap 4</text>
+<rect x="104" y="87" width="243.7" height="16" rx="2" class="wa-warn"/>
+<text x="353.7" y="95.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">15.0 µs</text>
+<text x="96.0" y="121.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">bpaf 0.9</text>
+<rect x="104" y="113" width="243.4" height="16" rx="2" class="wa-bad"/>
+<text x="353.4" y="121.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">14.9 µs</text>
+<text x="10.0" y="186.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-accent" text-anchor="start" font-weight="600">mise use -g node@20, 211 commands</text>
+<line x1="104" y1="198" x2="104" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="104.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">100 ns</text>
+<line x1="216" y1="198" x2="216" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="216.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">1 µs</text>
+<line x1="328" y1="198" x2="328" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="328.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">10 µs</text>
+<line x1="440" y1="198" x2="440" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="440.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">100 µs</text>
+<line x1="552" y1="198" x2="552" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="552.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">1 ms</text>
+<line x1="664" y1="198" x2="664" y2="302" class="wa-grid" stroke-width="1"/>
+<text x="664.0" y="319.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">10 ms</text>
+<text x="96.0" y="211.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">winnow-args</text>
+<rect x="104" y="203" width="63.0" height="16" rx="2" class="wa-green"/>
+<text x="173.0" y="211.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">365 ns</text>
+<text x="96.0" y="237.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">usage 7</text>
+<rect x="104" y="229" width="100.0" height="16" rx="2" class="wa-partial"/>
+<text x="210.0" y="237.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">782 ns</text>
+<text x="96.0" y="263.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">clap 4</text>
+<rect x="104" y="255" width="434.3" height="16" rx="2" class="wa-warn"/>
+<text x="544.3" y="263.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">755 µs</text>
+<text x="96.0" y="289.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="end" dominant-baseline="central">bpaf 0.9</text>
+<rect x="104" y="281" width="495.0" height="16" rx="2" class="wa-bad"/>
+<text x="605.0" y="289.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="start" dominant-baseline="central">2.63 ms</text>
+<text x="384.0" y="340.0" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" font-size="13" class="wa-muted" text-anchor="middle">time per parse, log scale</text>
 </svg>
